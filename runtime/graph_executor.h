@@ -11,6 +11,11 @@
 
 struct GraphExecutorOptions {
     std::map<std::string, std::vector<std::int64_t>> tensor_shapes;
+    // Keep true for debugging/backward passes that need every intermediate.
+    // Benchmarks and inference-only paths can set this false so the executor
+    // can recycle temporary tensor buffers as soon as their final use is done.
+    bool collect_intermediate_values = true;
+    RuntimeTensorWorkspace* tensor_workspace = nullptr;
 };
 
 using GraphRuntimeValue = std::variant<std::int64_t, double, bool, SimpleTensor>;

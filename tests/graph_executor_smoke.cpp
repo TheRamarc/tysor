@@ -72,6 +72,9 @@ bool matmul_relu_executes() {
     GraphExecutorOptions options;
     options.tensor_shapes["x"] = {2, 3};
     options.tensor_shapes["w"] = {3, 2};
+    RuntimeTensorWorkspace workspace;
+    options.collect_intermediate_values = false;
+    options.tensor_workspace = &workspace;
     auto execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&execution)) {
         std::cerr << "executor-matmul: execution failed: " << diagnostic->to_string() << '\n';
@@ -85,6 +88,10 @@ bool matmul_relu_executes() {
     }
     if (!tensor_data_is_aligned(*output)) {
         std::cerr << "executor-matmul: tensor data is not aligned to " << tensor_data_alignment << " bytes\n";
+        return false;
+    }
+    if (workspace.stats().reuses == 0) {
+        std::cerr << "executor-matmul: output-only execution did not reuse a tensor workspace buffer\n";
         return false;
     }
     return output->data[0] > 0.0F;

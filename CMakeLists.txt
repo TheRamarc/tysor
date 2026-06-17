@@ -122,6 +122,15 @@ cpptysor_add_executable(cpptysor_graph_executor_smoke
     runtime/runtime_tensor.cpp
 )
 
+cpptysor_add_executable(cpptysor_runtime_bench
+    bench/runtime_bench.cpp
+    cli/cli_args.cpp
+    cli/cli_pipeline.cpp
+    ${CPPTYSOR_FRONTEND_SOURCES}
+    runtime/graph_executor.cpp
+    runtime/runtime_tensor.cpp
+)
+
 cpptysor_add_executable(cpptysor_backward_smoke
     tests/backward_smoke.cpp
     cli/cli_args.cpp

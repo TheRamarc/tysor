@@ -67,6 +67,34 @@ bool operator!=(const AlignedAllocator<T, Alignment>& lhs, const AlignedAllocato
 constexpr std::size_t tensor_data_alignment = 64;
 using TensorData = std::vector<float, AlignedAllocator<float, tensor_data_alignment>>;
 
+struct SimpleTensor;
+
+struct RuntimeTensorWorkspaceStats {
+    std::size_t allocations = 0;
+    std::size_t reuses = 0;
+    std::size_t releases = 0;
+    std::size_t cached_buffers = 0;
+    std::size_t cached_bytes = 0;
+};
+
+// RuntimeTensorWorkspace is a small C++17 tensor buffer pool. Kernels still
+// return owning SimpleTensor values, but temporary tensors can return their
+// aligned buffers to this workspace once the executor knows they are dead.
+class RuntimeTensorWorkspace {
+public:
+    TensorData acquire(std::size_t element_count);
+    void release(SimpleTensor&& tensor);
+    void release(TensorData&& data);
+    void clear();
+    RuntimeTensorWorkspaceStats stats() const;
+
+private:
+    std::vector<TensorData> free_buffers_;
+    std::size_t allocations_ = 0;
+    std::size_t reuses_ = 0;
+    std::size_t releases_ = 0;
+};
+
 // Simple host tensor used by local execution, tests, and host/device transfer.
 // Shape stays ordinary vector metadata; data uses TensorData for aligned floats.
 struct SimpleTensor {
@@ -118,45 +146,122 @@ private:
 std::size_t num_elements(ShapeView shape);
 bool is_aligned_to(const void* pointer, std::size_t alignment);
 bool tensor_data_is_aligned(const SimpleTensor& tensor);
-SimpleTensor make_synthetic_tensor(ShapeView shape, std::string dtype);
+SimpleTensor make_synthetic_tensor(ShapeView shape, std::string dtype, RuntimeTensorWorkspace* workspace = nullptr);
 std::string format_tensor(const SimpleTensor& tensor);
 void print_tensor(const SimpleTensor& tensor);
 
-std::variant<SimpleTensor, Diagnostic> elementwise_binary(FeBinaryOp op, const SimpleTensor& lhs, const SimpleTensor& rhs);
-std::variant<SimpleTensor, Diagnostic> tensor_scalar_binary(FeBinaryOp op, const SimpleTensor& lhs, double rhs);
-std::variant<SimpleTensor, Diagnostic> scalar_tensor_binary(FeBinaryOp op, double lhs, const SimpleTensor& rhs);
-std::variant<SimpleTensor, Diagnostic> matmul(const SimpleTensor& lhs, const SimpleTensor& rhs);
-std::variant<SimpleTensor, Diagnostic> transpose_2d(const SimpleTensor& tensor);
+std::variant<SimpleTensor, Diagnostic> elementwise_binary(
+    FeBinaryOp op,
+    const SimpleTensor& lhs,
+    const SimpleTensor& rhs,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> tensor_scalar_binary(
+    FeBinaryOp op,
+    const SimpleTensor& lhs,
+    double rhs,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> scalar_tensor_binary(
+    FeBinaryOp op,
+    double lhs,
+    const SimpleTensor& rhs,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> matmul(
+    const SimpleTensor& lhs,
+    const SimpleTensor& rhs,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> transpose_2d(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace = nullptr);
 
-SimpleTensor apply_relu(const SimpleTensor& tensor);
-SimpleTensor apply_silu(const SimpleTensor& tensor);
-SimpleTensor apply_gelu(const SimpleTensor& tensor);
-SimpleTensor apply_tanh(const SimpleTensor& tensor);
-SimpleTensor apply_sigmoid(const SimpleTensor& tensor);
-std::variant<SimpleTensor, Diagnostic> apply_softmax(const SimpleTensor& tensor);
+SimpleTensor apply_relu(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace = nullptr);
+SimpleTensor apply_silu(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace = nullptr);
+SimpleTensor apply_gelu(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace = nullptr);
+SimpleTensor apply_tanh(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace = nullptr);
+SimpleTensor apply_sigmoid(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace = nullptr);
+std::variant<SimpleTensor, Diagnostic> apply_softmax(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace = nullptr);
 
-SimpleTensor make_linear_weight(std::int64_t in_features, std::int64_t out_features, const std::string& dtype);
-SimpleTensor make_linear_bias(std::int64_t out_features, const std::string& dtype);
-SimpleTensor make_embedding_weight(std::int64_t num_embeddings, std::int64_t embedding_dim, const std::string& dtype);
-std::variant<SimpleTensor, Diagnostic> apply_linear(const LinearClosure& closure, const SimpleTensor& input);
+SimpleTensor make_linear_weight(
+    std::int64_t in_features,
+    std::int64_t out_features,
+    const std::string& dtype,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+SimpleTensor make_linear_bias(
+    std::int64_t out_features,
+    const std::string& dtype,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+SimpleTensor make_embedding_weight(
+    std::int64_t num_embeddings,
+    std::int64_t embedding_dim,
+    const std::string& dtype,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> apply_linear(
+    const LinearClosure& closure,
+    const SimpleTensor& input,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
 std::variant<SimpleTensor, Diagnostic> apply_embedding_with_parameters(
     const SimpleTensor& indices,
     const SimpleTensor& weight,
     std::int64_t num_embeddings,
-    std::int64_t embedding_dim
+    std::int64_t embedding_dim,
+    RuntimeTensorWorkspace* workspace = nullptr
 );
-std::variant<SimpleTensor, Diagnostic> apply_dropout(const SimpleTensor& input, double probability);
-std::variant<SimpleTensor, Diagnostic> apply_reshape(const SimpleTensor& input, ShapeView shape);
-std::variant<SimpleTensor, Diagnostic> apply_transpose(const SimpleTensor& input);
-SimpleTensor apply_sum(const SimpleTensor& input);
-std::variant<SimpleTensor, Diagnostic> apply_sum_axis(const SimpleTensor& input, std::int64_t axis);
-SimpleTensor apply_mean(const SimpleTensor& input);
-std::variant<SimpleTensor, Diagnostic> apply_mean_axis(const SimpleTensor& input, std::int64_t axis);
-SimpleTensor apply_sqrt(const SimpleTensor& input);
-SimpleTensor apply_rsqrt(const SimpleTensor& input);
-std::variant<SimpleTensor, Diagnostic> apply_repeat_kv(const SimpleTensor& input, std::int64_t repeats);
-std::variant<SimpleTensor, Diagnostic> apply_flatten_heads(const SimpleTensor& input);
-std::variant<SimpleTensor, Diagnostic> apply_causal_mask(const SimpleTensor& input);
-std::variant<SimpleTensor, Diagnostic> apply_rope(const SimpleTensor& input, std::int64_t head_dim, double theta);
-std::variant<SimpleTensor, Diagnostic> apply_rms_norm(const SimpleTensor& input, std::int64_t hidden_size);
-std::variant<SimpleTensor, Diagnostic> apply_cross_entropy(const SimpleTensor& logits, const SimpleTensor& target);
+std::variant<SimpleTensor, Diagnostic> apply_dropout(
+    const SimpleTensor& input,
+    double probability,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> apply_reshape(
+    const SimpleTensor& input,
+    ShapeView shape,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> apply_transpose(const SimpleTensor& input, RuntimeTensorWorkspace* workspace = nullptr);
+SimpleTensor apply_sum(const SimpleTensor& input, RuntimeTensorWorkspace* workspace = nullptr);
+std::variant<SimpleTensor, Diagnostic> apply_sum_axis(
+    const SimpleTensor& input,
+    std::int64_t axis,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+SimpleTensor apply_mean(const SimpleTensor& input, RuntimeTensorWorkspace* workspace = nullptr);
+std::variant<SimpleTensor, Diagnostic> apply_mean_axis(
+    const SimpleTensor& input,
+    std::int64_t axis,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+SimpleTensor apply_sqrt(const SimpleTensor& input, RuntimeTensorWorkspace* workspace = nullptr);
+SimpleTensor apply_rsqrt(const SimpleTensor& input, RuntimeTensorWorkspace* workspace = nullptr);
+std::variant<SimpleTensor, Diagnostic> apply_repeat_kv(
+    const SimpleTensor& input,
+    std::int64_t repeats,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> apply_flatten_heads(
+    const SimpleTensor& input,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> apply_causal_mask(
+    const SimpleTensor& input,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> apply_rope(
+    const SimpleTensor& input,
+    std::int64_t head_dim,
+    double theta,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> apply_rms_norm(
+    const SimpleTensor& input,
+    std::int64_t hidden_size,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
+std::variant<SimpleTensor, Diagnostic> apply_cross_entropy(
+    const SimpleTensor& logits,
+    const SimpleTensor& target,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
