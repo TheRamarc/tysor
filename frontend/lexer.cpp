@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
+#include <iostream>
 
 namespace {
 
@@ -242,6 +243,7 @@ TokenizeResult tokenize_with_diagnostic(const std::string& source) {
                             line,
                             current_indent + 1
                         );
+
                     } else {
                         while (current_indent < indent_stack.back()) {
                             indent_stack.pop_back();

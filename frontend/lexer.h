@@ -12,6 +12,7 @@ enum class TokenType {
     Return,
     Int,
     Float,
+    str,
     Bool,
     Tensor,
     Tuple,

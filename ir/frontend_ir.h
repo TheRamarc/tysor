@@ -12,6 +12,17 @@
 #include <variant>
 #include <vector>
 
+// Frontend IR is the checked, compiler-friendly form of the program.
+//
+// Parser AST answers: "what syntax did the user write?"
+// Frontend IR answers: "what did that syntax mean after semantic analysis?"
+//
+// This layer keeps resolved types, resolved call shapes, evaluated config
+// constants, and desugared expressions before Graph IR turns them into runtime
+// operations.
+
+// Type categories used by lowered expressions, declarations, functions, configs,
+// and execution metadata.
 enum class FeTypeKind {
     Unknown,
     Int,
@@ -23,8 +34,11 @@ enum class FeTypeKind {
     Callable,
     Void,
     None,
+    str,
 };
 
+// Lowered type. This is similar to parser Type, but belongs to Frontend IR so
+// later compiler stages do not need to keep consulting AST nodes.
 struct FeType {
     FeTypeKind kind = FeTypeKind::Void;
     std::vector<FeType> elements;
@@ -54,8 +68,11 @@ struct FeType {
     static FeType callable(FeType return_type);
     static FeType void_type();
     static FeType none();
+    static FeType str();
 };
 
+// Compile-time value used for constants and evaluated config fields.
+// Example: a config field `hidden = 128` becomes FeValue::int_value(128).
 struct FeValue;
 struct FeTupleValue {
     std::vector<FeValue> values;
@@ -77,6 +94,8 @@ struct FeValue {
     static FeValue list_value(std::vector<FeValue> values);
 };
 
+// Compiler-level binary operators. These replace raw parser TokenType operators
+// like Plus, Minus, EqualEqual, etc.
 enum class FeBinaryOp {
     Add,
     Sub,
@@ -97,6 +116,8 @@ enum class FeBinaryOp {
 struct FeExpr;
 using FeExprPtr = std::shared_ptr<FeExpr>;
 
+// Lowered call argument. `name` preserves keyword arguments; `value` is already
+// lowered and typed.
 struct FeCallArg {
     std::optional<std::string> name;
     FeExprPtr value;
@@ -106,20 +127,27 @@ struct FeConstantExpr {
     FeValue value;
 };
 
+// Resolved variable reference. The expression wrapper carries the FeType, so the
+// variable node only needs the symbol name.
 struct FeVarExpr {
     std::string symbol;
 };
 
+// Normal call that produces a value immediately, like relu(x) or sqrt(x).
 struct FeCallExpr {
     std::string callee;
     std::vector<FeCallArg> args;
 };
 
+// Constructor-style library call that creates a callable object, like
+// linear(...), Embedding(...), or SiLU().
 struct FeLayerCtorExpr {
     std::string callee;
     std::vector<FeCallArg> args;
 };
 
+// Applying a callable value to arguments. Example: if dense is a linear layer,
+// dense(x) lowers to FeApplyExpr.
 struct FeApplyExpr {
     FeExprPtr callee;
     std::vector<FeCallArg> args;
@@ -157,6 +185,8 @@ using FeExprKind = std::variant<
     FeIfThenElseExpr
 >;
 
+// A lowered expression. Compared with AST Expr, this adds the resolved type and
+// uses meaning-level expression nodes instead of syntax-only nodes.
 struct FeExpr {
     FeType type;
     FeExprKind kind;
@@ -174,6 +204,9 @@ struct FeExpr {
 
 struct FeStmt;
 
+// Lowered variable declaration. If has_value is false, value may be null.
+// Graph-local declarations usually need a value because graph lowering is
+// expression-driven.
 struct FeVarDeclStmt {
     std::string name;
     FeType type;
@@ -209,10 +242,14 @@ struct FeIfStmt {
 
 using FeStmtKind = std::variant<FeVarDeclStmt, FeAssignStmt, FeReturnStmt, FeExprStmt, FeIfStmt>;
 
+// Lowered statement. AST ScopeStmt has already been expanded into vectors of
+// FeStmt inside functions, layers, and branches.
 struct FeStmt {
     FeStmtKind kind;
 };
 
+// Lowered function or layer. Both share the same shape after lowering; `is_layer`
+// keeps the frontend distinction for graph/runtime stages.
 struct FeFunction {
     std::string name;
     bool is_layer = false;
@@ -222,11 +259,15 @@ struct FeFunction {
     std::vector<FeStmt> body;
 };
 
+// Lowered config. Field initializer expressions have already been evaluated into
+// FeValue constants.
 struct FeConfig {
     std::string name;
     std::map<std::string, FeValue> fields;
 };
 
+// Lowered training config. These vectors are the frontend's normalized view of
+// train options before execution-plan expansion.
 struct FeTrain {
     std::string name;
     std::vector<FeValue> backends;
@@ -238,6 +279,8 @@ struct FeTrain {
     std::map<std::string, FeValue> extra_properties;
 };
 
+// Where a train objective symbol came from after resolving it against model
+// params, outputs, or locals.
 enum class ObjectiveSource {
     Param,
     Output,
@@ -245,6 +288,7 @@ enum class ObjectiveSource {
     Unknown,
 };
 
+// One concrete run derived from a model + train config combination.
 struct FeExecutionRun {
     std::string run_name;
     std::string model_name;
@@ -258,11 +302,14 @@ struct FeExecutionRun {
     std::optional<FeValue> iteration;
 };
 
+// Frontend-level execution plan. Later planning stages translate this into
+// backend/runtime-specific work.
 struct FeExecutionPlan {
     std::string model_entry;
     std::vector<FeExecutionRun> runs;
 };
 
+// Full lowered module produced by FrontendLowerer.
 struct LoweredModule {
     std::vector<FeConfig> configs;
     std::vector<FeTrain> trains;
@@ -273,6 +320,7 @@ struct LoweredModule {
 
 using FrontendResult = std::variant<LoweredModule, Diagnostic>;
 
+// Converts parser AST + SemanticInfo into Frontend IR.
 class FrontendLowerer {
 public:
     FrontendLowerer(const Program& program, const SemanticInfo& semantic_info);

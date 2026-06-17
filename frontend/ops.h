@@ -51,11 +51,11 @@ struct BuiltinSignature {
 struct OpDefinition {
     OpId id = OpId::Print;
     BuiltinSignature signature;
-    bool is_primitive_tensor_op = false;
-    bool is_library_op = false;
+    bool is_primitive_tensor_op = false; // this field is used for the op lowers to a primitive graph or not.
+    bool is_library_op = false; // this field is used for considered a builtin/library-level operations.
     bool is_callable_library_op = false;
-    bool preserves_first_tensor_arg = false;
-    bool runtime_supports_library_op = false;
+    bool preserves_first_tensor_arg = false; //the result keeps the general tensor type/shape from the first tensor argument.
+    bool runtime_supports_library_op = false; 
     RuntimePrimitiveKind runtime_primitive_kind = RuntimePrimitiveKind::Unsupported;
 };
 

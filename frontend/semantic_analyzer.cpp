@@ -312,7 +312,7 @@ void SemanticAnalyzer::register_builtins() {
             Signature{spec.name, spec.return_type, spec.arg_types, spec.min_arity, spec.max_arity};
     }
 }
-
+// U-Review
 std::optional<Diagnostic> SemanticAnalyzer::analyze(const Program& program) {
     if (auto diagnostic = collect_configs(program)) {
         return diagnostic;
@@ -391,7 +391,7 @@ std::optional<Diagnostic> SemanticAnalyzer::collect_configs(const Program& progr
     }
     return std::nullopt;
 }
-// U-Review
+// Reviewed
 std::optional<Diagnostic> SemanticAnalyzer::collect_layers(const Program& program) {
     for (const auto& layer : program.layers) {
         if (auto diagnostic = validate_declared_type(layer.return_type, layer.span)) {
@@ -423,7 +423,7 @@ std::optional<Diagnostic> SemanticAnalyzer::collect_layers(const Program& progra
     }
     return std::nullopt;
 }
-
+// Reviewed
 std::optional<Diagnostic> SemanticAnalyzer::collect_functions(const Program& program) {
     for (const auto& function : program.functions) {
         if (auto diagnostic = validate_declared_type(function.return_type, function.span)) {
@@ -452,7 +452,7 @@ std::optional<Diagnostic> SemanticAnalyzer::collect_functions(const Program& pro
     }
     return std::nullopt;
 }
-
+// U-Review
 std::optional<Diagnostic> SemanticAnalyzer::analyze_stmt(const Stmt& stmt, const Program& program) {
     return std::visit(
         [&](const auto& value) -> std::optional<Diagnostic> {
@@ -562,7 +562,7 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_expr(const Expr& expr, 
     auto result = std::visit(
         [&](const auto& value) -> std::variant<Type, Diagnostic> {
             using T = std::decay_t<decltype(value)>;
-            if constexpr (std::is_same_v<T, IntLiteral>) {
+            if constexpr (std::is_same_v<T, IntLiteral>) { // the compiler keeps only the IntLiteral branch. why we are using the constexpr
                 return Type::int_type();
             } else if constexpr (std::is_same_v<T, FloatLiteral>) {
                 return Type::float_type();
@@ -1482,7 +1482,7 @@ Diagnostic SemanticAnalyzer::error(const SourceSpan& span, const std::string& me
     last_diagnostic_ = diagnostic;
     return diagnostic;
 }
-
+// Reviewed
 void SemanticAnalyzer::push_scope() {
     scopes_.push_back({});
 }
