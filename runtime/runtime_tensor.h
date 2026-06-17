@@ -27,8 +27,24 @@ struct EmbeddingClosure {
     std::string dtype = "float32";
 };
 
-std::size_t num_elements(const std::vector<std::int64_t>& shape);
-SimpleTensor make_synthetic_tensor(const std::vector<std::int64_t>& shape, std::string dtype);
+class ShapeView {
+public:
+    ShapeView() = default;
+    ShapeView(const std::vector<std::int64_t>& shape);
+    ShapeView(const std::int64_t* values, std::size_t count);
+
+    const std::int64_t* begin() const;
+    const std::int64_t* end() const;
+    std::size_t size() const;
+    bool empty() const;
+
+private:
+    const std::int64_t* values_ = nullptr;
+    std::size_t size_ = 0;
+};
+
+std::size_t num_elements(ShapeView shape);
+SimpleTensor make_synthetic_tensor(ShapeView shape, std::string dtype);
 std::string format_tensor(const SimpleTensor& tensor);
 void print_tensor(const SimpleTensor& tensor);
 
@@ -56,7 +72,7 @@ std::variant<SimpleTensor, Diagnostic> apply_embedding_with_parameters(
     std::int64_t embedding_dim
 );
 std::variant<SimpleTensor, Diagnostic> apply_dropout(const SimpleTensor& input, double probability);
-std::variant<SimpleTensor, Diagnostic> apply_reshape(const SimpleTensor& input, const std::vector<std::int64_t>& shape);
+std::variant<SimpleTensor, Diagnostic> apply_reshape(const SimpleTensor& input, ShapeView shape);
 std::variant<SimpleTensor, Diagnostic> apply_transpose(const SimpleTensor& input);
 SimpleTensor apply_sum(const SimpleTensor& input);
 std::variant<SimpleTensor, Diagnostic> apply_sum_axis(const SimpleTensor& input, std::int64_t axis);

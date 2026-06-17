@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 enum class OpId {
@@ -61,13 +62,13 @@ struct OpDefinition {
 
 const std::vector<OpDefinition>& all_ops();
 std::vector<BuiltinSignature> all_builtin_signatures();
-const OpDefinition* lookup_op(const std::string& name);
-std::optional<OpId> lookup_op_id(const std::string& name);
+const OpDefinition* lookup_op(std::string_view name);
+std::optional<OpId> lookup_op_id(std::string_view name);
 const char* op_id_name(OpId id);
-bool is_builtin_op(const std::string& name);
-bool is_primitive_tensor_op(const std::string& name);
-bool is_library_op(const std::string& name);
-bool is_callable_library_op(const std::string& name);
-bool preserves_first_tensor_arg(const std::string& name);
-bool runtime_supports_library_op(const std::string& name);
-RuntimePrimitiveKind runtime_primitive(const std::string& name);
+bool is_builtin_op(std::string_view name);
+bool is_primitive_tensor_op(std::string_view name);
+bool is_library_op(std::string_view name);
+bool is_callable_library_op(std::string_view name);
+bool preserves_first_tensor_arg(std::string_view name);
+bool runtime_supports_library_op(std::string_view name);
+RuntimePrimitiveKind runtime_primitive(std::string_view name);

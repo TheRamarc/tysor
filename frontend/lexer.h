@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -84,5 +85,5 @@ using TokenizeResult = std::variant<std::vector<Token>, Diagnostic>;
 const char* token_type_name(TokenType kind);
 std::string token_to_string(const Token& token);
 
-TokenizeResult tokenize_with_diagnostic(const std::string& source);
-std::vector<Token> tokenize(const std::string& source);
+TokenizeResult tokenize_with_diagnostic(std::string_view source);
+std::vector<Token> tokenize(std::string_view source);

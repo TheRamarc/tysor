@@ -1,6 +1,7 @@
 #include "ops.h"
 
 #include <algorithm>
+#include <string_view>
 #include <utility>
 
 namespace {
@@ -99,15 +100,15 @@ std::vector<BuiltinSignature> all_builtin_signatures() {
     return signatures;
 }
 
-const OpDefinition* lookup_op(const std::string& name) {
+const OpDefinition* lookup_op(std::string_view name) {
     const auto& ops = all_ops();
     auto found = std::find_if(ops.begin(), ops.end(), [&](const OpDefinition& item) {
-        return item.signature.name == name;
+        return std::string_view(item.signature.name) == name;
     });
     return found == ops.end() ? nullptr : &*found;
 }
 
-std::optional<OpId> lookup_op_id(const std::string& name) {
+std::optional<OpId> lookup_op_id(std::string_view name) {
     const OpDefinition* item = lookup_op(name);
     if (item == nullptr) {
         return std::nullopt;
@@ -169,36 +170,36 @@ const char* op_id_name(OpId id) {
     return "Unknown";
 }
 
-bool is_builtin_op(const std::string& name) {
+bool is_builtin_op(std::string_view name) {
     return lookup_op(name) != nullptr;
 }
 
-bool is_primitive_tensor_op(const std::string& name) {
+bool is_primitive_tensor_op(std::string_view name) {
     const OpDefinition* item = lookup_op(name);
     return item != nullptr && item->is_primitive_tensor_op;
 }
 
-bool is_library_op(const std::string& name) {
+bool is_library_op(std::string_view name) {
     const OpDefinition* item = lookup_op(name);
     return item != nullptr && item->is_library_op;
 }
 
-bool is_callable_library_op(const std::string& name) {
+bool is_callable_library_op(std::string_view name) {
     const OpDefinition* item = lookup_op(name);
     return item != nullptr && item->is_callable_library_op;
 }
 
-bool preserves_first_tensor_arg(const std::string& name) {
+bool preserves_first_tensor_arg(std::string_view name) {
     const OpDefinition* item = lookup_op(name);
     return item != nullptr && item->preserves_first_tensor_arg;
 }
 
-bool runtime_supports_library_op(const std::string& name) {
+bool runtime_supports_library_op(std::string_view name) {
     const OpDefinition* item = lookup_op(name);
     return item != nullptr && item->runtime_supports_library_op;
 }
 
-RuntimePrimitiveKind runtime_primitive(const std::string& name) {
+RuntimePrimitiveKind runtime_primitive(std::string_view name) {
     const OpDefinition* item = lookup_op(name);
     return item == nullptr ? RuntimePrimitiveKind::Unsupported : item->runtime_primitive_kind;
 }

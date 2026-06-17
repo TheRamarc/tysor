@@ -15,6 +15,15 @@ Diagnostic runtime_error(std::string message) {
     return Diagnostic::error("runtime", "R0001", std::move(message));
 }
 
+std::vector<std::int64_t> copy_shape(ShapeView shape) {
+    std::vector<std::int64_t> copied;
+    copied.reserve(shape.size());
+    for (const auto dim : shape) {
+        copied.push_back(dim);
+    }
+    return copied;
+}
+
 float apply_binary_scalar(FeBinaryOp op, float lhs, float rhs, std::optional<Diagnostic>& error) {
     switch (op) {
         case FeBinaryOp::Add:
@@ -70,7 +79,29 @@ std::variant<SimpleTensor, Diagnostic> apply_linear_with_parameters(
 
 } // namespace
 
-std::size_t num_elements(const std::vector<std::int64_t>& shape) {
+ShapeView::ShapeView(const std::vector<std::int64_t>& shape)
+    : values_(shape.data()), size_(shape.size()) {}
+
+ShapeView::ShapeView(const std::int64_t* values, std::size_t count)
+    : values_(values), size_(count) {}
+
+const std::int64_t* ShapeView::begin() const {
+    return values_;
+}
+
+const std::int64_t* ShapeView::end() const {
+    return values_ == nullptr ? nullptr : values_ + size_;
+}
+
+std::size_t ShapeView::size() const {
+    return size_;
+}
+
+bool ShapeView::empty() const {
+    return size_ == 0;
+}
+
+std::size_t num_elements(ShapeView shape) {
     std::int64_t product = 1;
     for (const auto dim : shape) {
         product *= dim;
@@ -78,14 +109,14 @@ std::size_t num_elements(const std::vector<std::int64_t>& shape) {
     return static_cast<std::size_t>(std::max<std::int64_t>(product, 1));
 }
 
-SimpleTensor make_synthetic_tensor(const std::vector<std::int64_t>& shape, std::string dtype) {
+SimpleTensor make_synthetic_tensor(ShapeView shape, std::string dtype) {
     const std::size_t element_count = num_elements(shape);
     std::vector<float> data;
     data.reserve(element_count);
     for (std::size_t index = 0; index < element_count; ++index) {
         data.push_back(static_cast<float>((index % 17) + 1) / 8.0F);
     }
-    return SimpleTensor{shape, std::move(data), std::move(dtype)};
+    return SimpleTensor{copy_shape(shape), std::move(data), std::move(dtype)};
 }
 
 std::string format_tensor(const SimpleTensor& tensor) {
@@ -353,11 +384,11 @@ std::variant<SimpleTensor, Diagnostic> apply_dropout(const SimpleTensor& input, 
     return output;
 }
 
-std::variant<SimpleTensor, Diagnostic> apply_reshape(const SimpleTensor& input, const std::vector<std::int64_t>& shape) {
+std::variant<SimpleTensor, Diagnostic> apply_reshape(const SimpleTensor& input, ShapeView shape) {
     if (input.data.size() != num_elements(shape)) {
         return runtime_error("reshape requires matching element counts");
     }
-    return SimpleTensor{shape, input.data, input.dtype};
+    return SimpleTensor{copy_shape(shape), input.data, input.dtype};
 }
 
 std::variant<SimpleTensor, Diagnostic> apply_transpose(const SimpleTensor& input) {

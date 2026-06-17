@@ -42,6 +42,8 @@ std::string fe_type_to_graph_string(const FeType& type) {
             return type.scalar_dtype.value_or("float");
         case FeTypeKind::Bool:
             return "bool";
+        case FeTypeKind::str:
+            return "str";
         case FeTypeKind::Tensor:
             if (type.tensor_dtype && type.tensor_shape_expr) {
                 return "tensor[" + *type.tensor_dtype + ", " + *type.tensor_shape_expr + "]";

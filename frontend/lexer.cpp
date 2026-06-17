@@ -1,9 +1,11 @@
 #include "lexer.h"
 
+#include <array>
 #include <cctype>
+#include <optional>
 #include <sstream>
+#include <string_view>
 #include <stdexcept>
-#include <unordered_map>
 #include <utility>
 #include <iostream>
 
@@ -50,8 +52,8 @@ std::string token_value_to_string(const TokenValue& value) {
     return std::get<std::string>(value);
 }
 
-const std::unordered_map<std::string, TokenType>& keywords() {
-    static const std::unordered_map<std::string, TokenType> table = {
+std::optional<TokenType> lookup_keyword(std::string_view text) {
+    static constexpr std::array<std::pair<std::string_view, TokenType>, 20> table = {{
         {"return", TokenType::Return},
         {"int", TokenType::Int},
         {"bool", TokenType::Bool},
@@ -71,8 +73,14 @@ const std::unordered_map<std::string, TokenType>& keywords() {
         {"else", TokenType::Else},
         {"while", TokenType::While},
         {"for", TokenType::For},
+        {"str", TokenType::str},
+    }};
+    for (const auto& [keyword, kind] : table) {
+        if (keyword == text) {
+            return kind;
+        }
     };
-    return table;
+    return std::nullopt;
 }
 
 } // namespace
@@ -85,6 +93,8 @@ const char* token_type_name(TokenType kind) {
             return "INT";
         case TokenType::Float:
             return "FLOAT";
+        case TokenType::str:
+            return "STR";
         case TokenType::Bool:
             return "BOOL";
         case TokenType::Tensor:
@@ -209,7 +219,7 @@ std::string token_to_string(const Token& token) {
     return out.str();
 }
 
-TokenizeResult tokenize_with_diagnostic(const std::string& source) {
+TokenizeResult tokenize_with_diagnostic(std::string_view source) {
     std::vector<Token> tokens;
     std::size_t line = 1;
     std::size_t column = 1;
@@ -274,21 +284,19 @@ TokenizeResult tokenize_with_diagnostic(const std::string& source) {
         const std::size_t start_column = column;
 
         if (is_identifier_start(ch)) {
-            std::string text;
-            text.push_back(ch);
+            const std::size_t start_index = index;
             while (index + 1 < source.size() && is_identifier_continue(source[index + 1])) {
                 index += 1;
                 column += 1;
-                text.push_back(source[index]);
             }
+            const std::string_view text = source.substr(start_index, index - start_index + 1);
 
-            const auto keyword = keywords().find(text);
-            if (keyword != keywords().end()) {
-                push_token(tokens, keyword->second, std::monostate{}, line, start_column);
+            if (const auto keyword = lookup_keyword(text)) {
+                push_token(tokens, *keyword, std::monostate{}, line, start_column);
             } else if (text == "None") {
                 push_token(tokens, TokenType::Ident, std::string("None"), line, start_column);
             } else {
-                push_token(tokens, TokenType::Ident, std::move(text), line, start_column);
+                push_token(tokens, TokenType::Ident, std::string(text), line, start_column);
             }
             index += 1;
             column += 1;
@@ -591,11 +599,10 @@ TokenizeResult tokenize_with_diagnostic(const std::string& source) {
     return tokens;
 }
 
-std::vector<Token> tokenize(const std::string& source) {
+std::vector<Token> tokenize(std::string_view source) {
     TokenizeResult result = tokenize_with_diagnostic(source);
     if (const auto* tokens = std::get_if<std::vector<Token>>(&result)) {
         return *tokens;
     }
     throw std::runtime_error(std::get<Diagnostic>(result).to_string());
 }
-
