@@ -316,10 +316,11 @@ std::variant<SimpleTensor, Diagnostic> scalar_tensor_binary(
     return SimpleTensor{rhs.shape, std::move(data), rhs.dtype};
 }
 
-std::variant<SimpleTensor, Diagnostic> matmul(
+std::variant<SimpleTensor, Diagnostic> matmul_impl(
     const SimpleTensor& lhs,
     const SimpleTensor& rhs,
-    RuntimeTensorWorkspace* workspace
+    RuntimeTensorWorkspace* workspace,
+    bool apply_relu_to_output
 ) {
     if (lhs.shape.size() != 2 || rhs.shape.size() != 2) {
         return runtime_error("matmul currently requires rank-2 tensors");
@@ -338,10 +339,26 @@ std::variant<SimpleTensor, Diagnostic> matmul(
             for (std::size_t inner = 0; inner < k; ++inner) {
                 acc += lhs.data[row * k + inner] * rhs.data[inner * n + col];
             }
-            output[row * n + col] = acc;
+            output[row * n + col] = apply_relu_to_output ? std::max(acc, 0.0F) : acc;
         }
     }
     return SimpleTensor{{static_cast<std::int64_t>(m), static_cast<std::int64_t>(n)}, std::move(output), lhs.dtype};
+}
+
+std::variant<SimpleTensor, Diagnostic> matmul(
+    const SimpleTensor& lhs,
+    const SimpleTensor& rhs,
+    RuntimeTensorWorkspace* workspace
+) {
+    return matmul_impl(lhs, rhs, workspace, false);
+}
+
+std::variant<SimpleTensor, Diagnostic> matmul_relu(
+    const SimpleTensor& lhs,
+    const SimpleTensor& rhs,
+    RuntimeTensorWorkspace* workspace
+) {
+    return matmul_impl(lhs, rhs, workspace, true);
 }
 
 std::variant<SimpleTensor, Diagnostic> transpose_2d(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace) {

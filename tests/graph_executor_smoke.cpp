@@ -70,8 +70,19 @@ bool matmul_relu_executes() {
     }
 
     GraphExecutorOptions options;
-    options.tensor_shapes["x"] = {2, 3};
-    options.tensor_shapes["w"] = {3, 2};
+    options.tensor_shapes["x"] = {8, 1};
+    options.tensor_shapes["w"] = {1, 8};
+    auto reference_execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&reference_execution)) {
+        std::cerr << "executor-matmul: reference execution failed: " << diagnostic->to_string() << '\n';
+        return false;
+    }
+    const SimpleTensor* reference_output = single_tensor_output(std::get<GraphExecutionResult>(reference_execution));
+    if (reference_output == nullptr) {
+        std::cerr << "executor-matmul: missing reference output\n";
+        return false;
+    }
+
     RuntimeTensorWorkspace workspace;
     options.collect_intermediate_values = false;
     options.tensor_workspace = &workspace;
@@ -82,16 +93,20 @@ bool matmul_relu_executes() {
     }
 
     const SimpleTensor* output = single_tensor_output(std::get<GraphExecutionResult>(execution));
-    if (output == nullptr || output->shape != std::vector<std::int64_t>{2, 2} || output->data.size() != 4) {
+    if (output == nullptr || output->shape != std::vector<std::int64_t>{8, 8} || output->data.size() != 64) {
         std::cerr << "executor-matmul: unexpected output shape\n";
+        return false;
+    }
+    if (output->data != reference_output->data) {
+        std::cerr << "executor-matmul: fused output changed the result\n";
         return false;
     }
     if (!tensor_data_is_aligned(*output)) {
         std::cerr << "executor-matmul: tensor data is not aligned to " << tensor_data_alignment << " bytes\n";
         return false;
     }
-    if (workspace.stats().reuses == 0) {
-        std::cerr << "executor-matmul: output-only execution did not reuse a tensor workspace buffer\n";
+    if (workspace.stats().allocations > 3) {
+        std::cerr << "executor-matmul: fused execution allocated an intermediate tensor\n";
         return false;
     }
     return output->data[0] > 0.0F;

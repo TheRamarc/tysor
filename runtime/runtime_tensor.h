@@ -173,6 +173,11 @@ std::variant<SimpleTensor, Diagnostic> matmul(
     const SimpleTensor& rhs,
     RuntimeTensorWorkspace* workspace = nullptr
 );
+std::variant<SimpleTensor, Diagnostic> matmul_relu(
+    const SimpleTensor& lhs,
+    const SimpleTensor& rhs,
+    RuntimeTensorWorkspace* workspace = nullptr
+);
 std::variant<SimpleTensor, Diagnostic> transpose_2d(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace = nullptr);
 
 SimpleTensor apply_relu(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace = nullptr);

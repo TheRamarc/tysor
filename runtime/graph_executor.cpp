@@ -245,6 +245,71 @@ void release_consumed_inputs(
     }
 }
 
+bool has_resolved_op(const PlanOp& op, OpId id) {
+    const std::optional<OpId> resolved = resolved_op_id(op);
+    return resolved && *resolved == id;
+}
+
+bool can_fuse_matmul_relu(
+    const ExecutionPlan& plan,
+    const std::vector<std::size_t>& use_counts,
+    std::size_t step_index,
+    bool collect_intermediate_values
+) {
+    if (collect_intermediate_values || step_index + 1 >= plan.steps.size()) {
+        return false;
+    }
+
+    const PlanStep& matmul_step = plan.steps[step_index];
+    const PlanStep& relu_step = plan.steps[step_index + 1];
+    if (matmul_step.kind != PlanStepKind::ExecuteOp || relu_step.kind != PlanStepKind::ExecuteOp ||
+        !matmul_step.op_index || !relu_step.op_index) {
+        return false;
+    }
+
+    const PlanOp& matmul_op = plan.ops[*matmul_step.op_index];
+    const PlanOp& relu_op = plan.ops[*relu_step.op_index];
+    if (matmul_op.kind != PlanOpKind::PrimitiveCall || relu_op.kind != PlanOpKind::PrimitiveCall ||
+        !has_resolved_op(matmul_op, OpId::Matmul) || !has_resolved_op(relu_op, OpId::Relu)) {
+        return false;
+    }
+    if (matmul_op.inputs.size() != 2 || relu_op.inputs.size() != 1 || relu_op.inputs[0] != matmul_op.output) {
+        return false;
+    }
+    if (matmul_op.output >= use_counts.size() || use_counts[matmul_op.output] != 1) {
+        return false;
+    }
+    return true;
+}
+
+std::variant<RuntimeValue, Diagnostic> execute_matmul_relu_fusion(
+    const PlanOp& matmul_op,
+    const RuntimeValueStore& values,
+    RuntimeTensorWorkspace& workspace
+) {
+    auto lhs_value = require_value_ref(values, matmul_op.inputs[0], "lhs");
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs_value)) {
+        return *diagnostic;
+    }
+    auto rhs_value = require_value_ref(values, matmul_op.inputs[1], "rhs");
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&rhs_value)) {
+        return *diagnostic;
+    }
+    auto lhs = require_tensor_ref(runtime_value_ref(lhs_value));
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs)) {
+        return *diagnostic;
+    }
+    auto rhs = require_tensor_ref(runtime_value_ref(rhs_value));
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&rhs)) {
+        return *diagnostic;
+    }
+    auto result = matmul_relu(tensor_ref(lhs), tensor_ref(rhs), &workspace);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) {
+        return *diagnostic;
+    }
+    return RuntimeValue{std::get<SimpleTensor>(std::move(result))};
+}
+
 std::variant<RuntimeValue, Diagnostic> execute_primitive(
     const PlanOp& op,
     const RuntimeValueStore& values,
@@ -839,7 +904,8 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
     std::vector<std::size_t> use_counts = compute_runtime_use_counts(plan);
     std::size_t argument_index = 0;
 
-    for (const auto& step : plan.steps) {
+    for (std::size_t step_index = 0; step_index < plan.steps.size(); ++step_index) {
+        const PlanStep& step = plan.steps[step_index];
         switch (step.kind) {
             case PlanStepKind::AllocateHostValue: {
                 const PlanValue& value = plan.values[step.value_id];
@@ -871,6 +937,31 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
                 const PlanOp& op = plan.ops[*step.op_index];
                 if (op.backend != BackendKind::Local) {
                     return runtime_error("Local executor cannot run non-local plan operations");
+                }
+
+                if (can_fuse_matmul_relu(plan, use_counts, step_index, options.collect_intermediate_values)) {
+                    const PlanOp& relu_op = plan.ops[*plan.steps[step_index + 1].op_index];
+                    auto fused_result = execute_matmul_relu_fusion(op, state.values, workspace);
+                    if (const auto* diagnostic = std::get_if<Diagnostic>(&fused_result)) {
+                        return *diagnostic;
+                    }
+                    state.values.set(relu_op.output, std::get<RuntimeValue>(std::move(fused_result)));
+                    release_consumed_inputs(
+                        state.values,
+                        op.inputs,
+                        use_counts,
+                        workspace,
+                        options.collect_intermediate_values
+                    );
+                    release_consumed_inputs(
+                        state.values,
+                        relu_op.inputs,
+                        use_counts,
+                        workspace,
+                        options.collect_intermediate_values
+                    );
+                    ++step_index;
+                    break;
                 }
 
                 std::optional<std::variant<RuntimeValue, Diagnostic>> result;
