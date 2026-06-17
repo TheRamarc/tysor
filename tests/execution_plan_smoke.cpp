@@ -92,6 +92,10 @@ bool local_matmul_relu_plan_ok() {
         std::cerr << "local-plan: expected matmul and relu primitive ops\n";
         return false;
     }
+    if (plan.ops[0].resolved_op != OpId::Matmul || plan.ops[1].resolved_op != OpId::Relu) {
+        std::cerr << "local-plan: expected resolved primitive op ids\n";
+        return false;
+    }
     if (plan.steps.size() != plan.values.size() + plan.ops.size() + plan.outputs.size()) {
         std::cerr << "local-plan: unexpected step count\n";
         return false;

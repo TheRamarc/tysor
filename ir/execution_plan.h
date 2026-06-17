@@ -3,10 +3,12 @@
 #include "cli_args.h"
 #include "diagnostic.h"
 #include "graph_ir.h"
+#include "ops.h"
 
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -34,6 +36,29 @@ enum class PlanOpKind {
 };
 
 struct PlanOp {
+    PlanOp() = default;
+
+    PlanOp(
+        PlanOpKind plan_kind,
+        std::size_t output_id,
+        std::string op_name,
+        std::optional<std::string> op_identifier,
+        FeBinaryOp binary,
+        FeValue constant_value,
+        std::vector<std::size_t> input_ids,
+        BackendKind target_backend,
+        std::optional<OpId> resolved = std::nullopt
+    )
+        : kind(plan_kind),
+          output(output_id),
+          op(std::move(op_name)),
+          op_id(std::move(op_identifier)),
+          binary_op(binary),
+          constant(std::move(constant_value)),
+          inputs(std::move(input_ids)),
+          backend(target_backend),
+          resolved_op(resolved) {}
+
     PlanOpKind kind = PlanOpKind::Constant;
     std::size_t output = 0;
     std::string op;
@@ -42,6 +67,7 @@ struct PlanOp {
     FeValue constant = FeValue::none();
     std::vector<std::size_t> inputs;
     BackendKind backend = BackendKind::Local;
+    std::optional<OpId> resolved_op;
 };
 
 enum class PlanStepKind {

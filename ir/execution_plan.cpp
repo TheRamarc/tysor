@@ -120,6 +120,9 @@ CapabilityCheck check_named_op(
     const std::vector<std::string>& supported_names,
     const std::vector<std::string>& supported_ids
 ) {
+    if (op.resolved_op && contains_string(supported_ids, op_id_name(*op.resolved_op))) {
+        return supported();
+    }
     if (op.op_id && contains_string(supported_ids, *op.op_id)) {
         return supported();
     }
@@ -143,6 +146,7 @@ CapabilityCheck check_plan_op_capability_with_callables(
 ) {
     if (op.kind == PlanOpKind::LibraryCall &&
         !op.op_id &&
+        !op.resolved_op &&
         contains_string(callable_functions, op.op)) {
         return supported();
     }
@@ -188,6 +192,7 @@ PlanOp lower_plan_op(const GraphNode& node, BackendKind backend) {
         node.constant,
         node.inputs,
         backend,
+        lookup_op_id(node.op),
     };
 }
 
