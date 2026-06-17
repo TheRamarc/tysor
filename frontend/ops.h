@@ -10,6 +10,7 @@
 enum class OpId {
     Linear,
     Matmul,
+    MatmulRelu,
     Relu,
     Scale,
     Silu,

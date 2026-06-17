@@ -136,6 +136,13 @@ struct PlanModule {
     std::vector<PlanBuildSkipped> skipped;
 };
 
+struct PlanOptimizationOptions {
+    // Preserve intermediates by default because plan dumps, debugging, backward,
+    // and training paths may need every graph value to be materialized.
+    bool preserve_intermediate_values = true;
+    bool enable_operator_fusion = true;
+};
+
 using ExecutionPlanResult = std::variant<ExecutionPlan, Diagnostic>;
 using PlanModuleResult = std::variant<PlanModule, Diagnostic>;
 
@@ -143,6 +150,8 @@ ExecutionPlan compile_execution_plan(const GraphFunction& graph, BackendKind bac
 ExecutionPlan compile_local_execution_plan(const GraphFunction& graph);
 ExecutionPlan compile_metal_execution_plan(const GraphFunction& graph);
 PlanModuleResult compile_plan_module(const GraphModule& graph_module, BackendKind backend);
+ExecutionPlan optimize_execution_plan(ExecutionPlan plan, const PlanOptimizationOptions& options);
+PlanModule optimize_plan_module(PlanModule module, const PlanOptimizationOptions& options);
 std::optional<Diagnostic> validate_execution_plan(const ExecutionPlan& plan);
 BackendCapabilitySummary backend_capability_summary(BackendKind backend);
 CapabilityCheck check_plan_op_capability(BackendKind backend, const PlanOp& op);

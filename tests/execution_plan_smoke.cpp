@@ -109,6 +109,55 @@ bool local_matmul_relu_plan_ok() {
     return true;
 }
 
+bool output_only_optimizer_fuses_matmul_relu() {
+    auto graphs = graph_module(
+        "layer model(x: tensor[float16], w: tensor[float16]): tensor[float16]:\n"
+        "  let y = matmul(x, w)\n"
+        "  return relu(y)\n"
+    );
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&graphs)) {
+        std::cerr << "optimizer-fusion: graph lowering failed: " << diagnostic->to_string() << '\n';
+        return false;
+    }
+
+    auto module_result = compile_plan_module(std::get<GraphModule>(graphs), BackendKind::Local);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
+        std::cerr << "optimizer-fusion: plan lowering failed: " << diagnostic->to_string() << '\n';
+        return false;
+    }
+
+    const ExecutionPlan& plan = std::get<PlanModule>(module_result).plans.front();
+    PlanOptimizationOptions options;
+    options.preserve_intermediate_values = false;
+    ExecutionPlan optimized = optimize_execution_plan(plan, options);
+    if (auto diagnostic = validate_execution_plan(optimized)) {
+        std::cerr << "optimizer-fusion: optimized plan failed validation: " << diagnostic->to_string() << '\n';
+        return false;
+    }
+    if (optimized.ops.size() != 1 || optimized.ops.front().kind != PlanOpKind::PrimitiveCall ||
+        optimized.ops.front().op != "matmul_relu" ||
+        optimized.ops.front().resolved_op != OpId::MatmulRelu ||
+        optimized.ops.front().output != plan.outputs.front() ||
+        optimized.ops.front().inputs != std::vector<std::size_t>{0, 1}) {
+        std::cerr << "optimizer-fusion: expected one fused matmul_relu op\n";
+        return false;
+    }
+
+    if (check_plan_op_capability(BackendKind::Local, optimized.ops.front()).status != CapabilityStatus::Supported ||
+        check_plan_op_capability(BackendKind::Metal, optimized.ops.front()).status != CapabilityStatus::Unsupported) {
+        std::cerr << "optimizer-fusion: unexpected fused op capability result\n";
+        return false;
+    }
+
+    PlanOptimizationOptions debug_options;
+    ExecutionPlan debug_plan = optimize_execution_plan(plan, debug_options);
+    if (debug_plan.ops.size() != 2) {
+        std::cerr << "optimizer-fusion: default optimization should preserve intermediates\n";
+        return false;
+    }
+    return true;
+}
+
 bool metal_plan_uses_device_placement() {
     auto graphs = graph_module(
         "layer model(x: tensor[float16], w: tensor[float16]): tensor[float16]:\n"
@@ -286,6 +335,7 @@ bool capability_validation_returns_structured_backend_diagnostic() {
 int main() {
     const std::vector<bool> checks{
         local_matmul_relu_plan_ok(),
+        output_only_optimizer_fuses_matmul_relu(),
         metal_plan_uses_device_placement(),
         validation_rejects_bad_plan_references(),
         skipped_graphs_propagate_to_plan(),

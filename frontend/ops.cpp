@@ -122,6 +122,8 @@ const char* op_id_name(OpId id) {
             return "Linear";
         case OpId::Matmul:
             return "Matmul";
+        case OpId::MatmulRelu:
+            return "MatmulRelu";
         case OpId::Relu:
             return "Relu";
         case OpId::Scale:

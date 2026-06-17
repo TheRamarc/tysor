@@ -153,6 +153,81 @@ CapabilityCheck check_plan_op_capability_with_callables(
     return check_plan_op_capability(backend, op);
 }
 
+std::optional<OpId> resolved_plan_op_id(const PlanOp& op) {
+    if (op.resolved_op) {
+        return op.resolved_op;
+    }
+    return lookup_op_id(op.op);
+}
+
+bool has_resolved_op(const PlanOp& op, OpId id) {
+    const std::optional<OpId> resolved = resolved_plan_op_id(op);
+    return resolved && *resolved == id;
+}
+
+std::vector<std::size_t> compute_plan_use_counts(const ExecutionPlan& plan) {
+    std::vector<std::size_t> counts(plan.values.size(), 0);
+    for (const auto& op : plan.ops) {
+        for (const auto input : op.inputs) {
+            if (input < counts.size()) {
+                ++counts[input];
+            }
+        }
+    }
+    for (const auto output : plan.outputs) {
+        if (output < counts.size()) {
+            ++counts[output];
+        }
+    }
+    return counts;
+}
+
+bool can_fuse_matmul_relu(
+    const ExecutionPlan& plan,
+    const std::vector<std::size_t>& use_counts,
+    std::size_t step_index
+) {
+    if (step_index + 1 >= plan.steps.size()) {
+        return false;
+    }
+
+    const PlanStep& matmul_step = plan.steps[step_index];
+    const PlanStep& relu_step = plan.steps[step_index + 1];
+    if (matmul_step.kind != PlanStepKind::ExecuteOp || relu_step.kind != PlanStepKind::ExecuteOp ||
+        !matmul_step.op_index || !relu_step.op_index) {
+        return false;
+    }
+
+    const PlanOp& matmul_op = plan.ops[*matmul_step.op_index];
+    const PlanOp& relu_op = plan.ops[*relu_step.op_index];
+    if (matmul_op.backend != BackendKind::Local || relu_op.backend != BackendKind::Local ||
+        matmul_op.kind != PlanOpKind::PrimitiveCall || relu_op.kind != PlanOpKind::PrimitiveCall ||
+        !has_resolved_op(matmul_op, OpId::Matmul) || !has_resolved_op(relu_op, OpId::Relu)) {
+        return false;
+    }
+    if (matmul_op.inputs.size() != 2 || relu_op.inputs.size() != 1 || relu_op.inputs[0] != matmul_op.output) {
+        return false;
+    }
+    if (matmul_op.output >= use_counts.size() || use_counts[matmul_op.output] != 1) {
+        return false;
+    }
+    return true;
+}
+
+PlanOp make_matmul_relu_op(const PlanOp& matmul_op, const PlanOp& relu_op) {
+    return PlanOp{
+        PlanOpKind::PrimitiveCall,
+        relu_op.output,
+        "matmul_relu",
+        std::optional<std::string>{"MatmulRelu"},
+        FeBinaryOp::Add,
+        FeValue::none(),
+        matmul_op.inputs,
+        BackendKind::Local,
+        std::optional<OpId>{OpId::MatmulRelu},
+    };
+}
+
 PlanOpKind lower_plan_kind(GraphNodeKind kind) {
     switch (kind) {
         case GraphNodeKind::Constant:
@@ -510,6 +585,53 @@ ExecutionPlan compile_execution_plan(const GraphFunction& graph, BackendKind bac
     return compile_local_execution_plan(graph);
 }
 
+ExecutionPlan optimize_execution_plan(ExecutionPlan plan, const PlanOptimizationOptions& options) {
+    if (plan.backend != BackendKind::Local || options.preserve_intermediate_values || !options.enable_operator_fusion) {
+        return plan;
+    }
+
+    const std::vector<std::size_t> use_counts = compute_plan_use_counts(plan);
+    std::vector<PlanOp> optimized_ops;
+    std::vector<PlanStep> optimized_steps;
+    optimized_ops.reserve(plan.ops.size());
+    optimized_steps.reserve(plan.steps.size());
+
+    for (std::size_t step_index = 0; step_index < plan.steps.size(); ++step_index) {
+        const PlanStep& step = plan.steps[step_index];
+        if (can_fuse_matmul_relu(plan, use_counts, step_index)) {
+            const PlanOp& matmul_op = plan.ops[*step.op_index];
+            const PlanOp& relu_op = plan.ops[*plan.steps[step_index + 1].op_index];
+            optimized_ops.push_back(make_matmul_relu_op(matmul_op, relu_op));
+            optimized_steps.push_back(PlanStep{
+                PlanStepKind::ExecuteOp,
+                relu_op.output,
+                optimized_ops.size() - 1,
+            });
+            ++step_index;
+            continue;
+        }
+
+        if ((step.kind == PlanStepKind::ExecuteOp || step.kind == PlanStepKind::DispatchDeviceOp) && step.op_index) {
+            optimized_ops.push_back(plan.ops[*step.op_index]);
+            optimized_steps.push_back(PlanStep{step.kind, step.value_id, optimized_ops.size() - 1});
+            continue;
+        }
+
+        optimized_steps.push_back(step);
+    }
+
+    plan.ops = std::move(optimized_ops);
+    plan.steps = std::move(optimized_steps);
+    return plan;
+}
+
+PlanModule optimize_plan_module(PlanModule module, const PlanOptimizationOptions& options) {
+    for (auto& plan : module.plans) {
+        plan = optimize_execution_plan(std::move(plan), options);
+    }
+    return module;
+}
+
 PlanModuleResult compile_plan_module(const GraphModule& graph_module, BackendKind backend) {
     PlanModule module;
     module.backend = backend;
@@ -599,6 +721,11 @@ CapabilityCheck check_plan_op_capability(BackendKind backend, const PlanOp& op) 
             }
             return unsupported(std::string(plan_backend_name(backend)) + " backend does not support binary operations");
         case PlanOpKind::PrimitiveCall:
+            if (op.resolved_op && *op.resolved_op == OpId::MatmulRelu) {
+                return backend == BackendKind::Local
+                    ? supported()
+                    : unsupported(std::string(plan_backend_name(backend)) + " backend does not support fused matmul_relu");
+            }
             return check_named_op(backend, "primitive", op, primitive_ops(), primitive_op_ids());
         case PlanOpKind::LibraryCall:
             return check_named_op(backend, "library", op, library_ops(), library_op_ids());
