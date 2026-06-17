@@ -12,6 +12,8 @@
 #include <variant>
 #include <vector>
 
+// Runtime tensor buffers use an explicit allocator so CPU kernels and backend
+// upload paths can rely on a stable alignment contract without requiring C++20.
 template <typename T, std::size_t Alignment>
 class AlignedAllocator {
     static_assert(Alignment >= alignof(T), "Alignment must satisfy the allocated type");
@@ -60,9 +62,13 @@ bool operator!=(const AlignedAllocator<T, Alignment>& lhs, const AlignedAllocato
     return !(lhs == rhs);
 }
 
+// 64 bytes matches a common cache-line size and is a good baseline for future
+// SIMD/vectorized tensor kernels.
 constexpr std::size_t tensor_data_alignment = 64;
 using TensorData = std::vector<float, AlignedAllocator<float, tensor_data_alignment>>;
 
+// Simple host tensor used by local execution, tests, and host/device transfer.
+// Shape stays ordinary vector metadata; data uses TensorData for aligned floats.
 struct SimpleTensor {
     std::vector<std::int64_t> shape;
     TensorData data;
@@ -91,6 +97,8 @@ struct EmbeddingClosure {
     std::string dtype = "float32";
 };
 
+// C++17-friendly non-owning shape view. This keeps shape APIs lightweight
+// without introducing std::span or raising the project language standard.
 class ShapeView {
 public:
     ShapeView() = default;

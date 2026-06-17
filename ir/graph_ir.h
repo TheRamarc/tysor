@@ -9,6 +9,8 @@
 #include <variant>
 #include <vector>
 
+// Graph IR is a compact dataflow form after frontend lowering. Values are
+// referenced by numeric ids, and nodes describe how each value is produced.
 enum class GraphNodeKind {
     Constant,
     Binary,
@@ -18,6 +20,8 @@ enum class GraphNodeKind {
     Apply,
 };
 
+// Value ids are expected to be dense and stable. Execution planning validates
+// this and the local executor uses it for vector-backed runtime storage.
 struct GraphValue {
     std::size_t id = 0;
     std::string name;
@@ -26,6 +30,8 @@ struct GraphValue {
     bool requires_grad = false;
 };
 
+// Operation names are kept for diagnostics/backends, while op_id carries the
+// resolved builtin identity when the node maps to a known operation.
 struct GraphNode {
     GraphNodeKind kind = GraphNodeKind::Constant;
     std::size_t output = 0;
@@ -36,6 +42,8 @@ struct GraphNode {
     std::vector<std::size_t> inputs;
 };
 
+// GraphFunction is the executable shape of a function/layer. named_values keeps
+// source symbols available for train objectives and user-facing output lookup.
 struct GraphFunction {
     std::string name;
     bool is_layer = false;

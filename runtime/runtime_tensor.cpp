@@ -83,6 +83,8 @@ std::variant<SimpleTensor, Diagnostic> apply_linear_with_parameters(
 SimpleTensor::SimpleTensor(std::vector<std::int64_t> tensor_shape, TensorData tensor_data, std::string tensor_dtype)
     : shape(std::move(tensor_shape)), data(std::move(tensor_data)), dtype(std::move(tensor_dtype)) {}
 
+// Keep existing vector-based construction sites working while normalizing the
+// stored tensor data into TensorData's aligned allocation policy.
 SimpleTensor::SimpleTensor(
     std::vector<std::int64_t> tensor_shape,
     std::vector<float> tensor_data,
@@ -145,6 +147,8 @@ bool tensor_data_is_aligned(const SimpleTensor& tensor) {
 
 SimpleTensor make_synthetic_tensor(ShapeView shape, std::string dtype) {
     const std::size_t element_count = num_elements(shape);
+    // Synthetic parameters are created through TensorData so executor inputs
+    // get the same alignment guarantees as intermediate tensors.
     TensorData data;
     data.reserve(element_count);
     for (std::size_t index = 0; index < element_count; ++index) {

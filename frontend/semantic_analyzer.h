@@ -10,6 +10,8 @@
 #include <variant>
 #include <vector>
 
+// Symbol kind is kept in diagnostics and SemanticInfo so lowering can tell a
+// local variable from a layer/function/config access without re-resolving names.
 enum class SemanticSymbolKind {
     BuiltinFunction,
     Function,
@@ -105,6 +107,8 @@ struct SemanticCallInfo {
     bool arrow_stage = false;
 };
 
+// Side-table produced by semantic analysis. Frontend lowering consults this by
+// span/owner instead of repeating scope lookup and type inference.
 struct SemanticInfo {
     std::vector<SemanticSymbol> symbols;
     std::vector<SemanticExprInfo> exprs;
@@ -117,6 +121,9 @@ struct SemanticInfo {
 
 using SemanticResult = std::variant<SemanticInfo, Diagnostic>;
 
+// Performs declaration collection first, then statement/expression validation.
+// That supports forward calls to functions/layers while still enforcing local
+// scope, mutability, call arity, and tensor type compatibility.
 class SemanticAnalyzer {
 public:
     SemanticAnalyzer();
@@ -131,6 +138,8 @@ private:
         Layer,
     };
 
+    // Stack of lexical scopes. The current function/layer owner is recorded in
+    // SemanticInfo so identical spans in different owners remain distinguishable.
     std::vector<std::map<std::string, Symbol>> scopes_;
     std::map<std::string, Signature> functions_;
     std::map<std::string, Signature> layers_;

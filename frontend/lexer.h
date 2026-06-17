@@ -9,6 +9,8 @@
 #include <variant>
 #include <vector>
 
+// The lexer emits both language tokens and layout tokens. Indent/Dedent/Newline
+// let the parser treat significant whitespace like regular syntax.
 enum class TokenType {
     Return,
     Int,
@@ -71,6 +73,8 @@ enum class TokenType {
     Eof,
 };
 
+// Tokens own literal/identifier text even though tokenization reads through a
+// string_view, so parser tokens never depend on the source buffer lifetime.
 using TokenValue = std::variant<std::monostate, std::int64_t, double, std::string>;
 
 struct Token {
@@ -85,5 +89,7 @@ using TokenizeResult = std::variant<std::vector<Token>, Diagnostic>;
 const char* token_type_name(TokenType kind);
 std::string token_to_string(const Token& token);
 
+// Preferred entry point for compiler stages: errors stay as Diagnostics instead
+// of throwing, which keeps frontend failures reportable to the CLI/tests.
 TokenizeResult tokenize_with_diagnostic(std::string_view source);
 std::vector<Token> tokenize(std::string_view source);

@@ -12,6 +12,8 @@
 #include <variant>
 #include <vector>
 
+// Placement is the planner's contract with runtime backends: host values are
+// materialized locally, device values require upload/dispatch/download steps.
 enum class Placement {
     Host,
     Device,
@@ -35,6 +37,8 @@ enum class PlanOpKind {
     Apply,
 };
 
+// PlanOp is GraphNode plus backend-specific scheduling metadata. It still keeps
+// source operation text for diagnostics, but hot paths should prefer resolved_op.
 struct PlanOp {
     PlanOp() = default;
 
@@ -67,6 +71,8 @@ struct PlanOp {
     FeValue constant = FeValue::none();
     std::vector<std::size_t> inputs;
     BackendKind backend = BackendKind::Local;
+    // Resolved once during planning so hot runtime paths can dispatch by enum
+    // instead of repeatedly resolving or comparing operation strings.
     std::optional<OpId> resolved_op;
 };
 
@@ -105,6 +111,9 @@ struct PlanStep {
     std::optional<std::size_t> op_index;
 };
 
+// ExecutionPlan is deliberately explicit: values define storage, ops define
+// computation, and steps define execution order/data movement. Value ids are
+// validated to match their vector index.
 struct ExecutionPlan {
     BackendKind backend = BackendKind::Local;
     std::string name;

@@ -14,10 +14,13 @@
 namespace {
 
 struct ActivationClosure {
+    // Store activation constructors as OpId so apply dispatch stays enum-based.
     OpId op = OpId::Silu;
     double probability = 0.0;
 };
 
+// RuntimeValue includes callable closures because graph lowering represents
+// layer constructors and later application as separate graph operations.
 using RuntimeValue = std::variant<std::int64_t, double, bool, SimpleTensor, LinearClosure, EmbeddingClosure, ActivationClosure>;
 
 struct RuntimeValueStore {
@@ -37,6 +40,8 @@ struct RuntimeValueStore {
         return &*slots[id];
     }
 
+    // ExecutionPlan validation keeps value ids dense and index-matched, so a
+    // vector is cheaper than map lookup for the local executor's hot path.
     std::vector<std::optional<RuntimeValue>> slots;
 };
 

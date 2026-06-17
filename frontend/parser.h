@@ -12,6 +12,8 @@
 #include <variant>
 #include <vector>
 
+// Parser types preserve source-level shape/dtype spelling. Semantic analysis
+// later decides whether those annotations are valid and compatible.
 enum class TypeBase {
     Unknown,
     Int,
@@ -131,6 +133,8 @@ struct ArrowExpr {
     std::vector<ExprPtr> stages;
 };
 
+// The AST is intentionally syntax-shaped. Later IR stages desugar calls,
+// pipelines, config constants, and callable application into meaning-level IR.
 using ExprKind = std::variant<
     IntLiteral,
     FloatLiteral,
@@ -231,6 +235,8 @@ struct Config {
     std::vector<Field> fields;
 };
 
+// Top-level module form. Configs may become train configs during lowering,
+// while layers/functions are candidates for graph construction.
 struct Program {
     std::vector<Config> configs;
     std::vector<Layer> layers;
@@ -240,6 +246,8 @@ struct Program {
 
 using ParseResult = std::variant<Program, Diagnostic>;
 
+// Recursive-descent parser over an already-tokenized source stream. Parse
+// routines return owned AST nodes so the source text can be discarded.
 class Parser {
 public:
     explicit Parser(std::vector<Token> tokens);
@@ -302,4 +310,3 @@ private:
 std::string type_to_string(const Type& type);
 std::string program_summary(const Program& program);
 std::string ast_to_string(const Program& program);
-
