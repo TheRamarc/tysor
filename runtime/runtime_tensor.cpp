@@ -39,7 +39,8 @@ TensorData zeroed_data(std::size_t element_count, RuntimeTensorWorkspace* worksp
 
 SimpleTensor copy_tensor(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace) {
     TensorData data = data_with_capacity(tensor.data.size(), workspace);
-    data.insert(data.end(), tensor.data.begin(), tensor.data.end());
+    auto& out = data.writable_storage();
+    out.insert(out.end(), tensor.data.begin(), tensor.data.end());
     return SimpleTensor{tensor.shape, std::move(data), tensor.dtype};
 }
 
@@ -88,9 +89,11 @@ std::variant<SimpleTensor, Diagnostic> apply_linear_with_parameters(
         }
         const std::size_t batch = static_cast<std::size_t>(output.shape[0]);
         const std::size_t width = static_cast<std::size_t>(output.shape[1]);
+        float* out = output.data.data();
+        const float* bias_data = bias->data.data();
         for (std::size_t row = 0; row < batch; ++row) {
             for (std::size_t col = 0; col < width; ++col) {
-                output.data[row * width + col] += bias->data[col];
+                out[row * width + col] += bias_data[col];
             }
         }
     }
@@ -129,7 +132,7 @@ void RuntimeTensorWorkspace::release(SimpleTensor&& tensor) {
 }
 
 void RuntimeTensorWorkspace::release(TensorData&& data) {
-    if (data.capacity() == 0) {
+    if (data.capacity() == 0 || !data.unique_storage()) {
         return;
     }
     data.clear();
@@ -218,6 +221,10 @@ bool tensor_data_is_aligned(const SimpleTensor& tensor) {
     return is_aligned_to(tensor.data.data(), tensor_data_alignment);
 }
 
+bool tensor_data_shares_storage(const SimpleTensor& lhs, const SimpleTensor& rhs) {
+    return lhs.data.shares_storage_with(rhs.data);
+}
+
 SimpleTensor make_synthetic_tensor(ShapeView shape, std::string dtype, RuntimeTensorWorkspace* workspace) {
     const std::size_t element_count = num_elements(shape);
     // Synthetic parameters are created through TensorData so executor inputs
@@ -271,8 +278,11 @@ std::variant<SimpleTensor, Diagnostic> elementwise_binary(
     }
     TensorData data = data_with_capacity(lhs.data.size(), workspace);
     std::optional<Diagnostic> error;
+    auto& out = data.writable_storage();
+    const float* lhs_data = lhs.data.data();
+    const float* rhs_data = rhs.data.data();
     for (std::size_t index = 0; index < lhs.data.size(); ++index) {
-        data.push_back(apply_binary_scalar(op, lhs.data[index], rhs.data[index], error));
+        out.push_back(apply_binary_scalar(op, lhs_data[index], rhs_data[index], error));
         if (error) {
             return *error;
         }
@@ -289,8 +299,9 @@ std::variant<SimpleTensor, Diagnostic> tensor_scalar_binary(
     TensorData data = data_with_capacity(lhs.data.size(), workspace);
     std::optional<Diagnostic> error;
     const auto scalar = static_cast<float>(rhs);
+    auto& out = data.writable_storage();
     for (const auto value : lhs.data) {
-        data.push_back(apply_binary_scalar(op, value, scalar, error));
+        out.push_back(apply_binary_scalar(op, value, scalar, error));
         if (error) {
             return *error;
         }
@@ -307,8 +318,9 @@ std::variant<SimpleTensor, Diagnostic> scalar_tensor_binary(
     TensorData data = data_with_capacity(rhs.data.size(), workspace);
     std::optional<Diagnostic> error;
     const auto scalar = static_cast<float>(lhs);
+    auto& out = data.writable_storage();
     for (const auto value : rhs.data) {
-        data.push_back(apply_binary_scalar(op, scalar, value, error));
+        out.push_back(apply_binary_scalar(op, scalar, value, error));
         if (error) {
             return *error;
         }
@@ -333,13 +345,16 @@ std::variant<SimpleTensor, Diagnostic> matmul_impl(
         return runtime_error("matmul inner dimension mismatch");
     }
     TensorData output = zeroed_data(m * n, workspace);
+    const float* lhs_data = lhs.data.data();
+    const float* rhs_data = rhs.data.data();
+    float* output_data = output.data();
     for (std::size_t row = 0; row < m; ++row) {
         for (std::size_t col = 0; col < n; ++col) {
             float acc = 0.0F;
             for (std::size_t inner = 0; inner < k; ++inner) {
-                acc += lhs.data[row * k + inner] * rhs.data[inner * n + col];
+                acc += lhs_data[row * k + inner] * rhs_data[inner * n + col];
             }
-            output[row * n + col] = apply_relu_to_output ? std::max(acc, 0.0F) : acc;
+            output_data[row * n + col] = apply_relu_to_output ? std::max(acc, 0.0F) : acc;
         }
     }
     return SimpleTensor{{static_cast<std::int64_t>(m), static_cast<std::int64_t>(n)}, std::move(output), lhs.dtype};
@@ -368,9 +383,11 @@ std::variant<SimpleTensor, Diagnostic> transpose_2d(const SimpleTensor& tensor, 
     const auto rows = static_cast<std::size_t>(tensor.shape[0]);
     const auto cols = static_cast<std::size_t>(tensor.shape[1]);
     TensorData output = zeroed_data(tensor.data.size(), workspace);
+    const float* input_data = tensor.data.data();
+    float* output_data = output.data();
     for (std::size_t row = 0; row < rows; ++row) {
         for (std::size_t col = 0; col < cols; ++col) {
-            output[col * rows + row] = tensor.data[row * cols + col];
+            output_data[col * rows + row] = input_data[row * cols + col];
         }
     }
     return SimpleTensor{{static_cast<std::int64_t>(cols), static_cast<std::int64_t>(rows)}, std::move(output), tensor.dtype};
@@ -426,20 +443,22 @@ std::variant<SimpleTensor, Diagnostic> apply_softmax(const SimpleTensor& tensor,
         return runtime_error("softmax requires the last dimension to divide the data length");
     }
     SimpleTensor output = copy_tensor(tensor, workspace);
+    const float* input_data = tensor.data.data();
+    float* output_data = output.data.data();
     const std::size_t rows = tensor.data.size() / axis;
     for (std::size_t row = 0; row < rows; ++row) {
         const std::size_t start = row * axis;
-        const auto begin = tensor.data.begin() + static_cast<std::ptrdiff_t>(start);
-        const auto end = begin + static_cast<std::ptrdiff_t>(axis);
+        const float* begin = input_data + start;
+        const float* end = begin + axis;
         const float max_value = *std::max_element(begin, end);
         float sum = 0.0F;
-        for (auto it = begin; it != end; ++it) {
-            const std::size_t index = static_cast<std::size_t>(it - tensor.data.begin());
-            output.data[index] = std::exp(*it - max_value);
-            sum += output.data[index];
+        for (const float* it = begin; it != end; ++it) {
+            const std::size_t index = static_cast<std::size_t>(it - input_data);
+            output_data[index] = std::exp(*it - max_value);
+            sum += output_data[index];
         }
         for (std::size_t index = 0; index < axis; ++index) {
-            output.data[start + index] /= std::max(sum, std::numeric_limits<float>::epsilon());
+            output_data[start + index] /= std::max(sum, std::numeric_limits<float>::epsilon());
         }
     }
     return output;
@@ -558,12 +577,11 @@ std::variant<SimpleTensor, Diagnostic> apply_reshape(
     ShapeView shape,
     RuntimeTensorWorkspace* workspace
 ) {
+    (void)workspace;
     if (input.data.size() != num_elements(shape)) {
         return runtime_error("reshape requires matching element counts");
     }
-    TensorData data = data_with_capacity(input.data.size(), workspace);
-    data.insert(data.end(), input.data.begin(), input.data.end());
-    return SimpleTensor{copy_shape(shape), std::move(data), input.dtype};
+    return SimpleTensor{copy_shape(shape), TensorData::shared_view(input.data), input.dtype};
 }
 
 std::variant<SimpleTensor, Diagnostic> apply_transpose(const SimpleTensor& input, RuntimeTensorWorkspace* workspace) {
@@ -684,14 +702,13 @@ std::variant<SimpleTensor, Diagnostic> apply_repeat_kv(
 }
 
 std::variant<SimpleTensor, Diagnostic> apply_flatten_heads(const SimpleTensor& input, RuntimeTensorWorkspace* workspace) {
+    (void)workspace;
     if (input.shape.size() < 3) {
-        return copy_tensor(input, workspace);
+        return SimpleTensor{input.shape, TensorData::shared_view(input.data), input.dtype};
     }
     std::vector<std::int64_t> shape(input.shape.begin(), input.shape.end() - 2);
     shape.push_back(input.shape[input.shape.size() - 2] * input.shape[input.shape.size() - 1]);
-    TensorData data = data_with_capacity(input.data.size(), workspace);
-    data.insert(data.end(), input.data.begin(), input.data.end());
-    return SimpleTensor{std::move(shape), std::move(data), input.dtype};
+    return SimpleTensor{std::move(shape), TensorData::shared_view(input.data), input.dtype};
 }
 
 std::variant<SimpleTensor, Diagnostic> apply_causal_mask(const SimpleTensor& input, RuntimeTensorWorkspace* workspace) {

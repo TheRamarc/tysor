@@ -132,11 +132,14 @@ void print_workspace_stats(const std::string& name, const RuntimeTensorWorkspace
 int main() {
     try {
         const std::vector<std::int64_t> square_shape{64, 64};
+        const std::vector<std::int64_t> reshape_shape{128, 32};
+        const std::vector<std::int64_t> flatten_shape{16, 8, 32};
         const std::vector<std::int64_t> softmax_shape{128, 128};
         const std::vector<std::int64_t> linear_input_shape{32, 128};
 
         const SimpleTensor lhs = make_synthetic_tensor(square_shape, "float32");
         const SimpleTensor rhs = make_synthetic_tensor(square_shape, "float32");
+        const SimpleTensor flatten_input = make_synthetic_tensor(flatten_shape, "float32");
         const SimpleTensor softmax_input = make_synthetic_tensor(softmax_shape, "float32");
         const SimpleTensor linear_input = make_synthetic_tensor(linear_input_shape, "float32");
         RuntimeTensorWorkspace direct_workspace;
@@ -167,6 +170,18 @@ int main() {
             }),
             time_case("relu_4k", 5000, [&]() {
                 consume_and_release(apply_relu(lhs, &direct_workspace), direct_workspace);
+            }),
+            time_case("reshape_4k", 10000, [&]() {
+                consume_and_release(
+                    require_tensor_result(apply_reshape(lhs, reshape_shape, &direct_workspace), "reshape_4k"),
+                    direct_workspace
+                );
+            }),
+            time_case("flatten_heads_4k", 10000, [&]() {
+                consume_and_release(
+                    require_tensor_result(apply_flatten_heads(flatten_input, &direct_workspace), "flatten_heads_4k"),
+                    direct_workspace
+                );
             }),
             time_case("softmax_128x128", 400, [&]() {
                 consume_and_release(

@@ -123,7 +123,48 @@ bool runtime_tensor_data_is_aligned() {
         std::cerr << "executor-alignment: reshape failed: " << diagnostic->to_string() << '\n';
         return false;
     }
-    return tensor_data_is_aligned(std::get<SimpleTensor>(reshaped));
+    SimpleTensor reshaped_tensor = std::get<SimpleTensor>(std::move(reshaped));
+    if (!tensor_data_is_aligned(reshaped_tensor) || !tensor_data_shares_storage(tensor, reshaped_tensor)) {
+        std::cerr << "executor-alignment: reshape should preserve aligned shared storage\n";
+        return false;
+    }
+
+    const float original = static_cast<const SimpleTensor&>(tensor).data[0];
+    reshaped_tensor.data[0] = -99.0F;
+    if (static_cast<const SimpleTensor&>(tensor).data[0] != original ||
+        tensor_data_shares_storage(tensor, reshaped_tensor)) {
+        std::cerr << "executor-alignment: reshape view did not detach safely on mutation\n";
+        return false;
+    }
+
+    SimpleTensor source_mutation = make_synthetic_tensor(std::vector<std::int64_t>{2, 3}, "float32");
+    auto source_view_result = apply_reshape(source_mutation, std::vector<std::int64_t>{3, 2});
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&source_view_result)) {
+        std::cerr << "executor-alignment: source reshape failed: " << diagnostic->to_string() << '\n';
+        return false;
+    }
+    SimpleTensor source_view = std::get<SimpleTensor>(std::move(source_view_result));
+    const float view_original = static_cast<const SimpleTensor&>(source_view).data[0];
+    source_mutation.data[0] = -123.0F;
+    if (static_cast<const SimpleTensor&>(source_view).data[0] != view_original ||
+        tensor_data_shares_storage(source_mutation, source_view)) {
+        std::cerr << "executor-alignment: source tensor did not detach safely from reshape view\n";
+        return false;
+    }
+
+    SimpleTensor heads = make_synthetic_tensor(std::vector<std::int64_t>{2, 3, 4}, "float32");
+    auto flattened = apply_flatten_heads(heads);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&flattened)) {
+        std::cerr << "executor-alignment: flatten_heads failed: " << diagnostic->to_string() << '\n';
+        return false;
+    }
+    SimpleTensor flattened_tensor = std::get<SimpleTensor>(std::move(flattened));
+    if (flattened_tensor.shape != std::vector<std::int64_t>{2, 12} ||
+        !tensor_data_shares_storage(heads, flattened_tensor)) {
+        std::cerr << "executor-alignment: flatten_heads should be a metadata-only view\n";
+        return false;
+    }
+    return true;
 }
 
 bool callable_linear_and_tanh_execute() {

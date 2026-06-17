@@ -2,10 +2,12 @@
 
 #include "frontend_ir.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
 #include <limits>
+#include <memory>
 #include <new>
 #include <optional>
 #include <string>
@@ -65,7 +67,152 @@ bool operator!=(const AlignedAllocator<T, Alignment>& lhs, const AlignedAllocato
 // 64 bytes matches a common cache-line size and is a good baseline for future
 // SIMD/vectorized tensor kernels.
 constexpr std::size_t tensor_data_alignment = 64;
-using TensorData = std::vector<float, AlignedAllocator<float, tensor_data_alignment>>;
+
+using TensorDataStorage = std::vector<float, AlignedAllocator<float, tensor_data_alignment>>;
+
+// TensorData keeps vector-like ergonomics for existing kernels while allowing
+// explicit metadata-only views. Ordinary copies are deep copies; shared views
+// detach on mutation from either side so value-style tensor code remains safe.
+class TensorData {
+public:
+    using value_type = TensorDataStorage::value_type;
+    using size_type = TensorDataStorage::size_type;
+    using difference_type = TensorDataStorage::difference_type;
+    using reference = TensorDataStorage::reference;
+    using const_reference = TensorDataStorage::const_reference;
+    using pointer = TensorDataStorage::pointer;
+    using const_pointer = TensorDataStorage::const_pointer;
+    using iterator = TensorDataStorage::iterator;
+    using const_iterator = TensorDataStorage::const_iterator;
+
+    TensorData() : storage_(std::make_shared<TensorDataStorage>()) {}
+    TensorData(const TensorData& other)
+        : storage_(other.storage_ == nullptr
+              ? std::make_shared<TensorDataStorage>()
+              : std::make_shared<TensorDataStorage>(*other.storage_)) {}
+    TensorData(TensorData&& other) noexcept : storage_(std::move(other.storage_)) {
+        other.storage_ = std::make_shared<TensorDataStorage>();
+    }
+    TensorData(std::initializer_list<float> values)
+        : storage_(std::make_shared<TensorDataStorage>(values.begin(), values.end())) {}
+
+    template <typename InputIt>
+    TensorData(InputIt first, InputIt last) : storage_(std::make_shared<TensorDataStorage>(first, last)) {}
+
+    TensorData& operator=(const TensorData& other) {
+        if (this != &other) {
+            storage_ = other.storage_ == nullptr
+                ? std::make_shared<TensorDataStorage>()
+                : std::make_shared<TensorDataStorage>(*other.storage_);
+        }
+        return *this;
+    }
+    TensorData& operator=(TensorData&& other) noexcept {
+        if (this != &other) {
+            storage_ = std::move(other.storage_);
+            other.storage_ = std::make_shared<TensorDataStorage>();
+        }
+        return *this;
+    }
+
+    static TensorData shared_view(const TensorData& data) {
+        return TensorData{data.storage_};
+    }
+
+    bool shares_storage_with(const TensorData& other) const {
+        return storage_ == other.storage_;
+    }
+
+    bool unique_storage() const {
+        return storage_ != nullptr && storage_.use_count() == 1;
+    }
+
+    bool empty() const { return storage_->empty(); }
+    size_type size() const { return storage_->size(); }
+    size_type capacity() const { return storage_->capacity(); }
+
+    void reserve(size_type count) {
+        detach_for_write();
+        storage_->reserve(count);
+    }
+
+    void assign(size_type count, float value) {
+        detach_for_write();
+        storage_->assign(count, value);
+    }
+
+    void clear() {
+        detach_for_write();
+        storage_->clear();
+    }
+
+    void push_back(float value) {
+        detach_for_write();
+        storage_->push_back(value);
+    }
+
+    iterator begin() {
+        detach_for_write();
+        return storage_->begin();
+    }
+    const_iterator begin() const { return storage_->begin(); }
+    const_iterator cbegin() const { return storage_->cbegin(); }
+
+    iterator end() {
+        detach_for_write();
+        return storage_->end();
+    }
+    const_iterator end() const { return storage_->end(); }
+    const_iterator cend() const { return storage_->cend(); }
+
+    pointer data() {
+        detach_for_write();
+        return storage_->data();
+    }
+    const_pointer data() const { return storage_->data(); }
+
+    TensorDataStorage& writable_storage() {
+        detach_for_write();
+        return *storage_;
+    }
+    const TensorDataStorage& storage() const { return *storage_; }
+
+    reference operator[](size_type index) {
+        detach_for_write();
+        return (*storage_)[index];
+    }
+    const_reference operator[](size_type index) const { return (*storage_)[index]; }
+
+    template <typename InputIt>
+    iterator insert(const_iterator position, InputIt first, InputIt last) {
+        const auto offset = static_cast<difference_type>(position - storage_->cbegin());
+        detach_for_write();
+        return storage_->insert(storage_->cbegin() + offset, first, last);
+    }
+
+private:
+    explicit TensorData(std::shared_ptr<TensorDataStorage> storage) : storage_(std::move(storage)) {}
+
+    void detach_for_write() {
+        if (storage_ == nullptr) {
+            storage_ = std::make_shared<TensorDataStorage>();
+            return;
+        }
+        if (storage_.use_count() != 1) {
+            storage_ = std::make_shared<TensorDataStorage>(*storage_);
+        }
+    }
+
+    std::shared_ptr<TensorDataStorage> storage_;
+};
+
+inline bool operator==(const TensorData& lhs, const TensorData& rhs) {
+    return lhs.size() == rhs.size() && std::equal(lhs.begin(), lhs.end(), rhs.begin());
+}
+
+inline bool operator!=(const TensorData& lhs, const TensorData& rhs) {
+    return !(lhs == rhs);
+}
 
 struct SimpleTensor;
 
@@ -146,6 +293,7 @@ private:
 std::size_t num_elements(ShapeView shape);
 bool is_aligned_to(const void* pointer, std::size_t alignment);
 bool tensor_data_is_aligned(const SimpleTensor& tensor);
+bool tensor_data_shares_storage(const SimpleTensor& lhs, const SimpleTensor& rhs);
 SimpleTensor make_synthetic_tensor(ShapeView shape, std::string dtype, RuntimeTensorWorkspace* workspace = nullptr);
 std::string format_tensor(const SimpleTensor& tensor);
 void print_tensor(const SimpleTensor& tensor);
