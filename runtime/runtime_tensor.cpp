@@ -1,6 +1,7 @@
 #include "runtime_tensor.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -79,6 +80,25 @@ std::variant<SimpleTensor, Diagnostic> apply_linear_with_parameters(
 
 } // namespace
 
+SimpleTensor::SimpleTensor(std::vector<std::int64_t> tensor_shape, TensorData tensor_data, std::string tensor_dtype)
+    : shape(std::move(tensor_shape)), data(std::move(tensor_data)), dtype(std::move(tensor_dtype)) {}
+
+SimpleTensor::SimpleTensor(
+    std::vector<std::int64_t> tensor_shape,
+    std::vector<float> tensor_data,
+    std::string tensor_dtype
+)
+    : shape(std::move(tensor_shape)),
+      data(tensor_data.begin(), tensor_data.end()),
+      dtype(std::move(tensor_dtype)) {}
+
+SimpleTensor::SimpleTensor(
+    std::vector<std::int64_t> tensor_shape,
+    std::initializer_list<float> tensor_data,
+    std::string tensor_dtype
+)
+    : shape(std::move(tensor_shape)), data(tensor_data.begin(), tensor_data.end()), dtype(std::move(tensor_dtype)) {}
+
 ShapeView::ShapeView(const std::vector<std::int64_t>& shape)
     : values_(shape.data()), size_(shape.size()) {}
 
@@ -109,9 +129,23 @@ std::size_t num_elements(ShapeView shape) {
     return static_cast<std::size_t>(std::max<std::int64_t>(product, 1));
 }
 
+bool is_aligned_to(const void* pointer, std::size_t alignment) {
+    if (alignment == 0) {
+        return false;
+    }
+    if (pointer == nullptr) {
+        return true;
+    }
+    return reinterpret_cast<std::uintptr_t>(pointer) % alignment == 0;
+}
+
+bool tensor_data_is_aligned(const SimpleTensor& tensor) {
+    return is_aligned_to(tensor.data.data(), tensor_data_alignment);
+}
+
 SimpleTensor make_synthetic_tensor(ShapeView shape, std::string dtype) {
     const std::size_t element_count = num_elements(shape);
-    std::vector<float> data;
+    TensorData data;
     data.reserve(element_count);
     for (std::size_t index = 0; index < element_count; ++index) {
         data.push_back(static_cast<float>((index % 17) + 1) / 8.0F);

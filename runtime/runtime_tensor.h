@@ -2,16 +2,80 @@
 
 #include "frontend_ir.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
+#include <limits>
+#include <new>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
 
+template <typename T, std::size_t Alignment>
+class AlignedAllocator {
+    static_assert(Alignment >= alignof(T), "Alignment must satisfy the allocated type");
+    static_assert((Alignment & (Alignment - 1)) == 0, "Alignment must be a power of two");
+
+public:
+    using value_type = T;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+
+    template <typename U>
+    struct rebind {
+        using other = AlignedAllocator<U, Alignment>;
+    };
+
+    AlignedAllocator() noexcept = default;
+
+    template <typename U>
+    AlignedAllocator(const AlignedAllocator<U, Alignment>&) noexcept {}
+
+    [[nodiscard]] T* allocate(std::size_t count) {
+        if (count > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
+            throw std::bad_array_new_length();
+        }
+        if (count == 0) {
+            return nullptr;
+        }
+        return static_cast<T*>(::operator new(count * sizeof(T), std::align_val_t{Alignment}));
+    }
+
+    void deallocate(T* pointer, std::size_t) noexcept {
+        if (pointer == nullptr) {
+            return;
+        }
+        ::operator delete(pointer, std::align_val_t{Alignment});
+    }
+};
+
+template <typename T, typename U, std::size_t Alignment>
+bool operator==(const AlignedAllocator<T, Alignment>&, const AlignedAllocator<U, Alignment>&) noexcept {
+    return true;
+}
+
+template <typename T, typename U, std::size_t Alignment>
+bool operator!=(const AlignedAllocator<T, Alignment>& lhs, const AlignedAllocator<U, Alignment>& rhs) noexcept {
+    return !(lhs == rhs);
+}
+
+constexpr std::size_t tensor_data_alignment = 64;
+using TensorData = std::vector<float, AlignedAllocator<float, tensor_data_alignment>>;
+
 struct SimpleTensor {
     std::vector<std::int64_t> shape;
-    std::vector<float> data;
+    TensorData data;
     std::string dtype = "float32";
+
+    SimpleTensor() = default;
+    SimpleTensor(std::vector<std::int64_t> tensor_shape, TensorData tensor_data, std::string tensor_dtype = "float32");
+    SimpleTensor(std::vector<std::int64_t> tensor_shape, std::vector<float> tensor_data, std::string tensor_dtype = "float32");
+    SimpleTensor(
+        std::vector<std::int64_t> tensor_shape,
+        std::initializer_list<float> tensor_data,
+        std::string tensor_dtype = "float32"
+    );
 };
 
 struct LinearClosure {
@@ -44,6 +108,8 @@ private:
 };
 
 std::size_t num_elements(ShapeView shape);
+bool is_aligned_to(const void* pointer, std::size_t alignment);
+bool tensor_data_is_aligned(const SimpleTensor& tensor);
 SimpleTensor make_synthetic_tensor(ShapeView shape, std::string dtype);
 std::string format_tensor(const SimpleTensor& tensor);
 void print_tensor(const SimpleTensor& tensor);

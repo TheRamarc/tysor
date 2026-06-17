@@ -83,7 +83,25 @@ bool matmul_relu_executes() {
         std::cerr << "executor-matmul: unexpected output shape\n";
         return false;
     }
+    if (!tensor_data_is_aligned(*output)) {
+        std::cerr << "executor-matmul: tensor data is not aligned to " << tensor_data_alignment << " bytes\n";
+        return false;
+    }
     return output->data[0] > 0.0F;
+}
+
+bool runtime_tensor_data_is_aligned() {
+    SimpleTensor tensor = make_synthetic_tensor(std::vector<std::int64_t>{2, 3}, "float32");
+    if (!tensor_data_is_aligned(tensor)) {
+        std::cerr << "executor-alignment: synthetic tensor data is not aligned\n";
+        return false;
+    }
+    auto reshaped = apply_reshape(tensor, std::vector<std::int64_t>{3, 2});
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&reshaped)) {
+        std::cerr << "executor-alignment: reshape failed: " << diagnostic->to_string() << '\n';
+        return false;
+    }
+    return tensor_data_is_aligned(std::get<SimpleTensor>(reshaped));
 }
 
 bool callable_linear_and_tanh_execute() {
@@ -168,6 +186,7 @@ bool missing_shape_returns_runtime_diagnostic() {
 int main() {
     const std::vector<bool> checks{
         matmul_relu_executes(),
+        runtime_tensor_data_is_aligned(),
         callable_linear_and_tanh_execute(),
         module_local_function_calls_execute(),
         missing_shape_returns_runtime_diagnostic(),
