@@ -154,6 +154,60 @@ std::variant<SimpleTensor, Diagnostic> make_tensor_argument(
     );
 }
 
+const PlanParameter* find_plan_parameter_by_value(const ExecutionPlan& plan, std::size_t value_id) {
+    auto found = std::find_if(plan.parameters.begin(), plan.parameters.end(), [&](const PlanParameter& parameter) {
+        return parameter.value_id == value_id;
+    });
+    return found == plan.parameters.end() ? nullptr : &*found;
+}
+
+std::optional<std::int64_t> known_graph_dim(const GraphTensorType& type, std::size_t index) {
+    if (!type.has_known_rank || index >= type.shape.size()) {
+        return std::nullopt;
+    }
+    const GraphDim& dim = type.shape[index];
+    if (dim.kind != GraphDimKind::Known) {
+        return std::nullopt;
+    }
+    return dim.value;
+}
+
+bool starts_with(const std::string& value, const std::string& prefix) {
+    return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
+}
+
+std::variant<SimpleTensor, Diagnostic> make_model_parameter_tensor(
+    const PlanValue& value,
+    const PlanParameter& parameter,
+    RuntimeTensorWorkspace* workspace
+) {
+    const std::string dtype = parameter.tensor_type.dtype.value_or(value.type.tensor_dtype.value_or("float32"));
+    if (starts_with(parameter.name, "linear_") && parameter.role == "weight") {
+        auto in_features = known_graph_dim(parameter.tensor_type, 0);
+        auto out_features = known_graph_dim(parameter.tensor_type, 1);
+        if (!in_features || !out_features) {
+            return runtime_error("Linear weight parameter '" + parameter.name + "' requires known rank-2 shape");
+        }
+        return make_linear_weight(*in_features, *out_features, dtype, workspace);
+    }
+    if (starts_with(parameter.name, "linear_") && parameter.role == "bias") {
+        auto out_features = known_graph_dim(parameter.tensor_type, 0);
+        if (!out_features) {
+            return runtime_error("Linear bias parameter '" + parameter.name + "' requires known rank-1 shape");
+        }
+        return make_linear_bias(*out_features, dtype, workspace);
+    }
+    if (starts_with(parameter.name, "embedding_") && parameter.role == "weight") {
+        auto num_embeddings = known_graph_dim(parameter.tensor_type, 0);
+        auto embedding_dim = known_graph_dim(parameter.tensor_type, 1);
+        if (!num_embeddings || !embedding_dim) {
+            return runtime_error("Embedding weight parameter '" + parameter.name + "' requires known rank-2 shape");
+        }
+        return make_embedding_weight(*num_embeddings, *embedding_dim, dtype, workspace);
+    }
+    return runtime_error("Unsupported model parameter '" + parameter.name + "'");
+}
+
 std::variant<GraphRuntimeValue, Diagnostic> to_graph_value(const RuntimeValue& value) {
     if (const auto* item = std::get_if<std::int64_t>(&value)) {
         return *item;
@@ -882,6 +936,20 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
                         }
                         state.values.set(value.id, std::get<SimpleTensor>(std::move(tensor)));
                     }
+                }
+                if (value.is_model_parameter) {
+                    if (value.id >= use_counts.size() || use_counts[value.id] == 0) {
+                        break;
+                    }
+                    const PlanParameter* parameter = find_plan_parameter_by_value(plan, value.id);
+                    if (parameter == nullptr) {
+                        return runtime_error("Model parameter value '" + value.name + "' is missing plan parameter metadata");
+                    }
+                    auto tensor = make_model_parameter_tensor(value, *parameter, &workspace);
+                    if (const auto* diagnostic = std::get_if<Diagnostic>(&tensor)) {
+                        return *diagnostic;
+                    }
+                    state.values.set(value.id, std::get<SimpleTensor>(std::move(tensor)));
                 }
                 break;
             }

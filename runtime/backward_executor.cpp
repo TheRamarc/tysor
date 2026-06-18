@@ -97,6 +97,27 @@ SimpleTensor ones_like(const SimpleTensor& tensor) {
     return SimpleTensor{tensor.shape, std::vector<float>(tensor.data.size(), 1.0F), tensor.dtype};
 }
 
+bool is_trailing_vector_broadcast(const SimpleTensor& lhs, const SimpleTensor& rhs) {
+    return lhs.shape.size() == 2 &&
+           rhs.shape.size() == 1 &&
+           lhs.shape[1] == rhs.shape[0];
+}
+
+std::variant<SimpleTensor, Diagnostic> reduce_trailing_vector_gradient(const SimpleTensor& grad) {
+    if (grad.shape.size() != 2) {
+        return backward_error("trailing-vector broadcast backward requires rank-2 gradients");
+    }
+    const auto rows = static_cast<std::size_t>(grad.shape[0]);
+    const auto cols = static_cast<std::size_t>(grad.shape[1]);
+    SimpleTensor reduced{{static_cast<std::int64_t>(cols)}, std::vector<float>(cols, 0.0F), grad.dtype};
+    for (std::size_t row = 0; row < rows; ++row) {
+        for (std::size_t col = 0; col < cols; ++col) {
+            reduced.data[col] += grad.data[row * cols + col];
+        }
+    }
+    return reduced;
+}
+
 SimpleTensor make_backward_linear_weight(std::int64_t in_features, std::int64_t out_features, const std::string& dtype) {
     const std::size_t element_count = static_cast<std::size_t>(in_features * out_features);
     std::vector<float> data;
@@ -398,14 +419,27 @@ std::variant<SimpleTensor, Diagnostic> backward_binary(
     const auto* lhs_tensor = std::get_if<SimpleTensor>(&lhs_found->second);
     const auto* rhs_tensor = std::get_if<SimpleTensor>(&rhs_found->second);
     if (lhs_tensor != nullptr && rhs_tensor != nullptr) {
+        const bool rhs_broadcast = is_trailing_vector_broadcast(*lhs_tensor, *rhs_tensor);
         if (op.binary_op == FeBinaryOp::Add) {
             if (auto diagnostic = accumulate(gradients, op.inputs[0], grad)) return *diagnostic;
-            if (auto diagnostic = accumulate(gradients, op.inputs[1], grad)) return *diagnostic;
+            SimpleTensor rhs_grad = grad;
+            if (rhs_broadcast) {
+                auto reduced = reduce_trailing_vector_gradient(grad);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&reduced)) return *diagnostic;
+                rhs_grad = std::get<SimpleTensor>(std::move(reduced));
+            }
+            if (auto diagnostic = accumulate(gradients, op.inputs[1], rhs_grad)) return *diagnostic;
             return grad;
         }
         if (op.binary_op == FeBinaryOp::Sub) {
             if (auto diagnostic = accumulate(gradients, op.inputs[0], grad)) return *diagnostic;
-            if (auto diagnostic = accumulate(gradients, op.inputs[1], negate(grad))) return *diagnostic;
+            SimpleTensor rhs_grad = negate(grad);
+            if (rhs_broadcast) {
+                auto reduced = reduce_trailing_vector_gradient(rhs_grad);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&reduced)) return *diagnostic;
+                rhs_grad = std::get<SimpleTensor>(std::move(reduced));
+            }
+            if (auto diagnostic = accumulate(gradients, op.inputs[1], rhs_grad)) return *diagnostic;
             return grad;
         }
         if (op.binary_op == FeBinaryOp::Mul) {
@@ -413,8 +447,14 @@ std::variant<SimpleTensor, Diagnostic> backward_binary(
             auto rhs_grad = multiply(grad, *lhs_tensor);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs_grad)) return *diagnostic;
             if (const auto* diagnostic = std::get_if<Diagnostic>(&rhs_grad)) return *diagnostic;
+            SimpleTensor rhs_value_grad = std::get<SimpleTensor>(std::move(rhs_grad));
+            if (rhs_broadcast) {
+                auto reduced = reduce_trailing_vector_gradient(rhs_value_grad);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&reduced)) return *diagnostic;
+                rhs_value_grad = std::get<SimpleTensor>(std::move(reduced));
+            }
             if (auto diagnostic = accumulate(gradients, op.inputs[0], std::get<SimpleTensor>(lhs_grad))) return *diagnostic;
-            if (auto diagnostic = accumulate(gradients, op.inputs[1], std::get<SimpleTensor>(rhs_grad))) return *diagnostic;
+            if (auto diagnostic = accumulate(gradients, op.inputs[1], rhs_value_grad)) return *diagnostic;
             return grad;
         }
         if (op.binary_op == FeBinaryOp::Div) {
@@ -658,7 +698,7 @@ std::optional<Diagnostic> run_backward_plan_module(
 
     std::cout << "\n--- Gradient Output ---\n";
     for (const auto& value : plan->values) {
-        if (!value.is_parameter || value.type.kind != FeTypeKind::Tensor) {
+        if ((!value.is_parameter && !value.is_model_parameter) || value.type.kind != FeTypeKind::Tensor) {
             continue;
         }
         auto gradient = gradients.find(value.id);

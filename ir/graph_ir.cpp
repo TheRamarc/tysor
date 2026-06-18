@@ -391,6 +391,26 @@ std::optional<Diagnostic> ensure_same_shape(
     return std::nullopt;
 }
 
+std::optional<Diagnostic> ensure_trailing_vector_broadcast(
+    const GraphTensorType& tensor,
+    const GraphTensorType& vector,
+    const std::string& context
+) {
+    if (!same_dtype_or_unknown(tensor, vector)) {
+        return graph_error(context + " dtype mismatch: " + *tensor.dtype + " vs " + *vector.dtype);
+    }
+    if (!tensor.has_known_rank || !vector.has_known_rank) {
+        return std::nullopt;
+    }
+    if (tensor.shape.size() != 2 || vector.shape.size() != 1) {
+        return graph_error(
+            context + " rank mismatch: " + std::to_string(tensor.shape.size()) +
+            " vs " + std::to_string(vector.shape.size())
+        );
+    }
+    return ensure_compatible_dim(tensor.shape.back(), vector.shape.front(), context + " broadcast");
+}
+
 GraphDim multiply_dims(const std::vector<GraphDim>& dims) {
     if (dims.empty()) {
         return GraphDim::known(1);
@@ -437,6 +457,12 @@ std::optional<std::int64_t> known_element_count(const GraphTensorType& tensor) {
     return product;
 }
 
+bool has_known_dim(const GraphTensorType& tensor, std::size_t index) {
+    return tensor.has_known_rank &&
+           index < tensor.shape.size() &&
+           tensor.shape[index].kind == GraphDimKind::Known;
+}
+
 GraphTensorType tensor_with_shape(const GraphTensorType& source, std::vector<GraphDim> shape) {
     GraphTensorType result;
     result.dtype = source.dtype;
@@ -460,7 +486,46 @@ std::size_t append_value(GraphFunction& graph, std::string name, FeType type, bo
     const std::size_t id = graph.values.size();
     const bool requires_grad = is_parameter && type.kind == FeTypeKind::Tensor;
     const auto tensor_type = tensor_type_from_fe_type(type);
-    graph.values.push_back(GraphValue{id, name, std::move(type), is_parameter, requires_grad, tensor_type});
+    graph.values.push_back(GraphValue{id, name, std::move(type), is_parameter, requires_grad, false, tensor_type});
+    if (!name.empty()) {
+        graph.named_values[name] = id;
+    }
+    return id;
+}
+
+std::string shape_expr_from_tensor_type(const GraphTensorType& tensor) {
+    if (!tensor.has_known_rank) {
+        return std::string{};
+    }
+    std::ostringstream out;
+    out << '[';
+    for (std::size_t index = 0; index < tensor.shape.size(); ++index) {
+        if (index != 0) {
+            out << ", ";
+        }
+        out << graph_dim_to_string(tensor.shape[index]);
+    }
+    out << ']';
+    return out.str();
+}
+
+FeType fe_tensor_type_from_graph_tensor(const GraphTensorType& tensor) {
+    std::optional<std::string> shape_expr;
+    if (tensor.has_known_rank) {
+        shape_expr = shape_expr_from_tensor_type(tensor);
+    }
+    return FeType::tensor(tensor.dtype, shape_expr, tensor.has_known_rank ? std::optional<std::size_t>{tensor.shape.size()} : std::nullopt);
+}
+
+std::size_t append_tensor_value(
+    GraphFunction& graph,
+    std::string name,
+    GraphTensorType tensor_type,
+    bool is_model_parameter
+) {
+    const std::size_t id = graph.values.size();
+    FeType type = fe_tensor_type_from_graph_tensor(tensor_type);
+    graph.values.push_back(GraphValue{id, name, std::move(type), false, is_model_parameter, is_model_parameter, tensor_type});
     if (!name.empty()) {
         graph.named_values[name] = id;
     }
@@ -485,11 +550,23 @@ bool graph_has_parameter(const GraphFunction& graph, const std::string& name) {
     });
 }
 
+const GraphParameter* find_graph_parameter(
+    const GraphFunction& graph,
+    std::size_t owner_value,
+    const std::string& role
+) {
+    auto found = std::find_if(graph.parameters.begin(), graph.parameters.end(), [&](const GraphParameter& parameter) {
+        return parameter.owner_value == owner_value && parameter.role == role;
+    });
+    return found == graph.parameters.end() ? nullptr : &*found;
+}
+
 void append_graph_parameter(
     GraphFunction& graph,
     std::string name,
     std::string role,
     std::size_t owner_value,
+    std::size_t value_id,
     GraphTensorType tensor_type
 ) {
     if (graph_has_parameter(graph, name)) {
@@ -499,6 +576,7 @@ void append_graph_parameter(
         std::move(name),
         std::move(role),
         owner_value,
+        value_id,
         std::move(tensor_type),
         true,
     });
@@ -575,21 +653,33 @@ void append_linear_parameters_for_apply(
         in_dim = *inferred_in;
     }
     const GraphDim out_dim = GraphDim::known(*out_features);
-    append_graph_parameter(
-        graph,
-        graph_linear_weight_name(ctor.output),
-        "weight",
-        ctor.output,
-        parameter_tensor(input.dtype, {in_dim, out_dim})
-    );
-    if (linear_with_bias(graph, ctor).value_or(true)) {
+    const GraphTensorType weight_type = parameter_tensor(input.dtype, {in_dim, out_dim});
+    const std::string weight_name = graph_linear_weight_name(ctor.output);
+    if (find_graph_parameter(graph, ctor.output, "weight") == nullptr) {
+        const std::size_t weight_value = append_tensor_value(graph, weight_name, weight_type, true);
         append_graph_parameter(
             graph,
-            graph_linear_bias_name(ctor.output),
-            "bias",
+            weight_name,
+            "weight",
             ctor.output,
-            parameter_tensor(input.dtype, {out_dim})
+            weight_value,
+            weight_type
         );
+    }
+    if (linear_with_bias(graph, ctor).value_or(true)) {
+        const GraphTensorType bias_type = parameter_tensor(input.dtype, {out_dim});
+        const std::string bias_name = graph_linear_bias_name(ctor.output);
+        if (find_graph_parameter(graph, ctor.output, "bias") == nullptr) {
+            const std::size_t bias_value = append_tensor_value(graph, bias_name, bias_type, true);
+            append_graph_parameter(
+                graph,
+                bias_name,
+                "bias",
+                ctor.output,
+                bias_value,
+                bias_type
+            );
+        }
     }
 }
 
@@ -606,13 +696,19 @@ void append_embedding_parameters_for_apply(
     if (!num_embeddings || !embedding_dim) {
         return;
     }
-    append_graph_parameter(
-        graph,
-        graph_embedding_weight_name(ctor.output),
-        "weight",
-        ctor.output,
-        parameter_tensor(output.dtype, {GraphDim::known(*num_embeddings), GraphDim::known(*embedding_dim)})
-    );
+    const GraphTensorType weight_type = parameter_tensor(output.dtype, {GraphDim::known(*num_embeddings), GraphDim::known(*embedding_dim)});
+    const std::string weight_name = graph_embedding_weight_name(ctor.output);
+    if (find_graph_parameter(graph, ctor.output, "weight") == nullptr) {
+        const std::size_t weight_value = append_tensor_value(graph, weight_name, weight_type, true);
+        append_graph_parameter(
+            graph,
+            weight_name,
+            "weight",
+            ctor.output,
+            weight_value,
+            weight_type
+        );
+    }
 }
 
 void append_trainable_parameters_for_node(
@@ -645,6 +741,16 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_binary_tensor_typ
     const auto& lhs = graph.values[node.inputs[0]].tensor_type;
     const auto& rhs = graph.values[node.inputs[1]].tensor_type;
     if (lhs && rhs) {
+        const bool supports_trailing_broadcast = node.binary_op == FeBinaryOp::Add ||
+                                                 node.binary_op == FeBinaryOp::Sub ||
+                                                 node.binary_op == FeBinaryOp::Mul;
+        if (supports_trailing_broadcast &&
+            lhs->has_known_rank && rhs->has_known_rank && lhs->shape.size() == 2 && rhs->shape.size() == 1) {
+            if (auto diagnostic = ensure_trailing_vector_broadcast(*lhs, *rhs, "binary op")) {
+                return *diagnostic;
+            }
+            return *lhs;
+        }
         if (auto diagnostic = ensure_same_shape(*lhs, *rhs, "binary op")) {
             return *diagnostic;
         }
@@ -1026,6 +1132,8 @@ std::optional<Diagnostic> apply_inferred_tensor_type(
     return std::nullopt;
 }
 
+std::optional<std::string> graph_op_id_name(const std::string& name);
+
 std::optional<Diagnostic> append_node(GraphFunction& graph, GraphNode node) {
     auto inferred = infer_node_tensor_type(graph, node);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&inferred)) {
@@ -1037,6 +1145,87 @@ std::optional<Diagnostic> append_node(GraphFunction& graph, GraphNode node) {
     append_trainable_parameters_for_node(graph, node, std::get<std::optional<GraphTensorType>>(inferred));
     graph.nodes.push_back(std::move(node));
     return std::nullopt;
+}
+
+std::variant<std::optional<std::size_t>, Diagnostic> try_lower_linear_apply(
+    GraphFunction& graph,
+    std::size_t callee_id,
+    std::size_t input_id,
+    const FeType& output_type
+) {
+    const GraphNode* ctor = producer_node(graph, callee_id);
+    if (ctor == nullptr || ctor->kind != GraphNodeKind::LibraryCtor || ctor->op != "linear") {
+        return std::optional<std::size_t>{};
+    }
+
+    auto input = require_tensor_type(graph, input_id, "linear input");
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&input)) {
+        return *diagnostic;
+    }
+    const GraphTensorType input_tensor = std::get<GraphTensorType>(input);
+    auto inferred = infer_linear_apply_tensor_type(graph, *ctor, input_tensor);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&inferred)) {
+        return *diagnostic;
+    }
+    const auto inferred_tensor = std::get<std::optional<GraphTensorType>>(inferred);
+    if (!inferred_tensor) {
+        return graph_error("linear apply did not infer an output tensor type");
+    }
+
+    append_linear_parameters_for_apply(graph, *ctor, input_tensor);
+    const GraphParameter* weight = find_graph_parameter(graph, ctor->output, "weight");
+    if (weight == nullptr) {
+        return graph_error("linear apply could not materialize a weight parameter");
+    }
+    if (!has_known_dim(weight->tensor_type, 0) || !has_known_dim(weight->tensor_type, 1)) {
+        return std::optional<std::size_t>{};
+    }
+
+    const bool with_bias = linear_with_bias(graph, *ctor).value_or(true);
+    const GraphParameter* bias = nullptr;
+    if (with_bias) {
+        bias = find_graph_parameter(graph, ctor->output, "bias");
+        if (bias == nullptr) {
+            return graph_error("linear apply could not materialize a bias parameter");
+        }
+        if (!has_known_dim(bias->tensor_type, 0)) {
+            return std::optional<std::size_t>{};
+        }
+    }
+
+    const std::size_t matmul_output = with_bias
+        ? append_tensor_value(graph, std::string{}, *inferred_tensor, false)
+        : append_value(graph, std::string{}, output_type, false);
+    GraphNode matmul_node{
+        GraphNodeKind::PrimitiveCall,
+        matmul_output,
+        "matmul",
+        graph_op_id_name("matmul"),
+        FeBinaryOp::Add,
+        FeValue::none(),
+        {input_id, weight->value_id},
+    };
+    if (auto diagnostic = append_node(graph, std::move(matmul_node))) {
+        return *diagnostic;
+    }
+    if (!with_bias) {
+        return std::optional<std::size_t>{matmul_output};
+    }
+
+    const std::size_t output = append_value(graph, std::string{}, output_type, false);
+    GraphNode bias_node{
+        GraphNodeKind::Binary,
+        output,
+        std::string{},
+        std::nullopt,
+        FeBinaryOp::Add,
+        FeValue::none(),
+        {matmul_output, bias->value_id},
+    };
+    if (auto diagnostic = append_node(graph, std::move(bias_node))) {
+        return *diagnostic;
+    }
+    return std::optional<std::size_t>{output};
 }
 
 std::optional<std::string> graph_op_id_name(const std::string& name) {
@@ -1255,6 +1444,15 @@ std::variant<std::size_t, Diagnostic> GraphBuilder::lower_expr(const FeExprPtr& 
             }
             inputs.push_back(std::get<std::size_t>(lowered));
         }
+        if (inputs.size() == 2) {
+            auto lowered_linear = try_lower_linear_apply(graph, inputs[0], inputs[1], expr->type);
+            if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered_linear)) {
+                return *diagnostic;
+            }
+            if (const auto lowered_output = std::get<std::optional<std::size_t>>(lowered_linear)) {
+                return *lowered_output;
+            }
+        }
         const std::size_t output = append_value(graph, std::string{}, expr->type, false);
         GraphNode node{
             GraphNodeKind::Apply,
@@ -1372,6 +1570,12 @@ std::optional<Diagnostic> validate_graph_function(const GraphFunction& graph) {
                 "' references missing owner value " + std::to_string(parameter.owner_value)
             );
         }
+        if (value_ids.find(parameter.value_id) == value_ids.end()) {
+            return graph_error(
+                "Graph '" + graph.name + "' parameter '" + parameter.name +
+                "' references missing value " + std::to_string(parameter.value_id)
+            );
+        }
         if (!parameter_names.insert(parameter.name).second) {
             return graph_error("Graph '" + graph.name + "' has duplicate parameter '" + parameter.name + "'");
         }
@@ -1379,7 +1583,7 @@ std::optional<Diagnostic> validate_graph_function(const GraphFunction& graph) {
 
     std::set<std::size_t> produced_values;
     for (const auto& value : graph.values) {
-        if (value.is_parameter) {
+        if (value.is_parameter || value.is_model_parameter) {
             produced_values.insert(value.id);
         }
     }
@@ -1455,12 +1659,16 @@ std::string graph_ir_to_string(const GraphModule& module) {
             if (value.requires_grad) {
                 out << " requires_grad";
             }
+            if (value.is_model_parameter) {
+                out << " model_param";
+            }
             out << '\n';
         }
         for (const auto& parameter : graph.parameters) {
             out << "  param " << parameter.name
                 << " role=" << parameter.role
                 << " owner=%" << parameter.owner_value
+                << " value=%" << parameter.value_id
                 << " tensor=" << graph_tensor_type_to_string(parameter.tensor_type);
             if (parameter.trainable) {
                 out << " trainable";

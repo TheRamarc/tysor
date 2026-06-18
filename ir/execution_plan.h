@@ -26,6 +26,7 @@ struct PlanValue {
     bool is_parameter = false;
     bool requires_grad = false;
     Placement placement = Placement::Host;
+    bool is_model_parameter = false;
     std::optional<GraphTensorType> tensor_type = std::nullopt;
 };
 
@@ -33,6 +34,7 @@ struct PlanParameter {
     std::string name;
     std::string role;
     std::size_t owner_value = 0;
+    std::size_t value_id = 0;
     GraphTensorType tensor_type;
     bool trainable = true;
 };

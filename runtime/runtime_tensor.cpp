@@ -72,6 +72,12 @@ float apply_binary_scalar(FeBinaryOp op, float lhs, float rhs, std::optional<Dia
     return 0.0F;
 }
 
+bool is_trailing_vector_broadcast(const SimpleTensor& lhs, const SimpleTensor& rhs) {
+    return lhs.shape.size() == 2 &&
+           rhs.shape.size() == 1 &&
+           lhs.shape[1] == rhs.shape[0];
+}
+
 std::variant<SimpleTensor, Diagnostic> apply_linear_with_parameters(
     const SimpleTensor& input,
     const SimpleTensor& weight,
@@ -270,10 +276,10 @@ std::variant<SimpleTensor, Diagnostic> elementwise_binary(
     const SimpleTensor& rhs,
     RuntimeTensorWorkspace* workspace
 ) {
-    if (lhs.shape != rhs.shape) {
+    if (lhs.shape != rhs.shape && !is_trailing_vector_broadcast(lhs, rhs)) {
         return runtime_error("tensor shape mismatch");
     }
-    if (lhs.data.size() != rhs.data.size()) {
+    if (lhs.shape == rhs.shape && lhs.data.size() != rhs.data.size()) {
         return runtime_error("tensor data length mismatch");
     }
     TensorData data = data_with_capacity(lhs.data.size(), workspace);
@@ -281,6 +287,22 @@ std::variant<SimpleTensor, Diagnostic> elementwise_binary(
     auto& out = data.writable_storage();
     const float* lhs_data = lhs.data.data();
     const float* rhs_data = rhs.data.data();
+    if (is_trailing_vector_broadcast(lhs, rhs)) {
+        const auto rows = static_cast<std::size_t>(lhs.shape[0]);
+        const auto cols = static_cast<std::size_t>(lhs.shape[1]);
+        if (lhs.data.size() != rows * cols || rhs.data.size() != cols) {
+            return runtime_error("tensor broadcast data length mismatch");
+        }
+        for (std::size_t row = 0; row < rows; ++row) {
+            for (std::size_t col = 0; col < cols; ++col) {
+                out.push_back(apply_binary_scalar(op, lhs_data[row * cols + col], rhs_data[col], error));
+                if (error) {
+                    return *error;
+                }
+            }
+        }
+        return SimpleTensor{lhs.shape, std::move(data), lhs.dtype};
+    }
     for (std::size_t index = 0; index < lhs.data.size(); ++index) {
         out.push_back(apply_binary_scalar(op, lhs_data[index], rhs_data[index], error));
         if (error) {

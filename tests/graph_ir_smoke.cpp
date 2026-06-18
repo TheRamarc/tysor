@@ -178,6 +178,12 @@ bool expect_parameter(
                   << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
         return false;
     }
+    if (parameter->value_id >= graph.values.size() || !graph.values[parameter->value_id].is_model_parameter) {
+        std::cerr << test_name << ": parameter " << parameter->name
+                  << " does not reference a model parameter value\n"
+                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+        return false;
+    }
     if (parameter->name != expected_name ||
         graph_tensor_type_to_string(parameter->tensor_type) != expected_tensor ||
         !parameter->trainable) {
@@ -255,6 +261,20 @@ bool graph_infers_linear_symbolic_shape() {
         !expect_parameter("linear-shape-inference", graph, "bias", owner, expected_bias, "float32[4]")) {
         return false;
     }
+    const auto has_apply = std::any_of(graph.nodes.begin(), graph.nodes.end(), [](const GraphNode& node) {
+        return node.kind == GraphNodeKind::Apply;
+    });
+    const auto has_matmul = std::any_of(graph.nodes.begin(), graph.nodes.end(), [](const GraphNode& node) {
+        return node.kind == GraphNodeKind::PrimitiveCall && node.op == "matmul";
+    });
+    const auto has_bias_add = std::any_of(graph.nodes.begin(), graph.nodes.end(), [](const GraphNode& node) {
+        return node.kind == GraphNodeKind::Binary && node.binary_op == FeBinaryOp::Add;
+    });
+    if (has_apply || !has_matmul || !has_bias_add) {
+        std::cerr << "linear-shape-inference: expected linear apply to lower to matmul plus bias add\n"
+                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+        return false;
+    }
     ExecutionPlan plan = compile_local_execution_plan(graph);
     const auto y = graph.named_values.at("y");
     if (!plan.values[y].tensor_type || graph_tensor_type_to_string(*plan.values[y].tensor_type) != "float32[batch, 4]") {
@@ -263,7 +283,9 @@ bool graph_infers_linear_symbolic_shape() {
     }
     const PlanParameter* weight = find_plan_parameter(plan, "weight", owner);
     if (weight == nullptr || weight->name != expected_weight ||
-        graph_tensor_type_to_string(weight->tensor_type) != "float32[3, 4]") {
+        graph_tensor_type_to_string(weight->tensor_type) != "float32[3, 4]" ||
+        weight->value_id >= plan.values.size() ||
+        !plan.values[weight->value_id].is_model_parameter) {
         std::cerr << "linear-shape-inference: execution plan did not preserve parameter metadata\n";
         return false;
     }
@@ -461,7 +483,7 @@ int main() {
             "layer model(x: tensor[float16]): tensor[float16]:\n"
             "  return x -> linear(16, 16)\n",
             1,
-            4
+            5
         ),
         graph_module_skips_non_straight_line(),
         frontend_only_list_decl_is_skipped(),

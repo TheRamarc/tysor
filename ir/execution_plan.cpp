@@ -254,6 +254,7 @@ PlanValue lower_plan_value(const GraphValue& value, Placement placement) {
         value.is_parameter,
         value.requires_grad,
         placement,
+        value.is_model_parameter,
         value.tensor_type,
     };
 }
@@ -263,6 +264,7 @@ PlanParameter lower_plan_parameter(const GraphParameter& parameter) {
         parameter.name,
         parameter.role,
         parameter.owner_value,
+        parameter.value_id,
         parameter.tensor_type,
         parameter.trainable,
     };
@@ -557,13 +559,15 @@ ExecutionPlan compile_metal_execution_plan(const GraphFunction& graph) {
     ExecutionPlan plan = make_base_plan(graph, BackendKind::Metal);
     for (const auto& value : graph.values) {
         const Placement placement =
-            value.type.kind == FeTypeKind::Tensor && !value.is_parameter ? Placement::Device : Placement::Host;
+            value.type.kind == FeTypeKind::Tensor && !value.is_parameter && !value.is_model_parameter
+                ? Placement::Device
+                : Placement::Host;
         plan.values.push_back(lower_plan_value(value, placement));
     }
     for (const auto& value : plan.values) {
         if (value.placement == Placement::Host) {
             plan.steps.push_back(PlanStep{PlanStepKind::AllocateHostValue, value.id, std::nullopt});
-            if (value.is_parameter) {
+            if (value.is_parameter || value.is_model_parameter) {
                 plan.steps.push_back(PlanStep{PlanStepKind::UploadToDevice, value.id, std::nullopt});
             }
         } else {
@@ -812,6 +816,12 @@ std::optional<Diagnostic> validate_execution_plan(const ExecutionPlan& plan) {
                 "' references missing owner value " + std::to_string(parameter.owner_value)
             );
         }
+        if (value_ids.find(parameter.value_id) == value_ids.end()) {
+            return plan_error(
+                "Execution plan '" + plan.name + "' parameter '" + parameter.name +
+                "' references missing value " + std::to_string(parameter.value_id)
+            );
+        }
         if (!parameter_names.insert(parameter.name).second) {
             return plan_error("Execution plan '" + plan.name + "' has duplicate parameter '" + parameter.name + "'");
         }
@@ -889,12 +899,16 @@ std::string execution_plan_to_string(const PlanModule& module) {
             if (value.requires_grad) {
                 out << " requires_grad";
             }
+            if (value.is_model_parameter) {
+                out << " model_param";
+            }
             out << '\n';
         }
         for (const auto& parameter : plan.parameters) {
             out << "  param " << parameter.name
                 << " role=" << parameter.role
                 << " owner=%" << parameter.owner_value
+                << " value=%" << parameter.value_id
                 << " tensor=" << graph_tensor_type_to_string(parameter.tensor_type);
             if (parameter.trainable) {
                 out << " trainable";
