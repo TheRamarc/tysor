@@ -20,11 +20,14 @@ struct LinearSpec {
     LinearClosure closure;
     std::string weight_name;
     std::optional<std::string> bias_name;
+    std::optional<GraphTensorType> weight_type;
+    std::optional<GraphTensorType> bias_type;
 };
 
 struct EmbeddingSpec {
     EmbeddingClosure closure;
     std::string weight_name;
+    std::optional<GraphTensorType> weight_type;
 };
 
 struct ActivationSpec {
@@ -75,6 +78,28 @@ std::string linear_bias_name(std::size_t output_id) {
 
 std::string embedding_weight_name(std::size_t output_id) {
     return "embedding_" + std::to_string(output_id) + "_weight";
+}
+
+const PlanParameter* find_plan_parameter(
+    const ExecutionPlan& plan,
+    std::size_t owner_value,
+    const std::string& role
+) {
+    auto found = std::find_if(plan.parameters.begin(), plan.parameters.end(), [&](const PlanParameter& parameter) {
+        return parameter.owner_value == owner_value && parameter.role == role;
+    });
+    return found == plan.parameters.end() ? nullptr : &*found;
+}
+
+std::optional<std::int64_t> known_graph_dim(const GraphTensorType& type, std::size_t index) {
+    if (!type.has_known_rank || index >= type.shape.size()) {
+        return std::nullopt;
+    }
+    const GraphDim& dim = type.shape[index];
+    if (dim.kind != GraphDimKind::Known) {
+        return std::nullopt;
+    }
+    return dim.value;
 }
 
 std::variant<double, Diagnostic> require_number(const TrainValue& value) {
@@ -537,6 +562,7 @@ std::variant<SimpleTensor, Diagnostic> backward_embedding_weight(
 
 std::variant<LinearSpec, Diagnostic> build_linear_spec(
     const PlanOp& op,
+    const ExecutionPlan& plan,
     const PlanValue& output,
     const TrainExecutionResult& execution
 ) {
@@ -577,14 +603,38 @@ std::variant<LinearSpec, Diagnostic> build_linear_spec(
         spec.closure.with_bias = std::get<bool>(with_bias->second);
     }
     spec.weight_name = linear_weight_name(op.output);
+    if (const PlanParameter* weight = find_plan_parameter(plan, op.output, "weight")) {
+        spec.weight_name = weight->name;
+        spec.weight_type = weight->tensor_type;
+        if (auto in_features = known_graph_dim(weight->tensor_type, 0)) {
+            spec.closure.in_features = *in_features;
+        }
+        if (auto out_features = known_graph_dim(weight->tensor_type, 1)) {
+            spec.closure.out_features = *out_features;
+        }
+        if (weight->tensor_type.dtype) {
+            spec.closure.dtype = *weight->tensor_type.dtype;
+        }
+    }
     if (spec.closure.with_bias) {
         spec.bias_name = linear_bias_name(op.output);
+        if (const PlanParameter* bias = find_plan_parameter(plan, op.output, "bias")) {
+            spec.bias_name = bias->name;
+            spec.bias_type = bias->tensor_type;
+            if (auto out_features = known_graph_dim(bias->tensor_type, 0)) {
+                spec.closure.out_features = *out_features;
+            }
+            if (bias->tensor_type.dtype) {
+                spec.closure.dtype = *bias->tensor_type.dtype;
+            }
+        }
     }
     return spec;
 }
 
 std::variant<EmbeddingSpec, Diagnostic> build_embedding_spec(
     const PlanOp& op,
+    const ExecutionPlan& plan,
     const PlanValue& output,
     const TrainExecutionResult& execution
 ) {
@@ -599,6 +649,19 @@ std::variant<EmbeddingSpec, Diagnostic> build_embedding_spec(
         spec.closure.dtype = *output.type.callable_return->tensor_dtype;
     }
     spec.weight_name = embedding_weight_name(op.output);
+    if (const PlanParameter* weight = find_plan_parameter(plan, op.output, "weight")) {
+        spec.weight_name = weight->name;
+        spec.weight_type = weight->tensor_type;
+        if (auto num_embeddings = known_graph_dim(weight->tensor_type, 0)) {
+            spec.closure.num_embeddings = *num_embeddings;
+        }
+        if (auto embedding_dim = known_graph_dim(weight->tensor_type, 1)) {
+            spec.closure.embedding_dim = *embedding_dim;
+        }
+        if (weight->tensor_type.dtype) {
+            spec.closure.dtype = *weight->tensor_type.dtype;
+        }
+    }
     return spec;
 }
 
@@ -607,7 +670,10 @@ void ensure_linear_parameters(
     const SimpleTensor& input,
     std::map<std::string, SimpleTensor>& parameters
 ) {
-    const std::int64_t in_features = spec.closure.in_features.value_or(input.shape[1]);
+    std::int64_t in_features = spec.closure.in_features.value_or(input.shape[1]);
+    if (spec.weight_type) {
+        in_features = known_graph_dim(*spec.weight_type, 0).value_or(in_features);
+    }
     parameters.emplace(spec.weight_name, make_linear_weight(in_features, spec.closure.out_features, spec.closure.dtype));
     if (spec.bias_name) {
         parameters.emplace(*spec.bias_name, make_linear_bias(spec.closure.out_features, spec.closure.dtype));
@@ -699,12 +765,12 @@ std::variant<TrainValue, Diagnostic> execute_op(
         return TrainValue{std::get<SimpleTensor>(std::move(result))};
     }
     if (op.kind == PlanOpKind::LibraryCtor && op.op == "linear") {
-        auto spec = build_linear_spec(op, plan.values[op.output], execution);
+        auto spec = build_linear_spec(op, plan, plan.values[op.output], execution);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&spec)) return *diagnostic;
         return TrainValue{std::get<LinearSpec>(std::move(spec))};
     }
     if (op.kind == PlanOpKind::LibraryCtor && op.op == "Embedding") {
-        auto spec = build_embedding_spec(op, plan.values[op.output], execution);
+        auto spec = build_embedding_spec(op, plan, plan.values[op.output], execution);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&spec)) return *diagnostic;
         return TrainValue{std::get<EmbeddingSpec>(std::move(spec))};
     }

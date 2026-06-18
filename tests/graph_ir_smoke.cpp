@@ -1,9 +1,11 @@
 #include "frontend_ir.h"
+#include "execution_plan.h"
 #include "graph_ir.h"
 #include "lexer.h"
 #include "parser.h"
 #include "semantic_analyzer.h"
 
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -94,6 +96,99 @@ bool graph_ok(const std::string& name, const std::string& source, std::size_t gr
     return true;
 }
 
+std::variant<GraphFunction, Diagnostic> graph_from_source(const std::string& source) {
+    auto lowered = lower_module(source);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
+        return *diagnostic;
+    }
+    LoweredModule module = std::get<LoweredModule>(std::move(lowered));
+    if (module.functions.empty()) {
+        return Diagnostic::error("test", "T0001", "expected lowered function");
+    }
+    return build_graph_function(module.functions.front());
+}
+
+const GraphTensorType* named_tensor_type(const GraphFunction& graph, const std::string& name) {
+    auto found = graph.named_values.find(name);
+    if (found == graph.named_values.end()) {
+        return nullptr;
+    }
+    if (found->second >= graph.values.size()) {
+        return nullptr;
+    }
+    return graph.values[found->second].tensor_type ? &*graph.values[found->second].tensor_type : nullptr;
+}
+
+bool expect_named_tensor(
+    const std::string& test_name,
+    const GraphFunction& graph,
+    const std::string& value_name,
+    const std::string& expected
+) {
+    const GraphTensorType* tensor = named_tensor_type(graph, value_name);
+    if (tensor == nullptr) {
+        std::cerr << test_name << ": missing tensor metadata for '" << value_name << "'\n"
+                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+        return false;
+    }
+    const std::string actual = graph_tensor_type_to_string(*tensor);
+    if (actual != expected) {
+        std::cerr << test_name << ": expected '" << value_name << "' tensor " << expected
+                  << ", got " << actual << '\n'
+                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+        return false;
+    }
+    return true;
+}
+
+const GraphParameter* find_graph_parameter(
+    const GraphFunction& graph,
+    const std::string& role,
+    std::size_t owner_value
+) {
+    auto found = std::find_if(graph.parameters.begin(), graph.parameters.end(), [&](const GraphParameter& parameter) {
+        return parameter.role == role && parameter.owner_value == owner_value;
+    });
+    return found == graph.parameters.end() ? nullptr : &*found;
+}
+
+const PlanParameter* find_plan_parameter(
+    const ExecutionPlan& plan,
+    const std::string& role,
+    std::size_t owner_value
+) {
+    auto found = std::find_if(plan.parameters.begin(), plan.parameters.end(), [&](const PlanParameter& parameter) {
+        return parameter.role == role && parameter.owner_value == owner_value;
+    });
+    return found == plan.parameters.end() ? nullptr : &*found;
+}
+
+bool expect_parameter(
+    const std::string& test_name,
+    const GraphFunction& graph,
+    const std::string& role,
+    std::size_t owner_value,
+    const std::string& expected_name,
+    const std::string& expected_tensor
+) {
+    const GraphParameter* parameter = find_graph_parameter(graph, role, owner_value);
+    if (parameter == nullptr) {
+        std::cerr << test_name << ": missing graph parameter role=" << role
+                  << " owner=%" << owner_value << '\n'
+                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+        return false;
+    }
+    if (parameter->name != expected_name ||
+        graph_tensor_type_to_string(parameter->tensor_type) != expected_tensor ||
+        !parameter->trainable) {
+        std::cerr << test_name << ": unexpected parameter " << parameter->name
+                  << " tensor=" << graph_tensor_type_to_string(parameter->tensor_type) << '\n'
+                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+        return false;
+    }
+    return true;
+}
+
 bool matmul_relu_graph_ok() {
     auto lowered = lower_module(
         "layer model(x: tensor[float16], w: tensor[float16]): tensor[float16]:\n"
@@ -125,6 +220,106 @@ bool matmul_relu_graph_ok() {
     }
     if (graph.outputs.size() != 1 || graph.outputs.front() != graph.nodes[1].output) {
         std::cerr << "matmul-relu-graph: expected relu output as graph output\n";
+        return false;
+    }
+    return true;
+}
+
+bool graph_infers_linear_symbolic_shape() {
+    auto graph_result = graph_from_source(
+        "layer model(x: tensor[float32, [batch, 3]]): tensor[float32]:\n"
+        "  let proj = linear(3, 4, true)\n"
+        "  let y = x -> proj()\n"
+        "  return y\n"
+    );
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
+        std::cerr << "linear-shape-inference: graph lowering failed: " << diagnostic->to_string() << '\n';
+        return false;
+    }
+    const GraphFunction& graph = std::get<GraphFunction>(graph_result);
+    if (!expect_named_tensor("linear-shape-inference", graph, "x", "float32[batch, 3]")) {
+        return false;
+    }
+    if (!expect_named_tensor("linear-shape-inference", graph, "y", "float32[batch, 4]")) {
+        return false;
+    }
+    if (graph.parameters.size() != 2) {
+        std::cerr << "linear-shape-inference: expected weight and bias parameters\n"
+                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+        return false;
+    }
+    const std::size_t owner = graph.named_values.at("proj");
+    const std::string expected_weight = "linear_" + std::to_string(owner) + "_weight";
+    const std::string expected_bias = "linear_" + std::to_string(owner) + "_bias";
+    if (!expect_parameter("linear-shape-inference", graph, "weight", owner, expected_weight, "float32[3, 4]") ||
+        !expect_parameter("linear-shape-inference", graph, "bias", owner, expected_bias, "float32[4]")) {
+        return false;
+    }
+    ExecutionPlan plan = compile_local_execution_plan(graph);
+    const auto y = graph.named_values.at("y");
+    if (!plan.values[y].tensor_type || graph_tensor_type_to_string(*plan.values[y].tensor_type) != "float32[batch, 4]") {
+        std::cerr << "linear-shape-inference: execution plan did not preserve inferred tensor metadata\n";
+        return false;
+    }
+    const PlanParameter* weight = find_plan_parameter(plan, "weight", owner);
+    if (weight == nullptr || weight->name != expected_weight ||
+        graph_tensor_type_to_string(weight->tensor_type) != "float32[3, 4]") {
+        std::cerr << "linear-shape-inference: execution plan did not preserve parameter metadata\n";
+        return false;
+    }
+    return true;
+}
+
+bool graph_infers_reshape_and_flatten_shapes() {
+    auto graph_result = graph_from_source(
+        "layer model(x: tensor[float32, [2, 3, 4]]): tensor[float32]:\n"
+        "  let flat = flatten_heads(x)\n"
+        "  let reshaped = reshape(flat, 4, 6)\n"
+        "  return reshaped\n"
+    );
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
+        std::cerr << "reshape-flatten-shape-inference: graph lowering failed: " << diagnostic->to_string() << '\n';
+        return false;
+    }
+    const GraphFunction& graph = std::get<GraphFunction>(graph_result);
+    return expect_named_tensor("reshape-flatten-shape-inference", graph, "flat", "float32[2, 12]") &&
+           expect_named_tensor("reshape-flatten-shape-inference", graph, "reshaped", "float32[4, 6]");
+}
+
+bool graph_records_embedding_parameter() {
+    auto graph_result = graph_from_source(
+        "layer model(idx: tensor[float32, [batch]]): tensor[float32]:\n"
+        "  let tok = Embedding(32, 8)\n"
+        "  let y = idx -> tok()\n"
+        "  return y\n"
+    );
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
+        std::cerr << "embedding-parameter: graph lowering failed: " << diagnostic->to_string() << '\n';
+        return false;
+    }
+    const GraphFunction& graph = std::get<GraphFunction>(graph_result);
+    if (!expect_named_tensor("embedding-parameter", graph, "y", "float32[batch, 8]")) {
+        return false;
+    }
+    const std::size_t owner = graph.named_values.at("tok");
+    return expect_parameter(
+        "embedding-parameter",
+        graph,
+        "weight",
+        owner,
+        "embedding_" + std::to_string(owner) + "_weight",
+        "float32[32, 8]"
+    );
+}
+
+bool graph_rejects_matmul_inner_mismatch() {
+    auto graph_result = graph_from_source(
+        "layer model(x: tensor[float32, [2, 3]], w: tensor[float32, [4, 5]]): tensor[float32]:\n"
+        "  return matmul(x, w)\n"
+    );
+    const auto* diagnostic = std::get_if<Diagnostic>(&graph_result);
+    if (diagnostic == nullptr || diagnostic->message.find("matmul inner") == std::string::npos) {
+        std::cerr << "matmul-shape-mismatch: expected matmul inner dimension diagnostic\n";
         return false;
     }
     return true;
@@ -250,6 +445,10 @@ int main() {
         validation_rejects_read_before_production(),
         validation_rejects_bad_binary_shape(),
         matmul_relu_graph_ok(),
+        graph_infers_linear_symbolic_shape(),
+        graph_infers_reshape_and_flatten_shapes(),
+        graph_records_embedding_parameter(),
+        graph_rejects_matmul_inner_mismatch(),
         graph_ok(
             "binary-graph",
             "layer model(x: tensor[float16], y: tensor[float16]): tensor[float16]:\n"

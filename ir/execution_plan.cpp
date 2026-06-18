@@ -254,6 +254,17 @@ PlanValue lower_plan_value(const GraphValue& value, Placement placement) {
         value.is_parameter,
         value.requires_grad,
         placement,
+        value.tensor_type,
+    };
+}
+
+PlanParameter lower_plan_parameter(const GraphParameter& parameter) {
+    return PlanParameter{
+        parameter.name,
+        parameter.role,
+        parameter.owner_value,
+        parameter.tensor_type,
+        parameter.trainable,
     };
 }
 
@@ -278,6 +289,10 @@ ExecutionPlan make_base_plan(const GraphFunction& graph, BackendKind backend) {
     plan.return_type = graph.return_type;
     plan.outputs = graph.outputs;
     plan.named_values = graph.named_values;
+    plan.parameters.reserve(graph.parameters.size());
+    for (const auto& parameter : graph.parameters) {
+        plan.parameters.push_back(lower_plan_parameter(parameter));
+    }
     return plan;
 }
 
@@ -783,6 +798,24 @@ std::optional<Diagnostic> validate_execution_plan(const ExecutionPlan& plan) {
             );
         }
     }
+    std::set<std::string> parameter_names;
+    for (const auto& parameter : plan.parameters) {
+        if (parameter.name.empty()) {
+            return plan_error("Execution plan '" + plan.name + "' has an unnamed parameter");
+        }
+        if (parameter.role.empty()) {
+            return plan_error("Execution plan '" + plan.name + "' parameter '" + parameter.name + "' has an empty role");
+        }
+        if (value_ids.find(parameter.owner_value) == value_ids.end()) {
+            return plan_error(
+                "Execution plan '" + plan.name + "' parameter '" + parameter.name +
+                "' references missing owner value " + std::to_string(parameter.owner_value)
+            );
+        }
+        if (!parameter_names.insert(parameter.name).second) {
+            return plan_error("Execution plan '" + plan.name + "' has duplicate parameter '" + parameter.name + "'");
+        }
+    }
     for (std::size_t index = 0; index < plan.ops.size(); ++index) {
         const PlanOp& op = plan.ops[index];
         if (value_ids.find(op.output) == value_ids.end()) {
@@ -835,6 +868,7 @@ std::string execution_plan_to_string(const PlanModule& module) {
         out << "execution_plan " << plan.name
             << " backend=" << plan_backend_name(plan.backend)
             << " values=" << plan.values.size()
+            << " parameters=" << plan.parameters.size()
             << " ops=" << plan.ops.size()
             << " steps=" << plan.steps.size()
             << " outputs=" << plan.outputs.size()
@@ -846,11 +880,24 @@ std::string execution_plan_to_string(const PlanModule& module) {
             }
             out << ": " << fe_type_to_plan_string(value.type)
                 << " placement=" << placement_name(value.placement);
+            if (value.tensor_type) {
+                out << " tensor=" << graph_tensor_type_to_string(*value.tensor_type);
+            }
             if (value.is_parameter) {
                 out << " param";
             }
             if (value.requires_grad) {
                 out << " requires_grad";
+            }
+            out << '\n';
+        }
+        for (const auto& parameter : plan.parameters) {
+            out << "  param " << parameter.name
+                << " role=" << parameter.role
+                << " owner=%" << parameter.owner_value
+                << " tensor=" << graph_tensor_type_to_string(parameter.tensor_type);
+            if (parameter.trainable) {
+                out << " trainable";
             }
             out << '\n';
         }

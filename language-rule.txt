@@ -1,0 +1,4 @@
+  semantic_analyzer:
+    checks language-level type correctness
+  graph_ir:
+    checks tensor graph shape/dataflow correctness

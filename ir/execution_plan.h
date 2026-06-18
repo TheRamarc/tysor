@@ -26,6 +26,15 @@ struct PlanValue {
     bool is_parameter = false;
     bool requires_grad = false;
     Placement placement = Placement::Host;
+    std::optional<GraphTensorType> tensor_type = std::nullopt;
+};
+
+struct PlanParameter {
+    std::string name;
+    std::string role;
+    std::size_t owner_value = 0;
+    GraphTensorType tensor_type;
+    bool trainable = true;
 };
 
 enum class PlanOpKind {
@@ -119,6 +128,7 @@ struct ExecutionPlan {
     std::string name;
     FeType return_type;
     std::vector<PlanValue> values;
+    std::vector<PlanParameter> parameters;
     std::vector<PlanOp> ops;
     std::vector<PlanStep> steps;
     std::vector<std::size_t> outputs;

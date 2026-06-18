@@ -3,6 +3,7 @@
 #include "diagnostic.h"
 #include "frontend_ir.h"
 
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
@@ -20,6 +21,39 @@ enum class GraphNodeKind {
     Apply,
 };
 
+enum class GraphDimKind {
+    Unknown,
+    Known,
+    Symbolic,
+};
+
+// Graph dimensions are compiler facts, not runtime storage. Known dimensions
+// come from source annotations or op arguments; symbolic dimensions keep names
+// such as "batch" when the graph can prove equality but not a concrete size.
+struct GraphDim {
+    GraphDimKind kind = GraphDimKind::Unknown;
+    std::int64_t value = 0;
+    std::string symbol;
+
+    static GraphDim unknown();
+    static GraphDim known(std::int64_t dim);
+    static GraphDim symbolic(std::string name);
+};
+
+struct GraphTensorType {
+    std::optional<std::string> dtype;
+    std::vector<GraphDim> shape;
+    bool has_known_rank = false;
+};
+
+struct GraphParameter {
+    std::string name;
+    std::string role;
+    std::size_t owner_value = 0;
+    GraphTensorType tensor_type;
+    bool trainable = true;
+};
+
 // Value ids are expected to be dense and stable. Execution planning validates
 // this and the local executor uses it for vector-backed runtime storage.
 struct GraphValue {
@@ -28,6 +62,7 @@ struct GraphValue {
     FeType type;
     bool is_parameter = false;
     bool requires_grad = false;
+    std::optional<GraphTensorType> tensor_type = std::nullopt;
 };
 
 // Operation names are kept for diagnostics/backends, while op_id carries the
@@ -49,6 +84,7 @@ struct GraphFunction {
     bool is_layer = false;
     FeType return_type;
     std::vector<GraphValue> values;
+    std::vector<GraphParameter> parameters;
     std::vector<GraphNode> nodes;
     std::vector<std::size_t> outputs;
     std::map<std::string, std::size_t> named_values;
@@ -82,5 +118,7 @@ private:
 GraphFunctionResult build_graph_function(const FeFunction& function);
 std::variant<GraphModule, Diagnostic> build_graph_module(const LoweredModule& module);
 std::optional<Diagnostic> validate_graph_function(const GraphFunction& graph);
+std::string graph_dim_to_string(const GraphDim& dim);
+std::string graph_tensor_type_to_string(const GraphTensorType& type);
 std::string graph_module_summary(const GraphModule& module);
 std::string graph_ir_to_string(const GraphModule& module);
