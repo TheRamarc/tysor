@@ -428,6 +428,12 @@ Type Type::bool_type() {
     return type;
 }
 
+Type Type::str_type() {
+    Type type;
+    type.base = TypeBase::Str;
+    return type;
+}
+
 Type Type::void_type() {
     return Type{};
 }
@@ -804,6 +810,9 @@ Type Parser::parse_type() {
             return Type::bool_type();
         case TokenType::Float:
             fail_token("Use an explicit float width such as float16, float32, or float64", *token);
+        case TokenType::Str:
+            consume();
+            return Type::str_type();
         case TokenType::Ident: {
             std::string name = expect_string(*token);
             consume();
@@ -1304,6 +1313,8 @@ std::string type_to_string(const Type& type) {
             return "bool";
         case TypeBase::Int:
             return type.scalar_dtype.value_or("int");
+        case TypeBase::Str:
+            return "str";
         case TypeBase::Float:
             return type.scalar_dtype.value_or("float");
         case TypeBase::Tensor:

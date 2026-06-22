@@ -73,7 +73,7 @@ std::optional<TokenType> lookup_keyword(std::string_view text) {
         {"else", TokenType::Else},
         {"while", TokenType::While},
         {"for", TokenType::For},
-        {"str", TokenType::str},
+        {"str", TokenType::Str},
     }};
     for (const auto& [keyword, kind] : table) {
         if (keyword == text) {
@@ -93,7 +93,7 @@ const char* token_type_name(TokenType kind) {
             return "INT";
         case TokenType::Float:
             return "FLOAT";
-        case TokenType::str:
+        case TokenType::Str:
             return "STR";
         case TokenType::Bool:
             return "BOOL";

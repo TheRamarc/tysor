@@ -1,4 +1,4 @@
-let hi = "this is string"
+let mut hi:str = "this is string"
 layer model(x: tensor[float16]): tensor[float16]:
   let proj = linear(3, 2, true)
   let y = proj(x)
@@ -9,6 +9,11 @@ layer model(x: tensor[float16]): tensor[float16]:
   return y
 
 config model:
+  optimizer = "sgd"
+  lr = 0.1
+  objective = y
+
+config model1:
   optimizer = "sgd"
   lr = 0.1
   objective = y

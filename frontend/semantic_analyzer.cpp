@@ -3,8 +3,10 @@
 #include "ops.h"
 
 #include <algorithm>
+#include <optional>
 #include <set>
 #include <sstream>
+#include <iostream>
 #include <type_traits>
 #include <utility>
 
@@ -569,7 +571,7 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_expr(const Expr& expr, 
             } else if constexpr (std::is_same_v<T, BoolLiteral>) {
                 return Type::bool_type();
             } else if constexpr (std::is_same_v<T, StringLiteral>) {
-                return Type::void_type();
+                return Type::str_type();
             } else if constexpr (std::is_same_v<T, IdentifierExpr>) {
                 return visit_identifier(value.name, expr.span);
             } else if constexpr (std::is_same_v<T, CallExpr>) {

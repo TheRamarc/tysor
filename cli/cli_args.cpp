@@ -1,4 +1,5 @@
 #include "cli_args.h"
+#include "diagnostic.h"
 
 #include <cstdlib>
 #include <sstream>

@@ -1,6 +1,8 @@
 #include "graph_executor.h"
 
+#include "diagnostic.h"
 #include "ops.h"
+#include "runtime_tensor.h"
 
 #include <algorithm>
 #include <cmath>

@@ -1,6 +1,7 @@
 #include "frontend_ir.h"
 
 #include "ops.h"
+#include "parser.h"
 
 #include <algorithm>
 #include <cmath>
@@ -132,7 +133,7 @@ std::string fe_type_to_string(const FeType& type) {
             return type.scalar_dtype.value_or("float");
         case FeTypeKind::Bool:
             return "bool";
-        case FeTypeKind::str:
+        case FeTypeKind::Str:
             return "str";
         case FeTypeKind::Tensor:
             if (type.tensor_dtype && type.tensor_shape_expr) {
@@ -441,6 +442,12 @@ FeType FeType::float64() {
     return type;
 }
 
+FeType FeType::str_type() {
+    FeType type;
+    type.kind = FeTypeKind::Str;
+    return type;
+}
+
 FeType FeType::bool_type() {
     FeType type;
     type.kind = FeTypeKind::Bool;
@@ -622,6 +629,8 @@ FeType lower_type(const Type& type) {
             return FeType::float_type();
         case TypeBase::Bool:
             return FeType::bool_type();
+        case TypeBase::Str:
+            return FeType::str_type();
         case TypeBase::Tensor:
             return FeType::tensor(type.tensor_dtype, type.tensor_shape_expr, type.tensor_rank);
         case TypeBase::Tuple: {

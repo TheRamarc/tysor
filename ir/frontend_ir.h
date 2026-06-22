@@ -34,7 +34,7 @@ enum class FeTypeKind {
     Callable,
     Void,
     None,
-    str,
+    Str,
 };
 
 // Lowered type. This is similar to parser Type, but belongs to Frontend IR so
@@ -58,6 +58,7 @@ struct FeType {
     static FeType float32();
     static FeType float64();
     static FeType bool_type();
+    static FeType str_type();
     static FeType tensor(
         std::optional<std::string> dtype,
         std::optional<std::string> shape_expr,

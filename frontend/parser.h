@@ -20,6 +20,7 @@ enum class TypeBase {
     Void,
     Bool,
     Float,
+    Str,
     Tensor,
     Tuple,
     List,
@@ -51,6 +52,7 @@ struct Type {
     static Type float32();
     static Type float64();
     static Type bool_type();
+    static Type str_type();
     static Type void_type();
     static Type tensor(
         std::optional<std::string> dtype,
