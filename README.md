@@ -61,30 +61,30 @@ core/              diagnostics and shared source utilities
 
 Requirements:
 
-- CMake 3.20+
+- Meson
+- Ninja
 - A C++17 compiler
-- Ninja or Make through CMake
 - On Apple builds, a `metal_bridge.mm` file must exist at one of the paths
-  checked by `CMakeLists.txt`: `backend/metal/metal_bridge.mm`,
+  checked by `meson.build`: `backend/metal/metal_bridge.mm`,
   `../native/metal_bridge.mm`, or `../tysor/native/metal_bridge.mm`.
 
 Build:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
+meson setup out/meson --buildtype=debug
+meson compile -C out/meson
 ```
 
 Run the full test suite:
 
 ```bash
-ctest --test-dir build --output-on-failure
+meson test -C out/meson
 ```
 
 Run the runtime benchmark:
 
 ```bash
-./build/cpptysor_runtime_bench
+./out/meson/cpptysor_runtime_bench
 ```
 
 ## CLI
@@ -92,38 +92,38 @@ Run the runtime benchmark:
 Show help:
 
 ```bash
-./build/cpptysor --help
+./out/meson/cpptysor --help
 ```
 
 Common inspection flow:
 
 ```bash
-./build/cpptysor path/to/program.ty --tokens --ast --semantics --ir --graph --plan
+./out/meson/cpptysor path/to/program.ty --tokens --ast --semantics --ir --graph --plan
 ```
 
 Run a local program:
 
 ```bash
-./build/cpptysor path/to/program.ty --run --shape x=2x3
+./out/meson/cpptysor path/to/program.ty --run --shape x=2x3
 ```
 
 Run a training config:
 
 ```bash
-./build/cpptysor path/to/program.ty --train --shape x=2x3 --shape target=2x2
+./out/meson/cpptysor path/to/program.ty --train --shape x=2x3 --shape target=2x2
 ```
 
 Select a backend:
 
 ```bash
-./build/cpptysor path/to/program.ty --plan --backend local
-./build/cpptysor path/to/program.ty --plan --backend metal
+./out/meson/cpptysor path/to/program.ty --plan --backend local
+./out/meson/cpptysor path/to/program.ty --plan --backend metal
 ```
 
 Probe Metal availability:
 
 ```bash
-./build/cpptysor --metal-device
+./out/meson/cpptysor --metal-device
 ```
 
 ## Minimal Runnable Program
@@ -139,13 +139,13 @@ layer model(x: tensor[float32]): tensor[float32]:
 Inspect the compiler output:
 
 ```bash
-./build/cpptysor quickstart.ty --graph --plan
+./out/meson/cpptysor quickstart.ty --graph --plan
 ```
 
 Run it with a synthetic input tensor:
 
 ```bash
-./build/cpptysor quickstart.ty --run --shape x=2x3
+./out/meson/cpptysor quickstart.ty --run --shape x=2x3
 ```
 
 ## Minimal Training Program
@@ -167,7 +167,7 @@ config model:
 Run:
 
 ```bash
-./build/cpptysor train.ty --train --shape x=2x3 --shape target=2x2
+./out/meson/cpptysor train.ty --train --shape x=2x3 --shape target=2x2
 ```
 
 ## Language Sketch
@@ -252,22 +252,22 @@ source of truth for a backend.
 Build everything:
 
 ```bash
-cmake --build build
+meson compile -C out/meson
 ```
 
 Run one smoke executable:
 
 ```bash
-./build/cpptysor_graph_ir_smoke
-./build/cpptysor_execution_plan_smoke
-./build/cpptysor_graph_executor_smoke
-./build/cpptysor_train_smoke
+./out/meson/cpptysor_graph_ir_smoke
+./out/meson/cpptysor_execution_plan_smoke
+./out/meson/cpptysor_graph_executor_smoke
+./out/meson/cpptysor_train_smoke
 ```
 
 Run all tests:
 
 ```bash
-ctest --test-dir build --output-on-failure
+meson test -C out/meson
 ```
 
 Check formatting-related whitespace before committing:
@@ -289,4 +289,3 @@ High-value next steps:
 - Grow backend kernels and capability tests for Metal/CUDA/ROCm.
 - Move more tensor shape facts out of CLI runtime shape hints and into compiler
   inference where possible.
-

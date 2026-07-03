@@ -1,0 +1,2 @@
+let mut c : callable = linear(5, 5) 
+let mut x : tensor  = tensor(5, 5)

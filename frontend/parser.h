@@ -61,7 +61,7 @@ struct Type {
     );
     static Type tuple(std::vector<Type> elements);
     static Type list(std::vector<Type> elements);
-    static Type callable(Type return_type);
+    static Type callable(std::optional<Type> return_type);
 };
 
 struct Expr;

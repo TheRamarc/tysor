@@ -30,6 +30,7 @@ enum class SemanticCallTargetKind {
     CallableLocal,
 };
 
+// Symbol = information about one declared object (a variable, parameter, function, etc.).
 struct Symbol {
     Type type;
     bool mutable_symbol = false;
@@ -38,6 +39,7 @@ struct Symbol {
     SemanticSymbolKind kind = SemanticSymbolKind::Local;
 };
 
+// Signature = information about how to call a function.
 struct Signature {
     std::string name;
     Type return_type;

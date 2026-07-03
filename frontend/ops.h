@@ -33,6 +33,7 @@ enum class OpId {
     FlattenHeads,
     RepeatKv,
     Print,
+    Tensor
 };
 
 enum class RuntimePrimitiveKind {

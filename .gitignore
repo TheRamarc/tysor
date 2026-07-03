@@ -1,16 +1,14 @@
 # Build directories
 build/
-cmake-build-*/
 out/
 
-# CMake generated files
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-CTestTestfile.cmake
-DartConfiguration.tcl
-Testing/
-install_manifest.txt
+# Meson/Ninja generated files
+meson-info/
+meson-logs/
+meson-private/
+build.ninja
+.ninja_deps
+.ninja_log
 compile_commands.json
 
 # Native build files

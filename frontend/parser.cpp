@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <iostream>
 
 namespace {
 
@@ -464,11 +465,13 @@ Type Type::list(std::vector<Type> elements) {
     type.elements = std::move(elements);
     return type;
 }
-
-Type Type::callable(Type return_type) {
+// needed attention here.
+Type Type::callable(std::optional<Type> return_type) {
     Type type;
+    if (return_type.has_value()){
+        type.callable_return = std::make_unique<Type>(std::move(return_type.value()));
+    }
     type.base = TypeBase::Callable;
-    type.callable_return = std::make_unique<Type>(std::move(return_type));
     return type;
 }
 
@@ -737,7 +740,7 @@ ExprPtr Parser::parse_primary_expression() {
             result = parse_list_expression();
             break;
         default:
-            fail_here("Expected expression");
+            fail_here("--Expected expression");
     }
 
     while (peek_kind(0) == TokenType::OpenBracket) {
@@ -813,6 +816,9 @@ Type Parser::parse_type() {
         case TokenType::Str:
             consume();
             return Type::str_type();
+        case TokenType::Callable:
+            consume();
+            return Type::callable(std::nullopt);
         case TokenType::Ident: {
             std::string name = expect_string(*token);
             consume();
@@ -1067,7 +1073,7 @@ Stmt Parser::parse_stmt() {
             fail_token("Unexpected token in statement", *token);
     }
 }
-
+// this fn parseing the let keyword and assign wheather it mutable or not.
 Stmt Parser::parse_let_var_decl() {
     Token start = expect(TokenType::Let, "Expected 'let'");
     bool is_mutable = false;

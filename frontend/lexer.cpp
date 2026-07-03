@@ -53,7 +53,7 @@ std::string token_value_to_string(const TokenValue& value) {
 }
 
 std::optional<TokenType> lookup_keyword(std::string_view text) {
-    static constexpr std::array<std::pair<std::string_view, TokenType>, 20> table = {{
+    static constexpr std::array<std::pair<std::string_view, TokenType>, 21> table = {{
         {"return", TokenType::Return},
         {"int", TokenType::Int},
         {"bool", TokenType::Bool},
@@ -74,6 +74,7 @@ std::optional<TokenType> lookup_keyword(std::string_view text) {
         {"while", TokenType::While},
         {"for", TokenType::For},
         {"str", TokenType::Str},
+        {"callable", TokenType::Callable},
     }};
     for (const auto& [keyword, kind] : table) {
         if (keyword == text) {
@@ -99,6 +100,8 @@ const char* token_type_name(TokenType kind) {
             return "BOOL";
         case TokenType::Tensor:
             return "TENSOR";
+        case TokenType::Callable:
+            return "CALLABLE";
         case TokenType::Tuple:
             return "TUPLE";
         case TokenType::List:

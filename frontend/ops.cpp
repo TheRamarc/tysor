@@ -58,6 +58,7 @@ std::vector<Type> reshape_arg_types() {
 std::vector<OpDefinition> make_ops() {
     return {
         op(OpId::Linear, signature("linear", Type::callable(tensor_any()), {Type::int_type(), Type::int_type(), Type::bool_type()}, 1, 3), false, true, true, false, true),
+        op(OpId::Tensor, signature("tensor", tensor_any(), {Type::int_type(), Type::int_type(), Type::bool_type()}, 1, 3), false, true, true, false, true),
         op(OpId::Matmul, signature("matmul", tensor_any(), {tensor_any(), tensor_any()}, 2, 2), true, false, false, false, false, RuntimePrimitiveKind::Matmul),
         op(OpId::Relu, signature("relu", tensor_any(), {tensor_any()}, 1, 1), true, false, false, true, false, RuntimePrimitiveKind::Relu),
         op(OpId::Scale, signature("scale", tensor_any(), {tensor_any(), Type::float_type()}, 2, 2), true, true, false, true, false, RuntimePrimitiveKind::Scale),
@@ -120,6 +121,8 @@ const char* op_id_name(OpId id) {
     switch (id) {
         case OpId::Linear:
             return "Linear";
+        case OpId::Tensor:
+            return "Tensor";
         case OpId::Matmul:
             return "Matmul";
         case OpId::MatmulRelu:

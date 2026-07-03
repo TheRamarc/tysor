@@ -22,6 +22,7 @@ enum class TokenType {
     List,
     True,
     False,
+    Callable,
     Layer,
     Fn,
     Config,

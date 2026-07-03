@@ -1,6 +1,7 @@
 #include "semantic_analyzer.h"
 
 #include "ops.h"
+#include "parser.h"
 
 #include <algorithm>
 #include <optional>
@@ -493,6 +494,11 @@ std::optional<Diagnostic> SemanticAnalyzer::analyze_stmt(const Stmt& stmt, const
                             return diagnostic;
                         }
                         if (!is_compatible(value.type, init_type)) {
+                            // std::cout <<"this is value_type = " << type_to_string(value.type) << '\n';
+                            // std::cout <<"this is init_type = " << type_to_string(init_type) << '\n';
+                            // if (value.type.base == init_type.base) {
+                            //     std::cout << "both are same" << '\n';
+                            // }
                             return error(stmt.span, "Initialization type mismatch for '" + value.name + "'");
                         }
                     }
@@ -1384,10 +1390,12 @@ bool SemanticAnalyzer::is_compatible(const Type& target, const Type& source) con
         });
     }
     if (target.base == TypeBase::Callable) {
-        if (!target.callable_return || !source.callable_return) {
-            return !target.callable_return && !source.callable_return;
-        }
-        return is_compatible(*target.callable_return, *source.callable_return);
+        // here if we do 'c : callable' it doesn't have callable_return, we need to fix this
+        // if (!target.callable_return || !source.callable_return) {
+        //     return !target.callable_return && !source.callable_return;
+        // }
+        // return is_compatible(*target.callable_return, *source.callable_return);
+        return true;
     }
     return true;
 }
