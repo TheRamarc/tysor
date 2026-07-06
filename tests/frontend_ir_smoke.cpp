@@ -78,7 +78,7 @@ bool contains_ir(const std::string& name, const std::string& source, const std::
 bool local_objective_ok() {
     auto frontend_result = lower_module(
         "layer model(x: tensor[float16]): tensor[float16]:\n"
-        "  let loss = relu(x)\n"
+        "  loss = relu(x)\n"
         "  return x\n"
         "\n"
         "config model:\n"
@@ -108,7 +108,7 @@ int main() {
         lower_ok(
             "matmul-relu",
             "layer model(x: tensor[float16], w: tensor[float16]): tensor[float16]:\n"
-            "  let y = matmul(x, w)\n"
+            "  y = matmul(x, w)\n"
             "  return relu(y)\n",
             1,
             0

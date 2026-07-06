@@ -530,17 +530,19 @@ std::optional<Diagnostic> SemanticAnalyzer::analyze_stmt(const Stmt& stmt, const
                 Type value_type = std::get<Type>(std::move(analyzed));
                 const Symbol* symbol = find_var(value.name);
                 if (symbol == nullptr) {
-                    // this block shouldn't exit, we removed the let and mut, but now just leave.
-                    push_scope();
-                    return error(stmt.span, "Cannot assign to undefined variable '" + value.name + "'; declare it with 'let'");
+                    // Variable not found, implicitly declare it in the current scope
+                    const auto kind = current_callable_name_ ? SemanticSymbolKind::Local : SemanticSymbolKind::Global;
+                    record_declaration(stmt.span, value.name, kind, value_type);
+                    if (auto diagnostic = declare_var(value.name, value_type, kind, stmt.span)) {
+                        return diagnostic;
+                    }
+                    record_assignment(stmt.span, value.name, kind, value_type, value_type);
+                } else {
+                    if (!is_compatible(symbol->type, value_type)) {
+                        return error(stmt.span, "Assignment type mismatch for '" + value.name + "'");
+                    }
+                    record_assignment(stmt.span, value.name, symbol->kind, symbol->type, value_type);
                 }
-                if (!symbol->mutable_symbol) {
-                    return error(stmt.span, "Cannot assign to immutable variable '" + value.name + "'; declare it with 'mut'");
-                }
-                if (!is_compatible(symbol->type, value_type)) {
-                    return error(stmt.span, "Assignment type mismatch for '" + value.name + "'");
-                }
-                record_assignment(stmt.span, value.name, symbol->kind, symbol->type, value_type);
             } else if constexpr (std::is_same_v<T, ScopeStmt>) {
                 push_scope();
                 for (const auto& inner : value.statements) {

@@ -170,7 +170,7 @@ bool runtime_tensor_data_is_aligned() {
 bool callable_linear_and_tanh_execute() {
     auto module_result = plan_module(
         "layer model(x: tensor[float32]): tensor[float32]:\n"
-        "  let proj = linear(3, 2, true)\n"
+        "  proj = linear(3, 2, true)\n"
         "  return proj(x) -> Tanh()\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {

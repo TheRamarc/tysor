@@ -8,7 +8,7 @@
 int main() {
     const std::string source =
         "layer model(x: tensor[float32]): tensor[float32]:\n"
-        "  let y = x -> SiLU()\n"
+        "  y = x -> SiLU()\n"
         "  return y\n"
         "\n"
         "config model:\n"

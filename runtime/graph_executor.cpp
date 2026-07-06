@@ -1012,7 +1012,7 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
                             result = execute_library_ctor(op, plan.values[op.output], state.values);
                             break;
                         case PlanOpKind::Apply:
-                            result = execute_apply(op, plan.values[op.output], state.values, workspace);
+                            result = execute_op(op, plan, plan.values[op.output], state.values, workspace);
                             break;
                     }
                 }

@@ -198,7 +198,7 @@ bool expect_parameter(
 bool matmul_relu_graph_ok() {
     auto lowered = lower_module(
         "layer model(x: tensor[float16], w: tensor[float16]): tensor[float16]:\n"
-        "  let y = matmul(x, w)\n"
+        "  y = matmul(x, w)\n"
         "  return relu(y)\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
@@ -234,8 +234,8 @@ bool matmul_relu_graph_ok() {
 bool graph_infers_linear_symbolic_shape() {
     auto graph_result = graph_from_source(
         "layer model(x: tensor[float32, [batch, 3]]): tensor[float32]:\n"
-        "  let proj = linear(3, 4, true)\n"
-        "  let y = x -> proj()\n"
+        "  proj = linear(3, 4, true)\n"
+        "  y = x -> proj()\n"
         "  return y\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
@@ -295,8 +295,8 @@ bool graph_infers_linear_symbolic_shape() {
 bool graph_infers_reshape_and_flatten_shapes() {
     auto graph_result = graph_from_source(
         "layer model(x: tensor[float32, [2, 3, 4]]): tensor[float32]:\n"
-        "  let flat = flatten_heads(x)\n"
-        "  let reshaped = reshape(flat, 4, 6)\n"
+        "  flat = flatten_heads(x)\n"
+        "  reshaped = reshape(flat, 4, 6)\n"
         "  return reshaped\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
@@ -311,8 +311,8 @@ bool graph_infers_reshape_and_flatten_shapes() {
 bool graph_records_embedding_parameter() {
     auto graph_result = graph_from_source(
         "layer model(idx: tensor[float32, [batch]]): tensor[float32]:\n"
-        "  let tok = Embedding(32, 8)\n"
-        "  let y = idx -> tok()\n"
+        "  tok = Embedding(32, 8)\n"
+        "  y = idx -> tok()\n"
         "  return y\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
@@ -436,7 +436,7 @@ bool graph_module_skips_non_straight_line() {
 bool frontend_only_list_decl_is_skipped() {
     auto lowered = lower_module(
         "layer model(x: tensor[float16]): tensor[float16]:\n"
-        "  let dims = [1, 2]\n"
+        "  dims = [1, 2]\n"
         "  return x\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {

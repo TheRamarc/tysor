@@ -64,7 +64,7 @@ std::variant<GraphModule, Diagnostic> graph_module(const std::string& source) {
 bool local_matmul_relu_plan_ok() {
     auto graphs = graph_module(
         "layer model(x: tensor[float16], w: tensor[float16]): tensor[float16]:\n"
-        "  let y = matmul(x, w)\n"
+        "  y = matmul(x, w)\n"
         "  return relu(y)\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graphs)) {
@@ -112,7 +112,7 @@ bool local_matmul_relu_plan_ok() {
 bool output_only_optimizer_fuses_matmul_relu() {
     auto graphs = graph_module(
         "layer model(x: tensor[float16], w: tensor[float16]): tensor[float16]:\n"
-        "  let y = matmul(x, w)\n"
+        "  y = matmul(x, w)\n"
         "  return relu(y)\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graphs)) {

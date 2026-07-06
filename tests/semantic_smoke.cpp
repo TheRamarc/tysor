@@ -77,12 +77,12 @@ bool semantic_info_records_core_facts() {
         "config settings:\n"
         "  depth: int32 = 2\n"
         "\n"
-        "let global_step: int32 = 0\n"
+        "global_step = 0\n"
         "\n"
-        "layer model(mut x: tensor[float16], w: tensor[float16]): tensor[float16]:\n"
-        "  let mut y = matmul(x, w)\n"
+        "layer model(x: tensor[float16], w: tensor[float16]): tensor[float16]:\n"
+        "  y = matmul(x, w)\n"
         "  y = relu(y)\n"
-        "  let z: int32 = settings.depth\n"
+        "  z = settings.depth\n"
         "  return y\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
@@ -146,7 +146,7 @@ int main() {
         analyze_ok(
             "matmul-relu",
             "layer model(x: tensor[float16], w: tensor[float16]): tensor[float16]:\n"
-            "  let y = matmul(x, w)\n"
+            "  y = matmul(x, w)\n"
             "  return relu(y)\n",
             2
         ),
@@ -156,14 +156,7 @@ int main() {
             "  return x -> relu()[2] * 2\n",
             1
         ),
-        analyze_fails(
-            "immutable-assignment",
-            "layer model(x: tensor[float16]): tensor[float16]:\n"
-            "  let y = x\n"
-            "  y = x\n"
-            "  return y\n",
-            "Cannot assign to immutable variable 'y'"
-        ),
+
         analyze_fails(
             "unknown-symbol",
             "layer model(x: tensor[float16]): tensor[float16]:\n"
@@ -173,7 +166,7 @@ int main() {
         analyze_fails(
             "fn-arrow-callable-local",
             "fn helper(x: tensor[float16]): tensor[float16]:\n"
-            "  let proj = linear(8)\n"
+            "  proj = linear(8)\n"
             "  return x -> proj()\n",
             "cannot be used inside fn"
         ),
