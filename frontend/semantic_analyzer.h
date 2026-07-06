@@ -588,18 +588,103 @@ private:
         Layer,
     };
 
-    // Stack of lexical scopes. The current function/layer owner is recorded in
-    // SemanticInfo so identical spans in different owners remain distinguishable.
+    /**
+     * @brief Stack of lexical scopes for variable resolution.
+     * 
+     * Why it exists: Provides an ordered lookup mechanism (from most nested to global) to resolve identifier references (`IdentifierExpr`) to their typed `Symbol` counterparts and handle variable shadowing in nested block scopes (e.g. `IfStmt`, `ForStmt`).
+     * What it tracks: A dynamic stack where each element represents a lexical block. The `std::map` maps string identifiers directly to their AST `Symbol` definitions (type, callability, etc.). Index 0 always represents the global module scope.
+     * What mutates/updates it: `push_scope()` appends a new empty map when entering a block. `pop_scope()` destroys the deepest block on exit. `declare_var()` inserts new symbols into `scopes_.back()`.
+     */
     std::vector<std::map<std::string, Symbol>> scopes_;
+
+    /**
+     * @brief Global registry of user-defined functions.
+     * 
+     * Why it exists: Enables forward and mutually recursive calls across the module by establishing all callable targets before descending into function bodies.
+     * What it tracks: A flat dictionary mapping top-level `Function` AST node names to their parsed `Signature` (return type, argument types, and arity bounds).
+     * What mutates/updates it: Exclusively populated by `collect_functions()` during the initial top-level scan of the `Program` AST prior to statement analysis.
+     */
     std::map<std::string, Signature> functions_;
+
+    /**
+     * @brief Global registry of user-defined layers.
+     * 
+     * Why it exists: Serves as the authoritative source for layer validation, distinguishing neural network modules (which hold state) from pure mathematical functions during instantiation and invocation.
+     * What it tracks: Maps `Layer` AST node identifiers to their explicit `Signature`. Unlike functions, layers enforce different runtime constraints (like parameter initialization).
+     * What mutates/updates it: Exclusively populated by `collect_layers()` during the initial top-level scan of the `Program` AST.
+     */
     std::map<std::string, Signature> layers_;
+
+    /**
+     * @brief Global registry of configuration blocks.
+     * 
+     * Why it exists: Allows strict type-checking of hyperparameter and configuration field accesses (e.g., `train.learning_rate`) without requiring dynamic dictionaries at runtime.
+     * What it tracks: A nested map. The outer map keys on the config block name (e.g., "train"). The inner map associates specific field names with their deduced static `Type`.
+     * What mutates/updates it: Exclusively populated by `collect_configs()` during the initial scan of `Config` AST nodes.
+     */
     std::map<std::string, std::map<std::string, Type>> configs_;
+
+    /**
+     * @brief The deduced type of the last evaluated expression.
+     * 
+     * Why it exists: Acts as a side-channel to propagate type information up the AST, especially useful for implicit returns or arrow pipeline (`->`) stage inference where a parent node needs the exact type of its child.
+     * What it tracks: The `Type` object computed for the most recently traversed `Expr` node.
+     * What mutates/updates it: Overwritten at the end of every `analyze_expr()` call and `analyze_stmt()` expression evaluation. Reset to `Type::None_type()` when exiting scopes that don't produce values.
+     */
     Type last_expr_type_ = Type::None_type();
+
+    /**
+     * @brief The expected return type of the active callable.
+     * 
+     * Why it exists: Provides the reference type to validate all `ReturnStmt` nodes against. Without this, nested `return` statements would not know if they violate the function's strict signature.
+     * What it tracks: An `std::optional<Type>`. When `std::nullopt`, it indicates we are in the global scope (where returns are invalid). Otherwise, it holds the `return_type` of the enclosing function/layer.
+     * What mutates/updates it: Set by `visit_callable()` when descending into a function/layer body, and restored to its previous state (usually `nullopt`) upon returning up the call stack.
+     */
     std::optional<Type> current_return_type_;
+
+    /**
+     * @brief Flag indicating if the current callable has returned a value on all paths.
+     * 
+     * Why it exists: Powers the control-flow validation that ensures functions declaring a non-Void return type don't accidentally fall off the end of the body without returning a value.
+     * What it tracks: A strict boolean flag indicating if a valid `ReturnStmt` was unconditionally hit in the current execution block.
+     * What mutates/updates it: Set to `false` at the start of `visit_callable()`. Flipped to `true` inside `analyze_stmt()` when encountering a valid `ReturnStmt`.
+     */
     bool current_callable_has_return_ = false;
+
+    /**
+     * @brief The kind of the callable currently being analyzed.
+     * 
+     * Why it exists: Enforces contextual rules. For example, layers can instantiate other layers, but pure functions cannot hold state or instantiate layers. This tracks the context for those semantic checks.
+     * What it tracks: A `CallableKind` enum (`None` for global scope, `Function` for pure logic, `Layer` for stateful modules).
+     * What mutates/updates it: Overwritten by `visit_callable()` when entering a function/layer, and reverted to `CallableKind::None` upon exit.
+     */
     CallableKind current_callable_kind_ = CallableKind::None;
+
+    /**
+     * @brief The name of the callable currently being analyzed.
+     * 
+     * Why it exists: Enables the IR lowerer to disambiguate identically named local variables that exist in different functions by associating an 'owner' namespace to every resolved expression.
+     * What it tracks: The raw string name of the enclosing function or layer.
+     * What mutates/updates it: Set by `visit_callable()` and used to stamp the `owner` field in the `record_*` side-table helpers.
+     */
     std::optional<std::string> current_callable_name_;
+
+    /**
+     * @brief The accumulated semantic information side-table.
+     * 
+     * Why it exists: Completely decouples AST validation from IR generation. By building this side-table, the `FrontendLowerer` can perform O(1) lookups for type and target info without needing to understand scope rules or perform type inference.
+     * What it tracks: The `SemanticInfo` structure, containing parallel arrays (`exprs`, `identifiers`, `calls`, etc.) mapping `SourceSpan` coordinates to resolved backend facts.
+     * What mutates/updates it: Appended to sequentially by the `record_*` helpers (e.g., `record_expr_type`, `record_call`) throughout the entire AST traversal process.
+     */
     SemanticInfo semantic_info_;
+
+    /**
+     * @brief The last encountered error diagnostic.
+     * 
+     * Why it exists: Caches semantic compilation errors (like type mismatches or undefined variables) to halt compilation gracefully and report human-readable errors back to the CLI.
+     * What it tracks: An `std::optional<Diagnostic>` object holding the error message, severity, and exact `SourceSpan` where the semantic violation occurred.
+     * What mutates/updates it: Assigned by the `error()` helper method. Once set, the analyzer immediately aborts further traversal and bubbles the error up.
+     */
     std::optional<Diagnostic> last_diagnostic_;
 
     void begin_analysis();
