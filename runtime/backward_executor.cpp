@@ -4,7 +4,6 @@
 #include <cmath>
 #include <iostream>
 #include <map>
-#include <numeric>
 #include <optional>
 #include <string>
 #include <variant>

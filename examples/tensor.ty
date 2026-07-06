@@ -1,6 +1,6 @@
-# ── llama_config.ration ─────────────────────────────────────────────────────────────
-config llama_config:
-  vocab_size   : int32 = 32000
+# ── modelconfig ─
+config modelconfig:
+  vocab_size   : int32   = 32000
   hidden_dim   : int32   = 4096
   n_layers     : int32   = 32
   n_heads      : int32   = 32
@@ -13,62 +13,61 @@ config llama_config:
   epochs       : int32 = 36
   scheduler = cosine(warmup: 100)
 
-# ── Layers ────────────────────────────────────────────────────────────────────
+# ── Layers ──
 
 layer RMsNorm(x: tensor): tensor:
-  return x -> rms_norm(llama_config.hidden_dim)
+  return x -> rms_norm(modelconfig.hidden_dim)
 
 layer RotaryEmbedding(x: tensor): tensor: 
-  return x -> rope(llama_config.max_seq_len, llama_config.rope_theta)
+  return x -> rope(modelconfig.max_seq_len, modelconfig.rope_theta)
 
 layer GroupedQueryAttention(x: tensor): tensor:
-  let q_proj = linear(llama_config.hidden_dim, llama_config.hidden_dim)
-  let k_proj = linear(llama_config.hidden_dim, llama_config.n_kv_heads * llama_config.head_dim)
-  let v_proj = linear(llama_config.hidden_dim, llama_config.n_kv_heads * llama_config.head_dim)
-  let o_proj = linear(llama_config.hidden_dim, llama_config.hidden_dim)
+   q_proj = linear(modelconfig.hidden_dim, modelconfig.hidden_dim)
+   k_proj = linear(modelconfig.hidden_dim, modelconfig.n_kv_heads * modelconfig.head_dim)
+   v_proj = linear(modelconfig.hidden_dim, modelconfig.n_kv_heads * modelconfig.head_dim)
+   o_proj = linear(modelconfig.hidden_dim, modelconfig.hidden_dim)
 
-  let q = x -> q_proj() -> reshape(heads: llama_config.n_heads) -> RotaryEmbedding()
-  let mut k = x -> k_proj() -> reshape(heads: llama_config.n_kv_heads) -> RotaryEmbedding()
-  let mut v = x -> v_proj() -> reshape(heads: llama_config.n_kv_heads)
+   q = x -> q_proj() -> reshape(heads: modelconfig.n_heads) -> RotaryEmbedding()
+   mut k = x -> k_proj() -> reshape(heads: modelconfig.n_kv_heads) -> RotaryEmbedding()
+   mut v = x -> v_proj() -> reshape(heads: modelconfig.n_kv_heads)
 
 
-  k = k -> repeat_kv(llama_config.n_heads / llama_config.n_kv_heads)
-  v = v -> repeat_kv(llama_config.n_heads / llama_config.n_kv_heads)
+  k = k -> repeat_kv(modelconfig.n_heads / modelconfig.n_kv_heads)
+  v = v -> repeat_kv(modelconfig.n_heads / modelconfig.n_kv_heads)
 
   # attn = Dropout(Softmax(causal_mask(scale(q * k))))
   
-  let attn = q * k -> scale( llama_config.n_heads) -> causal_mask() -> Softmax() -> Dropout(llama_config.dropout)
+   attn = q * k -> scale( modelconfig.n_heads) -> causal_mask() -> Softmax() -> Dropout(modelconfig.dropout)
 
   return attn * v -> flatten_heads() -> o_proj()
 
 layer SwiGLU(x: tensor): tensor:
-  let gate_proj = linear(llama_config.hidden_dim, llama_config.intermediate)
-  let up_proj   = linear(llama_config.hidden_dim, llama_config.intermediate)
-  let down_proj = linear(llama_config.intermediate, llama_config.hidden_dim)
+   gate_proj = linear(modelconfig.hidden_dim, modelconfig.intermediate)
+   up_proj   = linear(modelconfig.hidden_dim, modelconfig.intermediate)
+   down_proj = linear(modelconfig.intermediate, modelconfig.hidden_dim)
 
-  let gate = x -> gate_proj() -> SiLU()
-  let up   = x -> up_proj()
+   gate = x -> gate_proj() -> SiLU()
+   up   = x -> up_proj()
 
   return gate * up -> down_proj()
 
 layer DecoderBlock(mut x: tensor): tensor:
-  let x = x + (x -> RMSNorm() -> GroupedQueryAttention())
+   x = x + (x -> RMSNorm() -> GroupedQueryAttention())
   return x + (x -> RMSNorm() -> SwiGLU())
 
-# ── Model ─────────────────────────────────────────────────────────────────────
+# ── Model ───────
 
 layer model(idx, targets=true): (tensor, tensor):
-  # logits = linear(RMSNorm(DecoderBlock(Dropout(Embedding(idx))))) here DecoderBlock * llama_config.n_layers is basically
+  # logits = linear(RMSNorm(DecoderBlock(Dropout(Embedding(idx))))) here DecoderBlock * modelconfig.n_layers is basically
   # that DecoderBlock how DecoderBlock block the computation go through.
-  let logits = idx -> Embedding(llama_config.vocab_size, llama_config.hidden_dim)
-               -> Dropout(llama_config.dropout)
-               -> DecoderBlock()[llama_config.n_layers] 
+   logits = idx -> Embedding(modelconfig.vocab_size, modelconfig.hidden_dim)
+               -> Dropout(modelconfig.dropout)
+               -> DecoderBlock()[modelconfig.n_layers] 
                -> RMSNorm()
-               -> linear(llama_config.hidden_dim, llama_config.vocab_size)
-  let mut loss: callable 
+               -> linear(modelconfig.hidden_dim, modelconfig.vocab_size)
+   mut loss: callable 
   if targets: 
     loss = cross_entropy(logits, targets)
   else:
      loss = None
   return logits, loss
-

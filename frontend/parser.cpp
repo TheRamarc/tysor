@@ -725,6 +725,7 @@ ExprPtr Parser::parse_primary_expression() {
                 expect(TokenType::CloseParen, "Expected ')' after function call arguments");
                 result = make_expr(span_of(token), CallExpr{std::move(name), std::move(args)});
             } else {
+                // here is we are parse the variable assignment
                 std::string name = consume_ident("Expected identifier");
                 result = make_expr(span_of(token), IdentifierExpr{std::move(name)});
             }
@@ -740,7 +741,7 @@ ExprPtr Parser::parse_primary_expression() {
             result = parse_list_expression();
             break;
         default:
-            fail_here("--Expected expression");
+            fail_here("Expected expression");
     }
 
     while (peek_kind(0) == TokenType::OpenBracket) {

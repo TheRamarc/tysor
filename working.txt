@@ -1,1 +1,2 @@
-working on frontendir 
+-> need to fix this tensor builtin call
+-> need to to fix this frontendir

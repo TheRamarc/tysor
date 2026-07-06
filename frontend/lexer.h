@@ -12,66 +12,70 @@
 // The lexer emits both language tokens and layout tokens. Indent/Dedent/Newline
 // let the parser treat significant whitespace like regular syntax.
 enum class TokenType {
-    Return,
-    Int,
-    Float,
-    Str,
-    Bool,
-    Tensor,
-    Tuple,
-    List,
-    True,
-    False,
-    Callable,
-    Layer,
-    Fn,
-    Config,
-    Let,
-    Mut,
-    If,
-    Elif,
-    Else,
-    While,
-    For,
-    IntLit,
-    FloatLit,
-    BoolLit,
-    StringLit,
-    Ident,
-    Plus,
-    Minus,
-    Star,
-    Slash,
-    DoubleSlash,
-    EqEq,
-    Neq,
-    Lt,
-    Gt,
-    LtEq,
-    GtEq,
-    Amp,
-    AmpAmp,
-    PipePipe,
-    Bang,
-    Eq,
-    Hash,
-    Underscore,
-    OpenParen,
-    CloseParen,
-    OpenBracket,
-    CloseBracket,
-    Semi,
-    Colon,
-    Comma,
-    Dot,
-    DotDot,
-    Pipe,
-    Arrow,
-    StarEq,
-    Indent,
-    Dedent,
-    Newline,
-    Eof,
+    Return,         // "return"
+    Int,            // "int"
+    Float,          // "float"
+    Str,            // "str"
+    Bool,           // "bool"
+    Tensor,         // "tensor"
+    Tuple,          // "tuple"
+    List,           // "list"
+    True,           // "true"
+    False,          // "false"
+    Callable,       // "callable"
+    Layer,          // "layer"
+    Fn,             // "fn"
+    Config,         // "config"
+    // Let,
+    // Mut,
+    If,             // "if"
+    Elif,           // "elif"
+    Else,           // "else"
+    While,          // "while"
+    For,            // "for"
+    
+    IntLit,         // e.g., 42
+    FloatLit,       // e.g., 3.14
+    // BoolLit,
+    StringLit,      // e.g., "hello"
+    Ident,          // e.g., my_var
+    
+    Plus,           // +
+    Minus,          // -
+    Star,           // *
+    Slash,          // /
+    DoubleSlash,    // //
+    EqEq,           // ==
+    Neq,            // !=
+    Lt,             // <
+    Gt,             // >
+    LtEq,           // <=
+    GtEq,           // >=
+    Amp,            // &
+    AmpAmp,         // &&
+    PipePipe,       // ||
+    Bang,           // !
+    Eq,             // =
+    
+    Hash,           // #
+    Underscore,     // _
+    OpenParen,      // (
+    CloseParen,     // )
+    OpenBracket,    // [
+    CloseBracket,   // ]
+    Semi,           // ;
+    Colon,          // :
+    Comma,          // ,
+    Dot,            // .
+    DotDot,         // ..
+    Pipe,           // |
+    Arrow,          // ->
+    StarEq,         // *=
+    
+    Indent,         // Block indentation increase
+    Dedent,         // Block indentation decrease
+    Newline,        // \n
+    Eof             // End of file
 };
 
 // Tokens own literal/identifier text even though tokenization reads through a

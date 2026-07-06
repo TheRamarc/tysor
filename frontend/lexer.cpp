@@ -66,8 +66,6 @@ std::optional<TokenType> lookup_keyword(std::string_view text) {
         {"layer", TokenType::Layer},
         {"fn", TokenType::Fn},
         {"config", TokenType::Config},
-        {"let", TokenType::Let},
-        {"mut", TokenType::Mut},
         {"if", TokenType::If},
         {"elif", TokenType::Elif},
         {"else", TokenType::Else},
@@ -116,10 +114,6 @@ const char* token_type_name(TokenType kind) {
             return "FN";
         case TokenType::Config:
             return "CONFIG";
-        case TokenType::Let:
-            return "LET";
-        case TokenType::Mut:
-            return "MUT";
         case TokenType::If:
             return "IF";
         case TokenType::Elif:

@@ -4,6 +4,7 @@
 #include "parser.h"
 
 #include <algorithm>
+#include <iostream>
 #include <cmath>
 #include <sstream>
 #include <type_traits>
