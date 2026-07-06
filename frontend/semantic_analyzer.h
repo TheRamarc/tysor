@@ -10,8 +10,12 @@
 #include <variant>
 #include <vector>
 
-// Symbol kind is kept in diagnostics and SemanticInfo so lowering can tell a
-// local variable from a layer/function/config access without re-resolving names.
+/**
+ * @brief Identifies the nature of a resolved symbol.
+ * 
+ * Symbol kind is kept in diagnostics and SemanticInfo so lowering can tell a
+ * local variable from a layer/function/config access without re-resolving names.
+ */
 enum class SemanticSymbolKind {
     BuiltinFunction,
     Function,
@@ -23,6 +27,9 @@ enum class SemanticSymbolKind {
     Local,
 };
 
+/**
+ * @brief Identifies the kind of callable being invoked.
+ */
 enum class SemanticCallTargetKind {
     BuiltinFunction,
     Function,
@@ -30,16 +37,23 @@ enum class SemanticCallTargetKind {
     CallableLocal,
 };
 
-// Symbol = information about one declared object (a variable, parameter, function, etc.).
+/**
+ * @brief Information about one declared object (a variable, parameter, function, etc.) in the scope.
+ */
 struct Symbol {
+    /// The resolved type of the symbol.
     Type type;
-    bool mutable_symbol = false;
+    /// Whether the symbol can be invoked like a function.
     bool is_callable = false;
+    /// If callable, the expected return type.
     std::optional<Type> callable_return_type;
+    /// The origin kind of the symbol.
     SemanticSymbolKind kind = SemanticSymbolKind::Local;
 };
 
-// Signature = information about how to call a function.
+/**
+ * @brief Information about how to call a function or layer.
+ */
 struct Signature {
     std::string name;
     Type return_type;
@@ -48,21 +62,32 @@ struct Signature {
     std::size_t max_arity = 0;
 };
 
+/**
+ * @brief Extended symbol information retained for downstream passes (e.g. lowering).
+ */
 struct SemanticSymbol {
     std::string name;
     SemanticSymbolKind kind = SemanticSymbolKind::Local;
     Type type;
+    /// How deeply nested the scope is.
     std::size_t scope_depth = 0;
+    /// Name of the function/layer that owns this symbol (if any).
     std::optional<std::string> owner;
     std::optional<SourceSpan> span;
 };
 
+/**
+ * @brief Type information deduced for a specific expression span.
+ */
 struct SemanticExprInfo {
     SourceSpan span{};
     Type type;
     std::optional<std::string> owner;
 };
 
+/**
+ * @brief Resolution information for an identifier expression.
+ */
 struct SemanticIdentifierInfo {
     SourceSpan span{};
     std::string name;
@@ -71,6 +96,9 @@ struct SemanticIdentifierInfo {
     std::optional<std::string> owner;
 };
 
+/**
+ * @brief Validation info for an assignment statement.
+ */
 struct SemanticAssignmentInfo {
     SourceSpan span{};
     std::string target_name;
@@ -80,6 +108,9 @@ struct SemanticAssignmentInfo {
     std::optional<std::string> owner;
 };
 
+/**
+ * @brief Validation info for a config field access (e.g. `cfg.learning_rate`).
+ */
 struct SemanticConfigFieldAccessInfo {
     SourceSpan span{};
     std::string config_name;
@@ -88,26 +119,36 @@ struct SemanticConfigFieldAccessInfo {
     std::optional<std::string> owner;
 };
 
+/**
+ * @brief Type and scope info for a variable declaration.
+ */
 struct SemanticDeclarationInfo {
     SourceSpan span{};
     std::string name;
     SemanticSymbolKind kind = SemanticSymbolKind::Local;
     Type final_type;
-    // bool mutable_symbol = false;
     std::optional<std::string> owner;
 };
 
+/**
+ * @brief Target resolution for a function/layer call.
+ */
 struct SemanticCallInfo {
     SourceSpan span{};
     std::string callee;
     SemanticCallTargetKind target = SemanticCallTargetKind::Function;
     Type result_type;
     std::optional<std::string> owner;
+    /// Whether this call is part of an Arrow pipeline expression (`->`).
     bool arrow_stage = false;
 };
 
-// Side-table produced by semantic analysis. Frontend lowering consults this by
-// span/owner instead of repeating scope lookup and type inference.
+/**
+ * @brief Side-table produced by semantic analysis.
+ * 
+ * Frontend lowering consults this by span/owner instead of repeating scope lookup
+ * and type inference.
+ */
 struct SemanticInfo {
     std::vector<SemanticSymbol> symbols;
     std::vector<SemanticExprInfo> exprs;
@@ -120,14 +161,25 @@ struct SemanticInfo {
 
 using SemanticResult = std::variant<SemanticInfo, Diagnostic>;
 
-// Performs declaration collection first, then statement/expression validation.
-// That supports forward calls to functions/layers while still enforcing local
-// scope, mutability, call arity, and tensor type compatibility.
+/**
+ * @brief Performs type checking and scope resolution over the AST.
+ * 
+ * Performs declaration collection first, then statement/expression validation.
+ * That supports forward calls to functions/layers while still enforcing local
+ * scope, call arity, and tensor type compatibility.
+ */
 class SemanticAnalyzer {
 public:
     SemanticAnalyzer();
 
+    /**
+     * @brief Analyzes the program and produces SemanticInfo or a Diagnostic error.
+     */
     SemanticResult analyze_with_info(const Program& program);
+    
+    /**
+     * @brief Consumes and returns the last recorded diagnostic.
+     */
     [[nodiscard]] std::optional<Diagnostic> take_last_diagnostic();
 
 private:

@@ -369,6 +369,8 @@ std::optional<Diagnostic> ensure_same_shape(
     const GraphTensorType& rhs,
     const std::string& context
 ) {
+    // Validates that two tensor types have the exact same shape and compatible
+    // dtypes. Returns an error diagnostic if there is a mismatch.
     if (!same_dtype_or_unknown(lhs, rhs)) {
         return graph_error(context + " dtype mismatch: " + *lhs.dtype + " vs " + *rhs.dtype);
     }
@@ -736,6 +738,8 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_binary_tensor_typ
     const GraphFunction& graph,
     const GraphNode& node
 ) {
+    // Infers the output shape for a binary operation by comparing the two input shapes.
+    // Supports trailing vector broadcasts (e.g. adding a bias to a rank-2 matrix).
     const auto& lhs = graph.values[node.inputs[0]].tensor_type;
     const auto& rhs = graph.values[node.inputs[1]].tensor_type;
     if (lhs && rhs) {
@@ -1133,6 +1137,8 @@ std::optional<Diagnostic> apply_inferred_tensor_type(
 std::optional<std::string> graph_op_id_name(const std::string& name);
 
 std::optional<Diagnostic> append_node(GraphFunction& graph, GraphNode node) {
+    // Validates shape inference for the node, applies the inferred tensor type to its output,
+    // and registers any newly required parameters before appending the node to the graph.
     auto inferred = infer_node_tensor_type(graph, node);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&inferred)) {
         return *diagnostic;

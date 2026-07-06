@@ -483,6 +483,12 @@ std::optional<Diagnostic> Parser::take_last_diagnostic() {
     return diagnostic;
 }
 
+/**
+ * @brief Parses the entire token stream into a Program AST.
+ * 
+ * Top-level definitions can be layers, functions, configs, or statements.
+ * @return A ParseResult containing the Program or a Diagnostic on failure.
+ */
 ParseResult Parser::parse_program() {
     try {
         Program program;
@@ -503,9 +509,6 @@ ParseResult Parser::parse_program() {
                 case TokenType::Config:
                     program.configs.push_back(parse_config());
                     break;
-                // case TokenType::Let:
-                //     program.globals.push_back(parse_stmt());
-                //     break;
                 case TokenType::Ident:
                     if (peek_kind(1) == TokenType::Eq) {
                         program.globals.push_back(parse_stmt());
@@ -515,8 +518,6 @@ ParseResult Parser::parse_program() {
                         fail_here("Unexpected token at top level");
                     }
                     break;
-                // case TokenType::Mut:
-                //     fail_token("Mutable declarations must start with 'let mut'", *token);
                 default:
                     fail_here("Unexpected token at top level");
             }
@@ -527,10 +528,16 @@ ParseResult Parser::parse_program() {
     }
 }
 
+/**
+ * @brief Parses an expression, which handles comma-separated tuple expressions at the top level.
+ */
 ExprPtr Parser::parse_expression() {
     return parse_tuple_expression();
 }
 
+/**
+ * @brief Parses a tuple expression if a comma is present.
+ */
 ExprPtr Parser::parse_tuple_expression() {
     auto first = parse_conditional_expression();
     if (peek_kind(0) != TokenType::Comma) {
@@ -546,6 +553,9 @@ ExprPtr Parser::parse_tuple_expression() {
     return make_expr(span, TupleExpr{std::move(elements)});
 }
 
+/**
+ * @brief Parses ternary conditional expressions (`A if B else C`).
+ */
 ExprPtr Parser::parse_conditional_expression() {
     auto expr = parse_pipeline_expression();
     if (peek_kind(0) != TokenType::If) {
@@ -561,6 +571,9 @@ ExprPtr Parser::parse_conditional_expression() {
     );
 }
 
+/**
+ * @brief Parses pipeline expressions (`A -> B -> C`).
+ */
 ExprPtr Parser::parse_pipeline_expression() {
     auto lhs = parse_logical_or_expression();
     if (peek_kind(0) != TokenType::Arrow) {

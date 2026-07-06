@@ -227,6 +227,7 @@ struct RuntimeTensorWorkspaceStats {
 // RuntimeTensorWorkspace is a small C++17 tensor buffer pool. Kernels still
 // return owning SimpleTensor values, but temporary tensors can return their
 // aligned buffers to this workspace once the executor knows they are dead.
+// This significantly reduces memory allocations during inference.
 class RuntimeTensorWorkspace {
 public:
     TensorData acquire(std::size_t element_count);
@@ -244,6 +245,7 @@ private:
 
 // Simple host tensor used by local execution, tests, and host/device transfer.
 // Shape stays ordinary vector metadata; data uses TensorData for aligned floats.
+// Provides a straightforward CPU-backed multi-dimensional array representation.
 struct SimpleTensor {
     std::vector<std::int64_t> shape;
     TensorData data;

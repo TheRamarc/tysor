@@ -7,10 +7,12 @@
 
 namespace {
 
+// Helper function to create standard CLI diagnostic errors
 Diagnostic cli_error(std::string message) {
     return Diagnostic::error("cli", "C0001", std::move(message));
 }
 
+// Parses a string backend identifier into the corresponding BackendKind enum.
 std::variant<BackendKind, Diagnostic> parse_backend(const std::string& value) {
     if (value == "local") {
         return BackendKind::Local;
@@ -30,9 +32,11 @@ std::variant<BackendKind, Diagnostic> parse_backend(const std::string& value) {
     return cli_error("unknown backend: " + value);
 }
 
+// Parses a shape specification string in the format "name=dim1xdim2x..."
 std::variant<std::pair<std::string, std::vector<std::int64_t>>, Diagnostic> parse_shape_spec(
     const std::string& spec
 ) {
+    // Find the separator between the tensor name and its dimensions
     const std::size_t equals = spec.find('=');
     if (equals == std::string::npos || equals == 0 || equals + 1 >= spec.size()) {
         return cli_error("expected --shape name=dimxdim, got '" + spec + "'");
@@ -41,6 +45,8 @@ std::variant<std::pair<std::string, std::vector<std::int64_t>>, Diagnostic> pars
     std::string name = spec.substr(0, equals);
     std::vector<std::int64_t> dims;
     std::size_t start = equals + 1;
+    
+    // Parse dimensions separated by 'x'
     while (start <= spec.size()) {
         const std::size_t end = spec.find('x', start);
         const std::string part = spec.substr(
@@ -51,6 +57,7 @@ std::variant<std::pair<std::string, std::vector<std::int64_t>>, Diagnostic> pars
             return cli_error("invalid dimension '' in shape '" + spec + "'");
         }
 
+        // Convert the dimension string to an integer
         char* parsed_end = nullptr;
         const long long value = std::strtoll(part.c_str(), &parsed_end, 10);
         if (parsed_end == part.c_str() || *parsed_end != '\0' || value <= 0) {
@@ -118,6 +125,7 @@ std::string usage() {
 CliParseResult parse_cli(const std::vector<std::string>& raw_args) {
     CliOptions options;
 
+    // Loop through arguments, updating options structure and parsing required values
     for (std::size_t index = 0; index < raw_args.size(); ++index) {
         const std::string& arg = raw_args[index];
 
@@ -175,8 +183,10 @@ CliParseResult parse_cli(const std::vector<std::string>& raw_args) {
             );
             options.tensor_shapes.emplace(std::move(shape.first), std::move(shape.second));
         } else if (!arg.empty() && arg.rfind("--", 0) == 0) {
+            // Unrecognized double-dash flag
             return cli_error("unknown option: " + arg);
         } else {
+            // Treat anything not matching a flag as the input path
             if (options.input_path.has_value()) {
                 return cli_error("multiple input paths provided");
             }

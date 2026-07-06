@@ -10,6 +10,9 @@ Type tensor_any() {
     return Type::tensor(std::nullopt, std::nullopt, std::nullopt);
 }
 
+/**
+ * @brief Helper to construct a BuiltinSignature.
+ */
 BuiltinSignature signature(
     std::string name,
     Type return_type,
@@ -20,6 +23,9 @@ BuiltinSignature signature(
     return BuiltinSignature{std::move(name), std::move(return_type), std::move(arg_types), min_arity, max_arity};
 }
 
+/**
+ * @brief Helper to construct an OpDefinition.
+ */
 OpDefinition op(
     OpId id,
     BuiltinSignature sig,
@@ -42,6 +48,11 @@ OpDefinition op(
     };
 }
 
+/**
+ * @brief Returns the expected argument types for the reshape operation.
+ * 
+ * Reshape accepts a tensor and up to 7 integer dimension sizes.
+ */
 std::vector<Type> reshape_arg_types() {
     return {
         tensor_any(),
@@ -55,6 +66,12 @@ std::vector<Type> reshape_arg_types() {
     };
 }
 
+/**
+ * @brief Defines the table of all available built-in operations.
+ * 
+ * Includes layers (like Linear, Embedding), activation functions, tensor ops (Reshape, Sum),
+ * and utilities (Print). Each definition specifies its typing and lowering properties.
+ */
 std::vector<OpDefinition> make_ops() {
     return {
         op(OpId::Linear, signature("linear", Type::callable(tensor_any()), {Type::int_type(), Type::int_type(), Type::bool_type()}, 1, 3), false, true, true, false, true),

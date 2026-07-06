@@ -250,6 +250,7 @@ std::variant<SimpleTensor, Diagnostic> apply_linear_with_parameters(
     const SimpleTensor& weight,
     const SimpleTensor* bias
 ) {
+    // Evaluates a linear layer with fully materialized weight and bias tensors.
     auto multiplied = matmul(input, weight);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&multiplied)) {
         return *diagnostic;
@@ -370,6 +371,8 @@ std::variant<SimpleTensor, Diagnostic> backward_linear_bias(const SimpleTensor& 
 }
 
 std::variant<SimpleTensor, Diagnostic> backward_cross_entropy_logits(const SimpleTensor& logits, const SimpleTensor& target) {
+    // Computes the gradient of the cross-entropy loss with respect to the input logits.
+    // The gradient simplifies to (softmax(logits) - target) for categorical cross-entropy.
     if (logits.shape != target.shape) {
         return train_error("backward_cross_entropy_logits shape mismatch");
     }

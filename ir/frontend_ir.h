@@ -37,7 +37,8 @@ enum class FeTypeKind {
 };
 
 // Lowered type. This is similar to parser Type, but belongs to Frontend IR so
-// later compiler stages do not need to keep consulting AST nodes.
+// later compiler stages do not need to keep consulting AST nodes. It captures
+// the exact evaluated type for variables, expressions, and functions.
 struct FeType {
     FeTypeKind kind = FeTypeKind::None;
     std::vector<FeType> elements;
@@ -47,6 +48,7 @@ struct FeType {
     std::optional<std::string> tensor_shape_expr;
     std::optional<std::size_t> tensor_rank;
 
+    // Factory methods for creating common FeType instances.
     static FeType unknown();
     static FeType int_type();
     static FeType int16();
@@ -85,6 +87,7 @@ struct FeValue {
     using Storage = std::variant<std::monostate, std::int64_t, double, bool, std::string, FeTupleValue, FeListValue>;
     Storage value;
 
+    // Factory methods to create values of different types.
     static FeValue none();
     static FeValue int_value(std::int64_t value);
     static FeValue float_value(double value);
@@ -186,11 +189,13 @@ using FeExprKind = std::variant<
 >;
 
 // A lowered expression. Compared with AST Expr, this adds the resolved type and
-// uses meaning-level expression nodes instead of syntax-only nodes.
+// uses meaning-level expression nodes instead of syntax-only nodes. This structure
+// holds the evaluated result type alongside the expression variant.
 struct FeExpr {
     FeType type;
     FeExprKind kind;
 
+    // Factory methods for creating specific FeExpr nodes.
     static FeExprPtr constant(FeValue value, FeType type);
     static FeExprPtr var(std::string symbol, FeType type);
     static FeExprPtr call(std::string callee, std::vector<FeCallArg> args, FeType type);
@@ -320,11 +325,16 @@ struct LoweredModule {
 using FrontendResult = std::variant<LoweredModule, Diagnostic>;
 
 // Converts parser AST + SemanticInfo into Frontend IR.
+// This class drives the lowering process, expanding config values, verifying types,
+// and resolving call targets into unambiguous Frontend IR nodes.
 class FrontendLowerer {
 public:
     FrontendLowerer(const Program& program, const SemanticInfo& semantic_info);
 
+    // Performs the lowering pass and returns the resulting module or a diagnostic.
     FrontendResult lower();
+
+    // Retrieves and clears the most recent diagnostic error encountered.
     [[nodiscard]] std::optional<Diagnostic> take_last_diagnostic();
 
 private:

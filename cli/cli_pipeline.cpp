@@ -12,6 +12,7 @@ void print_section(const char* start, const std::string& body, const char* end) 
     std::cout << end << '\n';
 }
 
+// Helper to join tokens into a multiline string for debugging purposes
 std::string make_token_dump(const std::vector<Token>& tokens) {
     std::ostringstream out;
     for (std::size_t index = 0; index < tokens.size(); ++index) {
@@ -26,6 +27,7 @@ std::string make_token_dump(const std::vector<Token>& tokens) {
 } // namespace
 
 CompileResult compile_source(const std::string& source, const CliOptions& options) {
+    // 1. Lexing phase: Convert raw source code string into token stream
     TokenizeResult tokenized = tokenize_with_diagnostic(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&tokenized)) {
         return *diagnostic;
@@ -39,6 +41,7 @@ CompileResult compile_source(const std::string& source, const CliOptions& option
         compiled.token_dump = make_token_dump(compiled.tokens);
     }
 
+    // 2. Parsing phase: Convert token stream into an Abstract Syntax Tree (AST)
     Parser parser(compiled.tokens);
     ParseResult parsed = parser.parse_program();
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
@@ -49,6 +52,7 @@ CompileResult compile_source(const std::string& source, const CliOptions& option
         compiled.ast_dump = ast_to_string(compiled.program);
     }
 
+    // 3. Semantic Analysis phase: Resolve types, verify scoping and program correctness
     SemanticAnalyzer analyzer;
     SemanticResult semantic_result = analyzer.analyze_with_info(compiled.program);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&semantic_result)) {
@@ -59,6 +63,7 @@ CompileResult compile_source(const std::string& source, const CliOptions& option
         compiled.semantics_dump = semantic_info_summary(compiled.semantic_info, compiled.program);
     }
 
+    // 4. Frontend Lowering phase: Transform AST into a flat intermediate representation (IR)
     FrontendLowerer lowerer(compiled.program, compiled.semantic_info);
     FrontendResult frontend_result = lowerer.lower();
     if (const auto* diagnostic = std::get_if<Diagnostic>(&frontend_result)) {
@@ -68,6 +73,8 @@ CompileResult compile_source(const std::string& source, const CliOptions& option
     if (options.ir) {
         compiled.ir_dump = frontend_ir_to_string(compiled.lowered);
     }
+
+    // 5. Graph IR phase: Build an execution graph if required by the requested actions
     if (options.graph || options.plan || options.run || options.backward || options.train) {
         auto graph_result = build_graph_module(compiled.lowered);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
@@ -78,6 +85,8 @@ CompileResult compile_source(const std::string& source, const CliOptions& option
             compiled.graph_dump = graph_ir_to_string(*compiled.graph);
         }
     }
+
+    // 6. Execution Plan phase: Create a backend-specific execution schedule
     if (options.plan || options.run || options.backward || options.train) {
         auto plan_result = compile_plan_module(*compiled.graph, options.backend);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&plan_result)) {

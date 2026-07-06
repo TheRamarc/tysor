@@ -19,6 +19,8 @@ enum class Placement {
     Device,
 };
 
+// Represents a runtime value to be mapped to a physical buffer by the executor.
+// Tracks placement (host or device) and properties like whether it needs gradients.
 struct PlanValue {
     std::size_t id = 0;
     std::string name;
@@ -124,7 +126,7 @@ struct PlanStep {
 
 // ExecutionPlan is deliberately explicit: values define storage, ops define
 // computation, and steps define execution order/data movement. Value ids are
-// validated to match their vector index.
+// validated to match their vector index. This struct drives backend execution.
 struct ExecutionPlan {
     BackendKind backend = BackendKind::Local;
     std::string name;

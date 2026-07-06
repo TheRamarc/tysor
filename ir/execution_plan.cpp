@@ -187,6 +187,9 @@ bool can_fuse_matmul_relu(
     const std::vector<std::size_t>& use_counts,
     std::size_t step_index
 ) {
+    // Determines if a matmul immediately followed by a relu can be fused into
+    // a single `matmul_relu` op. Checks if the matmul output is exclusively used
+    // by the relu step and both are mapped to the local backend.
     if (step_index + 1 >= plan.steps.size()) {
         return false;
     }
@@ -605,6 +608,8 @@ ExecutionPlan compile_execution_plan(const GraphFunction& graph, BackendKind bac
 }
 
 ExecutionPlan optimize_execution_plan(ExecutionPlan plan, const PlanOptimizationOptions& options) {
+    // Optimizes the compiled execution plan by fusing operations (like matmul + relu)
+    // and pruning unnecessary intermediate allocations when safe to do so.
     if (plan.backend != BackendKind::Local || options.preserve_intermediate_values || !options.enable_operator_fusion) {
         return plan;
     }

@@ -601,7 +601,8 @@ FeExprPtr FeExpr::if_then_else(FeExprPtr condition, FeExprPtr then_expr, FeExprP
 }
 
 FeType lower_type(const Type& type) {
-    // here do we need the None 
+    // Translates the parser AST Type into the strongly-typed FeType used in
+    // Frontend IR. Handles scalar dtype mappings and nested types.
     switch (type.base) {
         case TypeBase::Unknown:
             return FeType::unknown();
@@ -732,6 +733,7 @@ FrontendResult FrontendLowerer::lower() {
     }
 
     current_symbols_.clear();
+    // Lower global statements.
     for (const auto& stmt : program_.globals) {
         auto lowered = lower_stmt(stmt);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
@@ -937,6 +939,8 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_expr(const Expr& expr
 }
 
 std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_arrow_expr(const Expr& expr) {
+    // Lowers an arrow expression (pipeline) like `x |> f()` by iteratively lowering
+    // the source and applying each stage as if it were a function call or operation on the running value.
     const auto* arrow = std::get_if<ArrowExpr>(&expr.kind);
     if (arrow == nullptr) {
         return lower_expr(expr);
@@ -1615,6 +1619,9 @@ std::variant<FeValue, Diagnostic> FrontendLowerer::eval_config_field(
     const std::string& field_name,
     const SourceSpan& span
 ) {
+    // Evaluates a config field into a constant FeValue.
+    // Uses config_field_cache_ to memoize results and detect cyclic dependencies
+    // across config references during compile-time evaluation.
     auto config = config_defs_.find(config_name);
     if (config == config_defs_.end()) {
         return error_span(span, "Unknown config '" + config_name + "'");

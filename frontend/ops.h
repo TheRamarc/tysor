@@ -7,6 +7,9 @@
 #include <string_view>
 #include <vector>
 
+/**
+ * @brief Unique identifiers for built-in operations (both layers and primitive ops).
+ */
 enum class OpId {
     Linear,
     Matmul,
@@ -36,6 +39,9 @@ enum class OpId {
     Tensor
 };
 
+/**
+ * @brief Identifies whether a backend runtime natively supports a specific primitive.
+ */
 enum class RuntimePrimitiveKind {
     Unsupported,
     Matmul,
@@ -43,6 +49,9 @@ enum class RuntimePrimitiveKind {
     Scale,
 };
 
+/**
+ * @brief Defines the type signature and arity requirements for a built-in operation.
+ */
 struct BuiltinSignature {
     std::string name;
     Type return_type;
@@ -51,14 +60,23 @@ struct BuiltinSignature {
     std::size_t max_arity = 0;
 };
 
+/**
+ * @brief Defines a built-in operation, its signature, and its lowering properties.
+ */
 struct OpDefinition {
     OpId id = OpId::Print;
     BuiltinSignature signature;
-    bool is_primitive_tensor_op = false; // this field is used for the op lowers to a primitive graph or not.
-    bool is_library_op = false; // this field is used for considered a builtin/library-level operations.
+    /// If true, this op lowers directly to a primitive graph node.
+    bool is_primitive_tensor_op = false; 
+    /// If true, this is considered a library-level operation (often implemented as a composite or runtime call).
+    bool is_library_op = false; 
+    /// If true, this library op returns a callable that must be invoked with an input tensor.
     bool is_callable_library_op = false;
-    bool preserves_first_tensor_arg = false; //the result keeps the general tensor type/shape from the first tensor argument.
+    /// If true, the result keeps the general tensor type/shape from the first tensor argument.
+    bool preserves_first_tensor_arg = false; 
+    /// If true, the underlying runtime natively supports this library op directly.
     bool runtime_supports_library_op = false; 
+    /// Specifies the primitive kind if natively supported.
     RuntimePrimitiveKind runtime_primitive_kind = RuntimePrimitiveKind::Unsupported;
 };
 

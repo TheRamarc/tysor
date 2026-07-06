@@ -410,6 +410,8 @@ std::variant<SimpleTensor, Diagnostic> backward_binary(
     const SimpleTensor& grad,
     std::map<std::size_t, SimpleTensor>& gradients
 ) {
+    // Computes and accumulates gradients for generic binary operations (e.g. Add, Mul).
+    // Automatically handles trailing vector broadcast reduction if required by the shapes.
     auto lhs_found = execution.values.find(op.inputs[0]);
     auto rhs_found = execution.values.find(op.inputs[1]);
     if (lhs_found == execution.values.end() || rhs_found == execution.values.end()) {
@@ -514,6 +516,8 @@ std::optional<Diagnostic> compute_gradients(
     const GraphExecutionResult& execution,
     std::map<std::size_t, SimpleTensor>& gradients
 ) {
+    // Top-level backpropagation loop. Starts by seeding the objective gradient with ones,
+    // then walks the execution plan in reverse order to distribute gradients to all inputs.
     auto objective_id = resolve_objective_id(lowered, plan, plan.name);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&objective_id)) {
         return *diagnostic;

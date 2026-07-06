@@ -11,6 +11,15 @@
 
 namespace {
 
+/**
+ * @brief Helper function to append a new token to the tokens list.
+ * 
+ * @param tokens The list of tokens being accumulated.
+ * @param kind The type of token to push.
+ * @param value The token's payload value.
+ * @param line The token's line number.
+ * @param column The token's column number.
+ */
 void push_token(
     std::vector<Token>& tokens,
     TokenType kind,
@@ -21,22 +30,42 @@ void push_token(
     tokens.push_back(Token{kind, std::move(value), line, column});
 }
 
+/**
+ * @brief Constructs a lexer error diagnostic.
+ * 
+ * @param message The detailed error message.
+ * @param line The line where the error occurred.
+ * @param column The column where the error occurred.
+ * @return A constructed Diagnostic object for the lexer stage.
+ */
 Diagnostic lexer_error(std::string message, std::size_t line, std::size_t column) {
     return Diagnostic::error("lexer", "L0001", std::move(message)).with_span(line, column);
 }
 
+/**
+ * @brief Checks if a character is valid as the start of an identifier (letters).
+ */
 bool is_identifier_start(char ch) {
     return std::isalpha(static_cast<unsigned char>(ch)) != 0;
 }
 
+/**
+ * @brief Checks if a character is valid in the middle/end of an identifier (letters, digits, underscore).
+ */
 bool is_identifier_continue(char ch) {
     return std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '_';
 }
 
+/**
+ * @brief Checks if a character is a digit (0-9).
+ */
 bool is_digit(char ch) {
     return std::isdigit(static_cast<unsigned char>(ch)) != 0;
 }
 
+/**
+ * @brief Converts a TokenValue variant into its string representation for display.
+ */
 std::string token_value_to_string(const TokenValue& value) {
     if (std::holds_alternative<std::monostate>(value)) {
         return {};
@@ -52,6 +81,12 @@ std::string token_value_to_string(const TokenValue& value) {
     return std::get<std::string>(value);
 }
 
+/**
+ * @brief Looks up a string to see if it matches a predefined language keyword.
+ * 
+ * @param text The string to look up.
+ * @return An optional containing the mapped TokenType, or std::nullopt if it's not a keyword.
+ */
 std::optional<TokenType> lookup_keyword(std::string_view text) {
     static constexpr std::array<std::pair<std::string_view, TokenType>, 21> table = {{
         {"return", TokenType::Return},
@@ -222,14 +257,24 @@ TokenizeResult tokenize_with_diagnostic(std::string_view source) {
     std::vector<Token> tokens;
     std::size_t line = 1;
     std::size_t column = 1;
+    
+    // Stack to keep track of indentation levels to emit INDENT/DEDENT tokens.
+    // Starts with 0 for the base level.
     std::vector<std::size_t> indent_stack = {0};
+    
     bool start_of_line = true;
+    
+    // Counter to ignore line breaks inside parentheses/brackets.
     std::size_t paren_level = 0;
+    
     std::size_t index = 0;
 
     while (index < source.size()) {
         if (start_of_line) {
             std::size_t current_indent = 0;
+            
+            // Count leading whitespace to determine indentation level.
+            // Spaces count as 1, tabs advance to the next 8-space boundary.
             while (index < source.size() && (source[index] == ' ' || source[index] == '\t')) {
                 if (source[index] == ' ') {
                     current_indent += 1;
@@ -239,9 +284,13 @@ TokenizeResult tokenize_with_diagnostic(std::string_view source) {
                 index += 1;
             }
 
+            // If line is not entirely empty or just a comment
             if (index < source.size() && source[index] != '\n' && source[index] != '#') {
                 const bool is_continuation =
                     source[index] == '-' && index + 1 < source.size() && source[index + 1] == '>';
+                
+                // Only process indentation if we're not inside unclosed parens
+                // or if it's not a line continuation.
                 if (paren_level == 0 && !is_continuation) {
                     if (current_indent > indent_stack.back()) {
                         indent_stack.push_back(current_indent);
@@ -282,6 +331,7 @@ TokenizeResult tokenize_with_diagnostic(std::string_view source) {
         const char ch = source[index];
         const std::size_t start_column = column;
 
+        // Identifiers and Keywords
         if (is_identifier_start(ch)) {
             const std::size_t start_index = index;
             while (index + 1 < source.size() && is_identifier_continue(source[index + 1])) {

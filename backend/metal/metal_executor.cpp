@@ -162,10 +162,12 @@ bool tysor_metal_dispatch_cross_entropy(
 
 namespace {
 
+// Helper to construct a unified diagnostic error for Metal backend failures
 Diagnostic metal_error(std::string message) {
     return Diagnostic::error("runtime", "R0002", std::move(message));
 }
 
+// Locates a specific execution plan by its entry function name
 const ExecutionPlan* find_plan(const PlanModule& module, const std::string& entry) {
     auto found = std::find_if(module.plans.begin(), module.plans.end(), [&](const ExecutionPlan& plan) {
         return plan.name == entry;
@@ -173,6 +175,7 @@ const ExecutionPlan* find_plan(const PlanModule& module, const std::string& entr
     return found == module.plans.end() ? nullptr : &*found;
 }
 
+// Synthesizes a tensor with specific shape and type for testing/execution from CLI shapes
 std::variant<SimpleTensor, Diagnostic> make_tensor_argument(
     const PlanValue& value,
     const GraphExecutorOptions& options
@@ -629,11 +632,13 @@ TYSOR_BINARY_TS(floordiv_st, floor(s / t))
 )";
 }
 
+// Retrieves the last error string reported by the Objective-C Metal bridge
 std::string last_metal_error() {
     const char* error = tysor_metal_last_error();
     return error == nullptr || std::string(error).empty() ? "unknown Metal bridge error" : std::string(error);
 }
 
+// Custom deleter for bridging C++ unique_ptr with Objective-C ARC buffer deallocation
 struct MetalBufferDeleter {
     void operator()(void* buffer) const {
         if (buffer != nullptr) {
@@ -644,11 +649,13 @@ struct MetalBufferDeleter {
 
 using MetalBufferPtr = std::unique_ptr<void, MetalBufferDeleter>;
 
+// Structs to hold metadata for delayed activation function dispatch
 struct ActivationClosure {
     std::string op;
     double probability = 0.0;
 };
 
+// Represents an allocated memory buffer on the Metal GPU device
 struct DeviceTensor {
     SimpleTensor tensor;
     MetalBufferPtr buffer;
@@ -660,8 +667,10 @@ struct HostValue {
     MetalHostValue value;
 };
 
+// Represents a value living either on the CPU (HostValue) or GPU (DeviceTensor)
 using MetalValue = std::variant<HostValue, DeviceTensor>;
 
+// Allocates a Metal buffer and copies the host tensor data to the device
 std::variant<DeviceTensor, Diagnostic> upload_tensor(void* context, SimpleTensor tensor) {
     void* buffer = tysor_metal_buffer_new_with_data(context, tensor.data.data(), tensor.data.size());
     if (buffer == nullptr) {
@@ -670,6 +679,7 @@ std::variant<DeviceTensor, Diagnostic> upload_tensor(void* context, SimpleTensor
     return DeviceTensor{std::move(tensor), MetalBufferPtr(buffer)};
 }
 
+// Allocates an empty/zero-initialized Metal buffer for device results
 std::variant<DeviceTensor, Diagnostic> allocate_device_tensor(
     void* context,
     std::vector<std::int64_t> shape,
@@ -862,10 +872,12 @@ std::variant<ActivationClosure, Diagnostic> build_activation_closure(
     return closure;
 }
 
+// Predicts the output shape of various operations prior to their dispatch
 std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
     const PlanOp& op,
     std::map<std::size_t, MetalValue>& values
 ) {
+    // Matmul output dimensions are determined by [lhs_rows, rhs_cols]
     if (op.kind == PlanOpKind::PrimitiveCall && op.op == "matmul") {
         DeviceTensor* lhs = require_device_tensor(values, op.inputs[0], "matmul lhs");
         DeviceTensor* rhs = require_device_tensor(values, op.inputs[1], "matmul rhs");
@@ -1077,6 +1089,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
     return metal_error("Metal cannot infer output shape for planned op '" + op.op + "'");
 }
 
+// Computes matrix multiplication using the Metal bridged dispatch
 std::variant<DeviceTensor, Diagnostic> dispatch_matmul(
     void* context,
     const DeviceTensor& lhs,
@@ -1089,14 +1102,20 @@ std::variant<DeviceTensor, Diagnostic> dispatch_matmul(
     const auto k = static_cast<std::uint32_t>(lhs.tensor.shape[1]);
     const auto rhs_k = static_cast<std::uint32_t>(rhs.tensor.shape[0]);
     const auto n = static_cast<std::uint32_t>(rhs.tensor.shape[1]);
+    
+    // Ensure inner dimensions match
     if (k != rhs_k) {
         return metal_error("Metal matmul inner dimension mismatch");
     }
+    
+    // Allocate the output matrix C
     auto output = allocate_device_tensor(context, {m, n}, lhs.tensor.dtype);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&output)) {
         return *diagnostic;
     }
     DeviceTensor out = std::get<DeviceTensor>(std::move(output));
+    
+    // Dispatch to the Objective-C Metal runner
     if (!tysor_metal_dispatch_matmul(context, "matmul", lhs.buffer.get(), rhs.buffer.get(), out.buffer.get(), m, n, k)) {
         return metal_error("Metal matmul dispatch failed: " + last_metal_error());
     }
@@ -1639,6 +1658,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_activation(
     return metal_error("Unsupported Metal activation '" + closure.op + "'");
 }
 
+// Checks if the planned ops are supported by the current Metal backend
 std::optional<Diagnostic> validate_supported_plan(const ExecutionPlan& plan) {
     auto producer_for = [&](std::size_t value_id) -> const PlanOp* {
         auto found = std::find_if(plan.ops.begin(), plan.ops.end(), [&](const PlanOp& item) {
@@ -1674,6 +1694,7 @@ std::optional<Diagnostic> validate_supported_plan(const ExecutionPlan& plan) {
     return std::nullopt;
 }
 
+// Central interpreter loop for the execution plan using the Metal backend
 std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
     const ExecutionPlan& plan,
     const GraphExecutorOptions& options
@@ -1685,6 +1706,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
         return *diagnostic;
     }
 
+    // Initialize the shared Metal state via Objective-C bridge, loading kernel shaders
     std::unique_ptr<void, decltype(&tysor_metal_context_free)> context(
         tysor_metal_context_new(metal_source()),
         tysor_metal_context_free
@@ -1693,12 +1715,15 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
         return metal_error("Metal context creation failed: " + last_metal_error());
     }
 
+    // Storage for intermediate graph variables mapping value ID -> data (host or device)
     std::map<std::size_t, MetalValue> values;
     std::map<std::size_t, GraphRuntimeValue> outputs;
 
+    // Process the linear sequence of plan steps
     for (const auto& step : plan.steps) {
         switch (step.kind) {
             case PlanStepKind::AllocateHostValue: {
+                // Initialize synthetic tensor inputs based on CLI flags
                 const PlanValue& value = plan.values[step.value_id];
                 if (value.is_parameter) {
                     if (value.type.kind != FeTypeKind::Tensor) {
@@ -1713,6 +1738,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                 break;
             }
             case PlanStepKind::UploadToDevice: {
+                // Transfer a tensor resident in host memory to GPU VRAM
                 auto found = values.find(step.value_id);
                 if (found == values.end()) {
                     return metal_error("Metal upload step references an uninitialized host value");
@@ -1939,6 +1965,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                 break;
             }
             case PlanStepKind::DownloadToHost: {
+                // Read a buffer back from GPU memory into standard CPU memory
                 DeviceTensor* device = require_device_tensor(values, step.value_id, "download value");
                 if (device == nullptr) {
                     return metal_error("Metal download requires a device tensor value");

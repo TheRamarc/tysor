@@ -21,6 +21,17 @@ Type tensor_any() {
     return Type::tensor(std::nullopt, std::nullopt, std::nullopt);
 }
 
+/**
+ * @brief Infers the result type of a function or layer call based on its declared type and arguments.
+ * 
+ * Special-cases builtins (reshape, sum, mean, matmul, cross_entropy, etc.) to
+ * compute tensor ranks and shapes from the inputs when possible.
+ * 
+ * @param callee The name of the function or layer being called.
+ * @param declared_type The statically declared return type.
+ * @param arg_types The inferred types of the arguments passed to the call.
+ * @return The inferred return type of the call.
+ */
 Type infer_call_result_type(const std::string& callee, const Type& declared_type, const std::vector<Type>& arg_types) {
     if (declared_type.base == TypeBase::Callable && !arg_types.empty()) {
         if (declared_type.callable_return && declared_type.callable_return->base == TypeBase::Tensor &&
@@ -77,6 +88,11 @@ Type default_unconstrained_numeric_type(Type type) {
     return type;
 }
 
+/**
+ * @brief Merges two float types during binary operations, picking the highest precision.
+ * 
+ * E.g., float16 + float64 -> float64.
+ */
 Type merge_scalar_float_types(const Type& lhs, const Type& rhs) {
     auto rank = [](const Type& type) {
         if (type.scalar_dtype == "float64") {
@@ -454,7 +470,6 @@ std::optional<Diagnostic> SemanticAnalyzer::collect_functions(const Program& pro
     }
     return std::nullopt;
 }
-// U-Review
 std::optional<Diagnostic> SemanticAnalyzer::analyze_stmt(const Stmt& stmt, const Program& program) {
     return std::visit(
         [&](const auto& value) -> std::optional<Diagnostic> {
@@ -515,6 +530,8 @@ std::optional<Diagnostic> SemanticAnalyzer::analyze_stmt(const Stmt& stmt, const
                 Type value_type = std::get<Type>(std::move(analyzed));
                 const Symbol* symbol = find_var(value.name);
                 if (symbol == nullptr) {
+                    // this block shouldn't exit, we removed the let and mut, but now just leave.
+                    push_scope();
                     return error(stmt.span, "Cannot assign to undefined variable '" + value.name + "'; declare it with 'let'");
                 }
                 if (!symbol->mutable_symbol) {
@@ -1342,7 +1359,7 @@ const Symbol* SemanticAnalyzer::find_var(const std::string& name) const {
     }
     return nullptr;
 }
-
+// i think here we are checking to type are compatible
 bool SemanticAnalyzer::is_compatible(const Type& target, const Type& source) const {
     if (target.base == TypeBase::Unknown || source.base == TypeBase::Unknown) {
         return true;
@@ -1489,7 +1506,7 @@ Diagnostic SemanticAnalyzer::error(const SourceSpan& span, const std::string& me
     last_diagnostic_ = diagnostic;
     return diagnostic;
 }
-// Reviewed
+// this func pushing scope
 void SemanticAnalyzer::push_scope() {
     scopes_.push_back({});
 }

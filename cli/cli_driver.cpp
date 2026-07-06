@@ -16,6 +16,7 @@
 
 namespace {
 
+// Helper function to read the entire contents of a source file into a string
 std::variant<std::string, Diagnostic> read_source_file(const std::string& path) {
     std::ifstream input(path);
     if (!input) {
@@ -26,6 +27,7 @@ std::variant<std::string, Diagnostic> read_source_file(const std::string& path) 
     return buffer.str();
 }
 
+// Intercepts and executes standalone commands like --help, --version, or --metal-device
 std::optional<int> handle_builtin_command(const std::vector<std::string>& raw_args) {
     if (raw_args.size() == 1 && (raw_args[0] == "-h" || raw_args[0] == "--help")) {
         std::cout << usage();
@@ -57,6 +59,7 @@ std::variant<CliOptions, int> parse_or_report(const std::vector<std::string>& ra
     return std::get<CliOptions>(std::move(parsed));
 }
 
+// Checks if the user requested any actions that are not yet implemented in the C++ port
 std::optional<Diagnostic> unsupported_requested_actions(const CliOptions& options) {
     std::vector<std::string> actions;
     if (options.emit_metal) {
@@ -86,6 +89,7 @@ std::optional<Diagnostic> unsupported_requested_actions(const CliOptions& option
         .with_help("cpptysor currently supports compiler pipeline dumps and local --run execution");
 }
 
+// Executes the compiled entry function using the appropriate backend runtime
 std::optional<Diagnostic> run_entry_function(const CompiledProgram& compiled, const CliOptions& options) {
     if (!compiled.plan) {
         return Diagnostic::error("runtime", "R0001", "execution plan was not built for --run");
@@ -93,12 +97,16 @@ std::optional<Diagnostic> run_entry_function(const CompiledProgram& compiled, co
 
     GraphExecutorOptions executor_options;
     executor_options.tensor_shapes = options.tensor_shapes;
+    
+    // Dispatch to the correct backend executor
     auto execution = options.backend == BackendKind::Metal
         ? execute_metal_plan_module(*compiled.plan, options.entry, executor_options)
         : execute_plan_module(*compiled.plan, options.entry, executor_options);
+        
     if (const auto* diagnostic = std::get_if<Diagnostic>(&execution)) {
         return *diagnostic;
     }
+    
     const GraphExecutionResult& result = std::get<GraphExecutionResult>(execution);
     if (result.outputs.empty()) {
         return Diagnostic::error("runtime", "R0001", "Entry function did not return a value");
@@ -106,11 +114,15 @@ std::optional<Diagnostic> run_entry_function(const CompiledProgram& compiled, co
     if (result.outputs.size() != 1) {
         return Diagnostic::error("runtime", "R0001", "Runtime interpreter currently supports a single return value");
     }
+    
+    // Print the result to stdout
     print_graph_runtime_value(result.outputs.begin()->second);
     return std::nullopt;
 }
 
+// Core driver function for executing the full compiler pipeline and runtime actions
 int run_program(CliOptions options) {
+    // Read the source file from disk
     auto source_result = read_source_file(*options.input_path);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&source_result)) {
         std::cerr << diagnostic->to_string() << '\n';
@@ -121,22 +133,26 @@ int run_program(CliOptions options) {
     print_bootstrap_summary(options, source.size());
     std::cout.flush();
 
+    // Compile the source code to an execution plan
     CompileResult compiled_result = compile_source(source, options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&compiled_result)) {
         std::cerr << diagnostic->to_string() << '\n';
         return 1;
     }
 
+    // Output any requested debug dumps
     const auto compiled = std::get<CompiledProgram>(std::move(compiled_result));
     print_compile_summary(compiled);
     print_requested_dumps(compiled);
 
+    // Validate that the requested actions are supported
     if (const auto unsupported = unsupported_requested_actions(options)) {
         std::cout.flush();
         std::cerr << unsupported->to_string() << '\n';
         return 1;
     }
 
+    // Execute the forward pass if requested
     if (options.run) {
         if (const auto diagnostic = run_entry_function(compiled, options)) {
             std::cout.flush();
@@ -145,6 +161,7 @@ int run_program(CliOptions options) {
         }
     }
 
+    // Execute the backward pass (gradients) if requested
     if (options.backward) {
         if (!compiled.plan) {
             std::cout.flush();
@@ -160,6 +177,7 @@ int run_program(CliOptions options) {
         }
     }
 
+    // Execute the training loop if requested
     if (options.train) {
         if (!compiled.plan) {
             std::cout.flush();

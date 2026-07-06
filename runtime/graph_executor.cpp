@@ -306,6 +306,8 @@ std::variant<RuntimeValue, Diagnostic> execute_primitive(
     const RuntimeValueStore& values,
     RuntimeTensorWorkspace& workspace
 ) {
+    // Evaluates primitive graph operations such as matmul and relu.
+    // Maps the operation to the corresponding runtime tensor kernel.
     const std::optional<OpId> op_id = resolved_op_id(op);
     if (!op_id) {
         return runtime_error("Unsupported primitive graph op '" + op.op + "'");
@@ -819,8 +821,9 @@ std::variant<RuntimeValue, Diagnostic> execute_library_ctor(
     return runtime_error("Unsupported library constructor '" + op.op + "'");
 }
 
-std::variant<RuntimeValue, Diagnostic> execute_apply(
+std::variant<RuntimeValue, Diagnostic> execute_op(
     const PlanOp& op,
+    const ExecutionPlan& plan,
     const PlanValue& output,
     const RuntimeValueStore& values,
     RuntimeTensorWorkspace& workspace

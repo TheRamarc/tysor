@@ -12,8 +12,12 @@
 #include <variant>
 #include <vector>
 
-// Parser types preserve source-level shape/dtype spelling. Semantic analysis
-// later decides whether those annotations are valid and compatible.
+/**
+ * @brief Base kinds for the type system.
+ * 
+ * Parser types preserve source-level shape and dtype spelling. Semantic analysis
+ * later decides whether those annotations are valid and compatible.
+ */
 enum class TypeBase {
     Unknown,
     Int,
@@ -27,13 +31,25 @@ enum class TypeBase {
     Callable,
 };
 
+/**
+ * @brief Represents a parsed type annotation.
+ * 
+ * Includes optional tensor shape properties (dtype, shape expression, rank),
+ * tuple/list elements, or callable return types depending on its base kind.
+ */
 struct Type {
     TypeBase base = TypeBase::None;
+    /// Sub-types for collections (Tuple, List).
     std::vector<Type> elements;
+    /// Return type if this is a Callable.
     std::unique_ptr<Type> callable_return;
+    /// Data type string for scalar annotations.
     std::optional<std::string> scalar_dtype;
+    /// Data type string for tensor annotations.
     std::optional<std::string> tensor_dtype;
+    /// Shape expression for tensor annotations (e.g. "[B, C, H, W]").
     std::optional<std::string> tensor_shape_expr;
+    /// Resolved rank of the tensor, if deducible.
     std::optional<std::size_t> tensor_rank;
 
     Type() = default;
@@ -42,6 +58,7 @@ struct Type {
     Type(Type&&) noexcept = default;
     Type& operator=(Type&&) noexcept = default;
 
+    // Factory methods for constructing specific types:
     static Type unknown();
     static Type int_type();
     static Type int16();
@@ -70,10 +87,16 @@ struct Stmt;
 using ExprPtr = std::unique_ptr<Expr>;
 using StmtPtr = std::unique_ptr<Stmt>;
 
+/**
+ * @brief An argument passed in a function/callable invocation.
+ * Contains an optional name (for keyword args) and the expression value.
+ */
 struct CallArgument {
     std::optional<std::string> name;
     ExprPtr value;
 };
+
+// --- AST Node Structures for Expressions ---
 
 struct IntLiteral {
     std::int64_t value = 0;
@@ -100,6 +123,9 @@ struct CallExpr {
     std::vector<CallArgument> args;
 };
 
+/**
+ * @brief Represents a repeated stage execution (e.g., `stage()[N]`).
+ */
 struct RepeatExpr {
     ExprPtr stage;
     ExprPtr count;
@@ -130,13 +156,20 @@ struct ListExpr {
     std::vector<ExprPtr> elements;
 };
 
+/**
+ * @brief Represents a sequential pipeline of execution steps connected by '->'.
+ */
 struct ArrowExpr {
     ExprPtr source;
     std::vector<ExprPtr> stages;
 };
 
-// The AST is intentionally syntax-shaped. Later IR stages desugar calls,
-// pipelines, config constants, and callable application into meaning-level IR.
+/**
+ * @brief A discriminated union of all possible expression types.
+ * 
+ * The AST is intentionally syntax-shaped. Later IR stages desugar calls,
+ * pipelines, config constants, and callable application into meaning-level IR.
+ */
 using ExprKind = std::variant<
     IntLiteral,
     FloatLiteral,
@@ -153,11 +186,19 @@ using ExprKind = std::variant<
     ArrowExpr
 >;
 
+/**
+ * @brief A generic Expression AST node wrapping an ExprKind with source location.
+ */
 struct Expr {
     SourceSpan span{};
     ExprKind kind;
 };
 
+// --- AST Node Structures for Statements ---
+
+/**
+ * @brief Represents a variable declaration (e.g., `let x: int = 5`).
+ */
 struct VarDecl {
     std::string name;
     Type type;
@@ -165,11 +206,17 @@ struct VarDecl {
     std::optional<std::size_t> array_size;
 };
 
+/**
+ * @brief Represents variable assignment (e.g., `x = 5`).
+ */
 struct AssignStmt {
     std::string name;
     ExprPtr value;
 };
 
+/**
+ * @brief A block of statements enclosed in a new scope.
+ */
 struct ScopeStmt {
     std::vector<Stmt> statements;
 };
@@ -194,25 +241,40 @@ struct ExprStmt {
     ExprPtr value;
 };
 
+/**
+ * @brief A discriminated union of all possible statement types.
+ */
 using StmtKind = std::variant<ReturnStmt, ExprStmt, VarDecl, AssignStmt, ScopeStmt, IfStmt>;
 
+/**
+ * @brief A generic Statement AST node wrapping a StmtKind with source location.
+ */
 struct Stmt {
     SourceSpan span{};
     StmtKind kind;
 };
 
+/**
+ * @brief Function or layer argument definition.
+ */
 struct Arg {
     std::string name;
     Type type;
     ExprPtr default_value;
 };
 
+/**
+ * @brief Configuration struct field definition.
+ */
 struct Field {
     std::string name;
     Type type;
     ExprPtr init;
 };
 
+/**
+ * @brief Represents a standard function definition (`fn`).
+ */
 struct Function {
     SourceSpan span{};
     std::string name;
@@ -221,6 +283,9 @@ struct Function {
     Stmt body;
 };
 
+/**
+ * @brief Represents a neural network layer definition (`layer`).
+ */
 struct Layer {
     SourceSpan span{};
     std::string name;
@@ -229,6 +294,9 @@ struct Layer {
     Stmt body;
 };
 
+/**
+ * @brief Represents a configuration block (`config`).
+ */
 struct Config {
     SourceSpan span{};
     std::string name;

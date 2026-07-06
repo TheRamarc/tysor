@@ -109,6 +109,8 @@ std::variant<SimpleTensor, Diagnostic> apply_linear_with_parameters(
 } // namespace
 
 TensorData RuntimeTensorWorkspace::acquire(std::size_t element_count) {
+    // Locates the smallest available free buffer that satisfies `element_count`.
+    // If found, detaches it for reuse, otherwise allocates a new TensorData buffer.
     auto best = free_buffers_.end();
     for (auto it = free_buffers_.begin(); it != free_buffers_.end(); ++it) {
         if (it->capacity() < element_count) {
@@ -356,6 +358,8 @@ std::variant<SimpleTensor, Diagnostic> matmul_impl(
     RuntimeTensorWorkspace* workspace,
     bool apply_relu_to_output
 ) {
+    // Core CPU implementation of matrix multiplication. 
+    // Supports an optional fused ReLU activation to avoid an extra memory pass.
     if (lhs.shape.size() != 2 || rhs.shape.size() != 2) {
         return runtime_error("matmul currently requires rank-2 tensors");
     }
@@ -457,6 +461,8 @@ SimpleTensor apply_sigmoid(const SimpleTensor& tensor, RuntimeTensorWorkspace* w
 }
 
 std::variant<SimpleTensor, Diagnostic> apply_softmax(const SimpleTensor& tensor, RuntimeTensorWorkspace* workspace) {
+    // Computes softmax along the last dimension.
+    // Uses max-value subtraction for numerical stability before exponentiating.
     if (tensor.shape.empty()) {
         return runtime_error("softmax requires a tensor with at least one dimension");
     }

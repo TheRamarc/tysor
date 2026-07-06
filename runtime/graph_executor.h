@@ -20,6 +20,7 @@ struct GraphExecutorOptions {
 
 using GraphRuntimeValue = std::variant<std::int64_t, double, bool, SimpleTensor>;
 
+// Stores the evaluated values of intermediate nodes and final outputs for a graph execution.
 struct GraphExecutionResult {
     std::map<std::size_t, GraphRuntimeValue> values;
     std::map<std::size_t, GraphRuntimeValue> outputs;
@@ -27,6 +28,10 @@ struct GraphExecutionResult {
 
 using GraphExecutionResultVariant = std::variant<GraphExecutionResult, Diagnostic>;
 
+// Core execution routine for a given plan.
 GraphExecutionResultVariant execute_execution_plan(const ExecutionPlan& plan, const GraphExecutorOptions& options);
+
+// Looks up and executes a named plan within a compiled module.
 GraphExecutionResultVariant execute_plan_module(const PlanModule& module, const std::string& entry, const GraphExecutorOptions& options);
+
 void print_graph_runtime_value(const GraphRuntimeValue& value);

@@ -40,12 +40,16 @@ struct GraphDim {
     static GraphDim symbolic(std::string name);
 };
 
+// Describes a multidimensional array type (tensor) within the graph.
+// If the rank is known, the shape is populated with GraphDims.
 struct GraphTensorType {
     std::optional<std::string> dtype;
     std::vector<GraphDim> shape;
     bool has_known_rank = false;
 };
 
+// Represents a trainable or non-trainable parameter associated with a graph value.
+// It links the underlying value_id with parameter metadata such as name and shape.
 struct GraphParameter {
     std::string name;
     std::string role;
@@ -104,16 +108,23 @@ struct GraphModule {
 
 using GraphFunctionResult = std::variant<GraphFunction, Diagnostic>;
 
+// Lowers Frontend IR functions into Graph IR functions.
+// This builder traverses the linear list of frontend statements and converts
+// expressions into an ordered series of GraphNode dependencies.
 class GraphBuilder {
 public:
     explicit GraphBuilder(const FeFunction& function);
 
+    // Orchestrates the graph lowering process.
     GraphFunctionResult build();
 
 private:
     const FeFunction& function_;
 
+    // Lowers a frontend expression into one or more graph nodes and returns the value id.
     std::variant<std::size_t, Diagnostic> lower_expr(const FeExprPtr& expr, GraphFunction& graph) const;
+    
+    // Looks up the numeric value ID associated with a named symbol in the graph.
     std::variant<std::size_t, Diagnostic> lookup_named_value(const std::string& name, const GraphFunction& graph) const;
 };
 
