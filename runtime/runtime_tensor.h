@@ -203,6 +203,9 @@ private:
         }
     }
 
+    // Why it exists: To share underlying data safely across views without deep copies until mutated.
+    // What it tracks: A reference-counted pointer to the heap-allocated, aligned float vector.
+    // What mutates it: Allocated on creation, cloned on write if refcount > 1.
     std::shared_ptr<TensorDataStorage> storage_;
 };
 
@@ -217,8 +220,17 @@ inline bool operator!=(const TensorData& lhs, const TensorData& rhs) {
 struct SimpleTensor;
 
 struct RuntimeTensorWorkspaceStats {
+    // Why it exists: To track performance metrics of the pool.
+    // What it tracks: The number of times the OS was asked for fresh memory.
+    // What mutates it: Incremented when a suitably sized buffer wasn't found.
     std::size_t allocations = 0;
+    // Why it exists: To measure the pool's effectiveness.
+    // What it tracks: The number of times an existing buffer was recycled.
+    // What mutates it: Incremented when acquire() successfully recycles a buffer.
     std::size_t reuses = 0;
+    // Why it exists: To keep track of returns to the pool.
+    // What it tracks: The total number of times tensors were handed back.
+    // What mutates it: Incremented during release().
     std::size_t releases = 0;
     std::size_t cached_buffers = 0;
     std::size_t cached_bytes = 0;
@@ -237,9 +249,21 @@ public:
     RuntimeTensorWorkspaceStats stats() const;
 
 private:
+    // Why it exists: To prevent reallocation overhead during tight loops in inference.
+    // What it tracks: An object pool of detached, reusable TensorData allocations.
+    // What mutates it: Buffers pushed on release(), popped on acquire().
     std::vector<TensorData> free_buffers_;
+    // Why it exists: To track performance metrics of the pool.
+    // What it tracks: The number of times the OS was asked for fresh memory.
+    // What mutates it: Incremented when a suitably sized buffer wasn't found.
     std::size_t allocations_ = 0;
+    // Why it exists: To measure the pool's effectiveness.
+    // What it tracks: The number of times an existing buffer was recycled.
+    // What mutates it: Incremented when acquire() successfully recycles a buffer.
     std::size_t reuses_ = 0;
+    // Why it exists: To keep track of returns to the pool.
+    // What it tracks: The total number of times tensors were handed back.
+    // What mutates it: Incremented during release().
     std::size_t releases_ = 0;
 };
 
@@ -247,7 +271,13 @@ private:
 // Shape stays ordinary vector metadata; data uses TensorData for aligned floats.
 // Provides a straightforward CPU-backed multi-dimensional array representation.
 struct SimpleTensor {
+    // Why it exists: To define the mathematical geometry of the data.
+    // What it tracks: The sequence of dimension sizes for this tensor.
+    // What mutates it: Assigned on creation or changed via reshape operations.
     std::vector<std::int64_t> shape;
+    // Why it exists: To hold the actual numerical content of the tensor.
+    // What it tracks: The aligned contiguous floating-point elements.
+    // What mutates it: Modified by executor kernels during mathematical operations.
     TensorData data;
     std::string dtype = "float32";
 
@@ -262,14 +292,29 @@ struct SimpleTensor {
 };
 
 struct LinearClosure {
+    // Why it exists: To define the input size expected by the linear layer.
+    // What it tracks: The innermost dimension of the incoming tensor.
+    // What mutates it: Parsed from model architecture definitions.
     std::optional<std::int64_t> in_features;
+    // Why it exists: To define the output size produced by the linear layer.
+    // What it tracks: The size of the newly projected dimension.
+    // What mutates it: Parsed from model architecture definitions.
     std::int64_t out_features = 0;
+    // Why it exists: To control whether an additive bias is applied.
+    // What it tracks: True if a bias parameter should be added after matmul.
+    // What mutates it: Configured by layer properties.
     bool with_bias = true;
     std::string dtype = "float32";
 };
 
 struct EmbeddingClosure {
+    // Why it exists: To define the vocabulary size for the embedding table.
+    // What it tracks: The number of discrete indices this embedding can map.
+    // What mutates it: Defined at model instantiation.
     std::int64_t num_embeddings = 0;
+    // Why it exists: To specify the size of the continuous vector space.
+    // What it tracks: The size of the vector assigned to each index.
+    // What mutates it: Defined at model instantiation.
     std::int64_t embedding_dim = 0;
     std::string dtype = "float32";
 };
@@ -288,7 +333,13 @@ public:
     bool empty() const;
 
 private:
+    // Why it exists: To point to an existing array of dimension sizes without owning it.
+    // What it tracks: A raw pointer to the start of the shape array.
+    // What mutates it: Bound on construction; immutable.
     const std::int64_t* values_ = nullptr;
+    // Why it exists: To safely bound iterations over the shape pointer.
+    // What it tracks: The number of dimensions present in the shape.
+    // What mutates it: Bound on construction; immutable.
     std::size_t size_ = 0;
 };
 

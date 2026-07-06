@@ -34,17 +34,58 @@ const char* diagnostic_severity_name(DiagnosticSeverity severity);
  * the message itself, and optionally the location in the source code and a help message.
  */
 struct Diagnostic {
-    /// A unique code identifying the specific type of diagnostic (e.g., "E001").
+    /**
+     * @brief A unique code identifying the specific type of diagnostic (e.g., "E001").
+     * 
+     * Why it exists: Allows programmatic filtering and easy referencing of known issues.
+     * What it tracks: A fixed string representation of the error category.
+     * What mutates/updates it: Initialized on creation by static factory methods (e.g., error(), warning()) and usually unchanged.
+     */
     std::string code;
-    /// The compilation stage where the diagnostic was generated (e.g., "lexer", "parser").
+    
+    /**
+     * @brief The compilation stage where the diagnostic was generated (e.g., "lexer", "parser").
+     * 
+     * Why it exists: Helps developers isolate which phase of compilation failed.
+     * What it tracks: The name of the subsystem that emitted this diagnostic.
+     * What mutates/updates it: Set during instantiation and immutable afterwards.
+     */
     std::string stage;
-    /// The severity of the diagnostic, defaulting to Error.
+    
+    /**
+     * @brief The severity of the diagnostic, defaulting to Error.
+     * 
+     * Why it exists: Determines how the compiler should react (fail, print warning, etc.).
+     * What it tracks: The criticality level (Error, Warning, Note).
+     * What mutates/updates it: Defined at creation via the respective factory method (error, warning, note).
+     */
     DiagnosticSeverity severity = DiagnosticSeverity::Error;
-    /// The detailed diagnostic message.
+    
+    /**
+     * @brief The detailed diagnostic message.
+     * 
+     * Why it exists: Provides a human-readable explanation of the issue.
+     * What it tracks: The specific contextual error text.
+     * What mutates/updates it: Set at creation time based on the exact failure condition.
+     */
     std::string message;
-    /// An optional source location indicating where the issue occurred.
+    
+    /**
+     * @brief An optional source location indicating where the issue occurred.
+     * 
+     * Why it exists: Crucial for pointing users to the exact place in their code causing the issue.
+     * What it tracks: The line and column spanning the erroneous syntax or semantics.
+     * What mutates/updates it: Initially empty or set at creation; can be updated by `with_span()` or `with_source_span()` to add context as the error bubbles up.
+     */
     std::optional<SourceSpan> span;
-    /// An optional help message suggesting a fix or providing more details.
+    
+    /**
+     * @brief An optional help message suggesting a fix or providing more details.
+     * 
+     * Why it exists: Improves developer experience by offering actionable solutions.
+     * What it tracks: A secondary string giving guidance to resolve the diagnostic.
+     * What mutates/updates it: Initially empty; typically mutated/added via the `with_help()` method.
+     */
     std::optional<std::string> help;
 
 

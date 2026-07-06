@@ -105,13 +105,40 @@ using TokenValue = std::variant<std::monostate, std::int64_t, double, std::strin
  * A token is the fundamental unit of syntax produced by the lexer and consumed by the parser.
  */
 struct Token {
-    /// The type of the token.
+    /**
+     * @brief The type of the token.
+     * 
+     * Why it exists: Serves as the primary discriminator for the parser to match grammar rules.
+     * What it tracks: The lexical category of the parsed text (e.g., Keyword, Identifier, Operator).
+     * What mutates/updates it: Set once by the lexer when recognizing a token pattern; immutable afterwards.
+     */
     TokenType kind;
-    /// The specific value of the token (if applicable).
+
+    /**
+     * @brief The specific value of the token (if applicable).
+     * 
+     * Why it exists: Carries the semantic payload for tokens like literals or identifiers.
+     * What it tracks: The parsed integer, float, or string content extracted from the source.
+     * What mutates/updates it: Populated by the lexer when a literal/identifier is encountered; immutable afterwards.
+     */
     TokenValue value;
-    /// The line number where this token starts (1-indexed).
+
+    /**
+     * @brief The line number where this token starts (1-indexed).
+     * 
+     * Why it exists: Associates the token with its vertical source code position for diagnostics.
+     * What it tracks: The 1-based line index in the original source string.
+     * What mutates/updates it: Computed by tracking newlines in the lexer; immutable afterwards.
+     */
     std::size_t line;
-    /// The column number where this token starts (1-indexed).
+
+    /**
+     * @brief The column number where this token starts (1-indexed).
+     * 
+     * Why it exists: Associates the token with its horizontal source code position.
+     * What it tracks: The 1-based character offset on the current line.
+     * What mutates/updates it: Updated per-character by the lexer during scanning; immutable afterwards.
+     */
     std::size_t column;
 };
 
