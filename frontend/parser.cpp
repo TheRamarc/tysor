@@ -207,9 +207,9 @@ void append_args(std::ostringstream& out, const std::vector<Arg>& args) {
             out << ", ";
         }
         const auto& arg = args[index];
-        if (arg.is_mutable) {
-            out << "mut ";
-        }
+        // if (arg.is_mutable) {
+        //     out << "mut ";
+        // }
         out << arg.name;
         if (arg.type.base != TypeBase::Unknown) {
             out << ": " << type_to_string(arg.type);
@@ -304,7 +304,7 @@ void append_stmt_summary(std::ostringstream& out, const Stmt& stmt, std::size_t 
                 append_expr_summary(out, *value.value);
                 out << '\n';
             } else if constexpr (std::is_same_v<T, VarDecl>) {
-                out << (value.is_mutable ? "let mut " : "let ") << value.name << ": "
+                out  << value.name << ": "
                     << type_to_string(value.type);
                 if (value.init) {
                     out << " = ";
@@ -1161,11 +1161,6 @@ std::vector<Arg> Parser::parse_callable_args() {
     std::vector<Arg> args;
     if (peek_kind(0) != TokenType::CloseParen) {
         while (true) {
-            bool is_mutable = false;
-            // if (peek_kind(0) == TokenType::Mut) {
-            //     consume();
-            //     is_mutable = true;
-            // }
             std::string arg_name = consume_ident("Expected argument name");
             Type type = Type::unknown();
             if (peek_kind(0) == TokenType::Colon) {
@@ -1177,7 +1172,7 @@ std::vector<Arg> Parser::parse_callable_args() {
                 consume();
                 default_value = parse_expression();
             }
-            args.push_back(Arg{std::move(arg_name), std::move(type), std::move(default_value), is_mutable});
+            args.push_back(Arg{std::move(arg_name), std::move(type), std::move(default_value)});
             if (peek_kind(0) == TokenType::Comma) {
                 consume();
             } else {
@@ -1314,8 +1309,6 @@ std::string type_to_string(const Type& type) {
     switch (type.base) {
         case TypeBase::Unknown:
             return "unknown";
-        // case TypeBase::Void:
-        //     return "void";
         case TypeBase::Bool:
             return "bool";
         case TypeBase::Int:

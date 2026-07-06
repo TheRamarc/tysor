@@ -163,7 +163,6 @@ struct VarDecl {
     Type type;
     ExprPtr init;
     std::optional<std::size_t> array_size;
-    bool is_mutable = false;
 };
 
 struct AssignStmt {
@@ -206,7 +205,6 @@ struct Arg {
     std::string name;
     Type type;
     ExprPtr default_value;
-    bool is_mutable = false;
 };
 
 struct Field {

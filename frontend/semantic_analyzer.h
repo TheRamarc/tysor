@@ -52,7 +52,6 @@ struct SemanticSymbol {
     std::string name;
     SemanticSymbolKind kind = SemanticSymbolKind::Local;
     Type type;
-    bool mutable_symbol = false;
     std::size_t scope_depth = 0;
     std::optional<std::string> owner;
     std::optional<SourceSpan> span;
@@ -69,7 +68,6 @@ struct SemanticIdentifierInfo {
     std::string name;
     SemanticSymbolKind target = SemanticSymbolKind::Local;
     Type type;
-    bool mutable_symbol = false;
     std::optional<std::string> owner;
 };
 
@@ -79,7 +77,6 @@ struct SemanticAssignmentInfo {
     SemanticSymbolKind target_kind = SemanticSymbolKind::Local;
     Type target_type;
     Type value_type;
-    bool mutable_symbol = false;
     std::optional<std::string> owner;
 };
 
@@ -96,7 +93,7 @@ struct SemanticDeclarationInfo {
     std::string name;
     SemanticSymbolKind kind = SemanticSymbolKind::Local;
     Type final_type;
-    bool mutable_symbol = false;
+    // bool mutable_symbol = false;
     std::optional<std::string> owner;
 };
 
@@ -222,7 +219,6 @@ private:
     std::optional<Diagnostic> declare_var(
         const std::string& name,
         Type type,
-        bool mutable_symbol,
         SemanticSymbolKind kind,
         const SourceSpan& span
     );
@@ -254,16 +250,14 @@ private:
         const SourceSpan& span,
         const std::string& name,
         SemanticSymbolKind target,
-        Type type,
-        bool mutable_symbol
+        Type type
     );
     void record_assignment(
         const SourceSpan& span,
         const std::string& name,
         SemanticSymbolKind target,
         Type target_type,
-        Type value_type,
-        bool mutable_symbol
+        Type value_type
     );
     void record_config_field_access(
         const SourceSpan& span,
@@ -275,8 +269,7 @@ private:
         const SourceSpan& span,
         const std::string& name,
         SemanticSymbolKind kind,
-        Type final_type,
-        bool mutable_symbol
+        Type final_type
     );
     void record_call(
         const SourceSpan& span,

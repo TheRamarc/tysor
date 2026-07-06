@@ -120,8 +120,7 @@ bool semantic_info_records_core_facts() {
         info.assignments.begin(),
         info.assignments.end(),
         [](const SemanticAssignmentInfo& assignment) {
-            return assignment.target_name == "y" && assignment.mutable_symbol &&
-                   assignment.target_type.base == TypeBase::Tensor;
+            return assignment.target_name == "y" && assignment.target_type.base == TypeBase::Tensor;
         }
     );
 

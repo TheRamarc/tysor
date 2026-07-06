@@ -212,7 +212,6 @@ struct FeVarDeclStmt {
     FeType type;
     FeExprPtr value;
     bool has_value = false;
-    bool mutable_symbol = false;
 };
 
 struct FeAssignStmt {

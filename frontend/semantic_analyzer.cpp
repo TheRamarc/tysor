@@ -301,7 +301,6 @@ void SemanticAnalyzer::begin_analysis() {
             spec.name,
             SemanticSymbolKind::BuiltinFunction,
             spec.return_type,
-            false,
             0,
             std::nullopt,
             std::nullopt,
@@ -382,9 +381,9 @@ std::optional<Diagnostic> SemanticAnalyzer::collect_configs(const Program& progr
             fields[field.name] = field.type;
         }
         configs_[config.name] = fields;
-        record_symbol(SemanticSymbol{config.name, SemanticSymbolKind::Config, Type::None_type(), false, 0, std::nullopt, config.span});
+        record_symbol(SemanticSymbol{config.name, SemanticSymbolKind::Config, Type::None_type(), 0, std::nullopt, config.span});
         for (const auto& field : config.fields) {
-            record_symbol(SemanticSymbol{field.name, SemanticSymbolKind::ConfigField, field.type, false, 0, config.name, config.span});
+            record_symbol(SemanticSymbol{field.name, SemanticSymbolKind::ConfigField, field.type, 0, config.name, config.span});
         }
         if (is_train_config(config)) {
             if (auto diagnostic = validate_train_config(config, program)) {
@@ -422,7 +421,7 @@ std::optional<Diagnostic> SemanticAnalyzer::collect_layers(const Program& progra
             arg_types.push_back(arg.type);
         }
         layers_[layer.name] = Signature{layer.name, layer.return_type, arg_types, min_arity, layer.args.size()};
-        record_symbol(SemanticSymbol{layer.name, SemanticSymbolKind::Layer, layer.return_type, false, 0, std::nullopt, layer.span});
+        record_symbol(SemanticSymbol{layer.name, SemanticSymbolKind::Layer, layer.return_type, 0, std::nullopt, layer.span});
     }
     return std::nullopt;
 }
@@ -451,7 +450,7 @@ std::optional<Diagnostic> SemanticAnalyzer::collect_functions(const Program& pro
         }
         functions_[function.name] =
             Signature{function.name, function.return_type, arg_types, min_arity, function.args.size()};
-        record_symbol(SemanticSymbol{function.name, SemanticSymbolKind::Function, function.return_type, false, 0, std::nullopt, function.span});
+        record_symbol(SemanticSymbol{function.name, SemanticSymbolKind::Function, function.return_type,  0, std::nullopt, function.span});
     }
     return std::nullopt;
 }
@@ -506,8 +505,8 @@ std::optional<Diagnostic> SemanticAnalyzer::analyze_stmt(const Stmt& stmt, const
                     return diagnostic;
                 }
                 const auto kind = current_callable_name_ ? SemanticSymbolKind::Local : SemanticSymbolKind::Global;
-                record_declaration(stmt.span, value.name, kind, final_type, value.is_mutable);
-                return declare_var(value.name, std::move(final_type), value.is_mutable, kind, stmt.span);
+                record_declaration(stmt.span, value.name, kind, final_type);
+                return declare_var(value.name, std::move(final_type), kind, stmt.span);
             } else if constexpr (std::is_same_v<T, AssignStmt>) {
                 auto analyzed = analyze_expr(*value.value, program);
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
@@ -524,7 +523,7 @@ std::optional<Diagnostic> SemanticAnalyzer::analyze_stmt(const Stmt& stmt, const
                 if (!is_compatible(symbol->type, value_type)) {
                     return error(stmt.span, "Assignment type mismatch for '" + value.name + "'");
                 }
-                record_assignment(stmt.span, value.name, symbol->kind, symbol->type, value_type, symbol->mutable_symbol);
+                record_assignment(stmt.span, value.name, symbol->kind, symbol->type, value_type);
             } else if constexpr (std::is_same_v<T, ScopeStmt>) {
                 push_scope();
                 for (const auto& inner : value.statements) {
@@ -634,11 +633,11 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::visit_identifier(const std::str
         return Type::None_type();
     }
     if (const Symbol* symbol = find_var(name)) {
-        record_identifier(span, name, symbol->kind, symbol->type, symbol->mutable_symbol);
+        record_identifier(span, name, symbol->kind, symbol->type);
         return symbol->type;
     }
     if (configs_.count(name) != 0) {
-        record_identifier(span, name, SemanticSymbolKind::Config, Type::None_type(), false);
+        record_identifier(span, name, SemanticSymbolKind::Config, Type::None_type());
         return Type::None_type();
     }
     return error(span, "Undefined variable '" + name + "'");
@@ -1289,7 +1288,7 @@ std::optional<Diagnostic> SemanticAnalyzer::visit_callable(
                 return error(span, "Default value for argument '" + arg.name + "' has incompatible type");
             }
         }
-        if (auto diagnostic = declare_var(arg.name, arg.type, arg.is_mutable, SemanticSymbolKind::Parameter, span)) {
+        if (auto diagnostic = declare_var(arg.name, arg.type,  SemanticSymbolKind::Parameter, span)) {
             return diagnostic;
         }
     }
@@ -1312,7 +1311,6 @@ std::optional<Diagnostic> SemanticAnalyzer::visit_callable(
 std::optional<Diagnostic> SemanticAnalyzer::declare_var(
     const std::string& name,
     Type type,
-    bool mutable_symbol,
     SemanticSymbolKind kind,
     const SourceSpan& span
 ) {
@@ -1325,14 +1323,13 @@ std::optional<Diagnostic> SemanticAnalyzer::declare_var(
     }
     Symbol symbol;
     symbol.type = type;
-    symbol.mutable_symbol = mutable_symbol;
     symbol.is_callable = is_callable(type);
     if (type.callable_return) {
         symbol.callable_return_type = *type.callable_return;
     }
     symbol.kind = kind;
     scope[name] = symbol;
-    record_symbol(SemanticSymbol{name, kind, type, mutable_symbol, scopes_.size(), current_callable_name_, span});
+    record_symbol(SemanticSymbol{name, kind, type, scopes_.size(), current_callable_name_, span});
     return std::nullopt;
 }
 
@@ -1515,11 +1512,10 @@ void SemanticAnalyzer::record_identifier(
     const SourceSpan& span,
     const std::string& name,
     SemanticSymbolKind target,
-    Type type,
-    bool mutable_symbol
+    Type type
 ) {
     semantic_info_.identifiers.push_back(
-        SemanticIdentifierInfo{span, name, target, std::move(type), mutable_symbol, current_callable_name_}
+        SemanticIdentifierInfo{span, name, target, std::move(type), current_callable_name_}
     );
 }
 
@@ -1528,8 +1524,7 @@ void SemanticAnalyzer::record_assignment(
     const std::string& name,
     SemanticSymbolKind target,
     Type target_type,
-    Type value_type,
-    bool mutable_symbol
+    Type value_type
 ) {
     semantic_info_.assignments.push_back(SemanticAssignmentInfo{
         span,
@@ -1537,7 +1532,6 @@ void SemanticAnalyzer::record_assignment(
         target,
         std::move(target_type),
         std::move(value_type),
-        mutable_symbol,
         current_callable_name_,
     });
 }
@@ -1557,11 +1551,10 @@ void SemanticAnalyzer::record_declaration(
     const SourceSpan& span,
     const std::string& name,
     SemanticSymbolKind kind,
-    Type final_type,
-    bool mutable_symbol
+    Type final_type
 ) {
     semantic_info_.declarations.push_back(
-        SemanticDeclarationInfo{span, name, kind, std::move(final_type), mutable_symbol, current_callable_name_}
+        SemanticDeclarationInfo{span, name, kind, std::move(final_type) , current_callable_name_}
     );
 }
 

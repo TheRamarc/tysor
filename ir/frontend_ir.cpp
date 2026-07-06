@@ -339,7 +339,7 @@ void append_stmt(std::ostringstream& out, const FeStmt& stmt, std::size_t indent
             using T = std::decay_t<decltype(value)>;
             out << pad;
             if constexpr (std::is_same_v<T, FeVarDeclStmt>) {
-                out << (value.mutable_symbol ? "let mut " : "let ") << value.name << ": "
+                out  << value.name << ": "
                     << fe_type_to_string(value.type);
                 if (value.has_value && value.value) {
                     out << " = ";
@@ -1222,7 +1222,7 @@ std::variant<FeStmt, Diagnostic> FrontendLowerer::lower_stmt(const Stmt& stmt) {
                 }
                 FeType type = lower_type(declaration->final_type);
                 bind_symbol(value.name, type);
-                return FeStmt{FeVarDeclStmt{value.name, type, lowered_value, has_value, value.is_mutable}};
+                return FeStmt{FeVarDeclStmt{value.name, type, lowered_value, has_value}};
             } else if constexpr (std::is_same_v<T, AssignStmt>) {
                 auto assignment = semantic_assignment_for_stmt(stmt, value.name);
                 if (!assignment) {
