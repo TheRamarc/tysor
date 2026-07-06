@@ -96,10 +96,8 @@ std::string fe_type_to_graph_string(const FeType& type) {
         }
         case FeTypeKind::Callable:
             return "callable -> " + (type.callable_return ? fe_type_to_graph_string(*type.callable_return) : "void");
-        case FeTypeKind::Void:
-            return "void";
         case FeTypeKind::None:
-            return "none";
+            return "None";
     }
     return "unknown";
 }

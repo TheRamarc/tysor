@@ -17,7 +17,7 @@
 enum class TypeBase {
     Unknown,
     Int,
-    Void,
+    None,
     Bool,
     Float,
     Str,
@@ -28,7 +28,7 @@ enum class TypeBase {
 };
 
 struct Type {
-    TypeBase base = TypeBase::Void;
+    TypeBase base = TypeBase::None;
     std::vector<Type> elements;
     std::unique_ptr<Type> callable_return;
     std::optional<std::string> scalar_dtype;
@@ -53,7 +53,7 @@ struct Type {
     static Type float64();
     static Type bool_type();
     static Type str_type();
-    static Type void_type();
+    static Type None_type();
     static Type tensor(
         std::optional<std::string> dtype,
         std::optional<std::string> shape_expr,

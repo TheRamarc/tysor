@@ -146,7 +146,7 @@ private:
     std::map<std::string, Signature> functions_;
     std::map<std::string, Signature> layers_;
     std::map<std::string, std::map<std::string, Type>> configs_;
-    Type last_expr_type_ = Type::void_type();
+    Type last_expr_type_ = Type::None_type();
     std::optional<Type> current_return_type_;
     bool current_callable_has_return_ = false;
     CallableKind current_callable_kind_ = CallableKind::None;

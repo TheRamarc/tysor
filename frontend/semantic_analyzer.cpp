@@ -288,7 +288,7 @@ void SemanticAnalyzer::begin_analysis() {
     layers_.clear();
     configs_.clear();
     register_builtins();
-    last_expr_type_ = Type::void_type();
+    last_expr_type_ = Type::None_type();
     current_return_type_.reset();
     current_callable_has_return_ = false;
     current_callable_kind_ = CallableKind::None;
@@ -382,7 +382,7 @@ std::optional<Diagnostic> SemanticAnalyzer::collect_configs(const Program& progr
             fields[field.name] = field.type;
         }
         configs_[config.name] = fields;
-        record_symbol(SemanticSymbol{config.name, SemanticSymbolKind::Config, Type::void_type(), false, 0, std::nullopt, config.span});
+        record_symbol(SemanticSymbol{config.name, SemanticSymbolKind::Config, Type::None_type(), false, 0, std::nullopt, config.span});
         for (const auto& field : config.fields) {
             record_symbol(SemanticSymbol{field.name, SemanticSymbolKind::ConfigField, field.type, false, 0, config.name, config.span});
         }
@@ -631,15 +631,15 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_expr(const Expr& expr, 
 
 std::variant<Type, Diagnostic> SemanticAnalyzer::visit_identifier(const std::string& name, const SourceSpan& span) {
     if (name == "None") {
-        return Type::void_type();
+        return Type::None_type();
     }
     if (const Symbol* symbol = find_var(name)) {
         record_identifier(span, name, symbol->kind, symbol->type, symbol->mutable_symbol);
         return symbol->type;
     }
     if (configs_.count(name) != 0) {
-        record_identifier(span, name, SemanticSymbolKind::Config, Type::void_type(), false);
-        return Type::void_type();
+        record_identifier(span, name, SemanticSymbolKind::Config, Type::None_type(), false);
+        return Type::None_type();
     }
     return error(span, "Undefined variable '" + name + "'");
 }
@@ -861,7 +861,7 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::visit_ternary(
     if (!is_compatible(then_type, else_type) && !is_compatible(else_type, then_type)) {
         return error(span, "Ternary branches must have compatible types");
     }
-    return then_type.base == TypeBase::Void ? else_type : then_type;
+    return then_type.base == TypeBase::None ? else_type : then_type;
 }
 
 std::variant<Type, Diagnostic> SemanticAnalyzer::visit_arrow(
@@ -1038,7 +1038,7 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_stage(
         if (!is_compatible(lhs, rhs) && !is_compatible(rhs, lhs)) {
             return error(expr.span, "Ternary branches must have compatible types");
         }
-        return lhs.base == TypeBase::Void ? rhs : lhs;
+        return lhs.base == TypeBase::None ? rhs : lhs;
     }
     if (const auto* tuple = std::get_if<TupleExpr>(&expr.kind)) {
         std::vector<Type> types;
@@ -1298,7 +1298,7 @@ std::optional<Diagnostic> SemanticAnalyzer::visit_callable(
     }
     pop_scope();
 
-    if (return_type.base != TypeBase::Void && !current_callable_has_return_) {
+    if (return_type.base != TypeBase::None && !current_callable_has_return_) {
         return error(span, std::string(label) + " '" + name + "' is missing a return statement");
     }
 

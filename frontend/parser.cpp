@@ -435,7 +435,7 @@ Type Type::str_type() {
     return type;
 }
 
-Type Type::void_type() {
+Type Type::None_type() {
     return Type{};
 }
 
@@ -503,9 +503,9 @@ ParseResult Parser::parse_program() {
                 case TokenType::Config:
                     program.configs.push_back(parse_config());
                     break;
-                case TokenType::Let:
-                    program.globals.push_back(parse_stmt());
-                    break;
+                // case TokenType::Let:
+                //     program.globals.push_back(parse_stmt());
+                //     break;
                 case TokenType::Ident:
                     if (peek_kind(1) == TokenType::Eq) {
                         program.globals.push_back(parse_stmt());
@@ -515,8 +515,8 @@ ParseResult Parser::parse_program() {
                         fail_here("Unexpected token at top level");
                     }
                     break;
-                case TokenType::Mut:
-                    fail_token("Mutable declarations must start with 'let mut'", *token);
+                // case TokenType::Mut:
+                //     fail_token("Mutable declarations must start with 'let mut'", *token);
                 default:
                     fail_here("Unexpected token at top level");
             }
@@ -1016,8 +1016,8 @@ Stmt Parser::parse_stmt() {
             consume_terminator();
             return make_stmt(span_of(start), ReturnStmt{std::move(expr)});
         }
-        case TokenType::Let:
-            return parse_let_var_decl();
+        // case TokenType::Let:
+        //     return parse_let_var_decl();
         case TokenType::Ident:
             if (peek_kind(1) == TokenType::Colon) {
                 fail_token("Variable declarations must start with 'let'", *token);
@@ -1035,8 +1035,8 @@ Stmt Parser::parse_stmt() {
                 return make_stmt(span_of(start), ExprStmt{std::move(expr)});
             }
             fail_token("Unexpected identifier or missing assignment.", *token);
-        case TokenType::Mut:
-            fail_token("Mutable declarations must start with 'let mut'", *token);
+        // case TokenType::Mut:
+        //     fail_token("Mutable declarations must start with 'let mut'", *token);
         case TokenType::Indent:
             return parse_scope();
         case TokenType::If: {
@@ -1075,33 +1075,33 @@ Stmt Parser::parse_stmt() {
     }
 }
 // this fn parseing the let keyword and assign wheather it mutable or not.
-Stmt Parser::parse_let_var_decl() {
-    Token start = expect(TokenType::Let, "Expected 'let'");
-    bool is_mutable = false;
-    if (peek_kind(0) == TokenType::Mut) {
-        consume();
-        is_mutable = true;
-    }
-    std::string name = consume_ident("Expected variable name");
-    Type type = Type::unknown();
-    if (peek_kind(0) == TokenType::Colon) {
-        consume();
-        type = parse_type();
-    }
-    ExprPtr init;
-    if (peek_kind(0) == TokenType::Eq) {
-        consume();
-        init = parse_expression();
-    }
-    if (type.base == TypeBase::Unknown && !init) {
-        fail_token("Variable declaration needs a type annotation or initializer", start);
-    }
-    consume_terminator();
-    return make_stmt(
-        span_of(start),
-        VarDecl{std::move(name), std::move(type), std::move(init), std::nullopt, is_mutable}
-    );
-}
+// Stmt Parser::parse_let_var_decl() {
+//     Token start = expect(TokenType::Let, "Expected 'let'");
+//     bool is_mutable = false;
+//     if (peek_kind(0) == TokenType::Mut) {
+//         consume();
+//         is_mutable = true;
+//     }
+//     std::string name = consume_ident("Expected variable name");
+//     Type type = Type::unknown();
+//     if (peek_kind(0) == TokenType::Colon) {
+//         consume();
+//         type = parse_type();
+//     }
+//     ExprPtr init;
+//     if (peek_kind(0) == TokenType::Eq) {
+//         consume();
+//         init = parse_expression();
+//     }
+//     if (type.base == TypeBase::Unknown && !init) {
+//         fail_token("Variable declaration needs a type annotation or initializer", start);
+//     }
+//     consume_terminator();
+//     return make_stmt(
+//         span_of(start),
+//         VarDecl{std::move(name), std::move(type), std::move(init), std::nullopt, is_mutable}
+//     );
+// }
 
 Layer Parser::parse_layer() {
     Token start = expect(TokenType::Layer, "Expected 'layer' keyword");
@@ -1162,10 +1162,10 @@ std::vector<Arg> Parser::parse_callable_args() {
     if (peek_kind(0) != TokenType::CloseParen) {
         while (true) {
             bool is_mutable = false;
-            if (peek_kind(0) == TokenType::Mut) {
-                consume();
-                is_mutable = true;
-            }
+            // if (peek_kind(0) == TokenType::Mut) {
+            //     consume();
+            //     is_mutable = true;
+            // }
             std::string arg_name = consume_ident("Expected argument name");
             Type type = Type::unknown();
             if (peek_kind(0) == TokenType::Colon) {
@@ -1314,8 +1314,8 @@ std::string type_to_string(const Type& type) {
     switch (type.base) {
         case TypeBase::Unknown:
             return "unknown";
-        case TypeBase::Void:
-            return "void";
+        // case TypeBase::Void:
+        //     return "void";
         case TypeBase::Bool:
             return "bool";
         case TypeBase::Int:
@@ -1353,6 +1353,8 @@ std::string type_to_string(const Type& type) {
         case TypeBase::Callable:
             return type.callable_return ? "callable -> " + type_to_string(*type.callable_return)
                                         : "callable";
+        case TypeBase::None: // need attention
+            return "None";
     }
     return "unknown";
 }

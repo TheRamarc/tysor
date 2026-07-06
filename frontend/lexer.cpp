@@ -128,8 +128,8 @@ const char* token_type_name(TokenType kind) {
             return "INT_LIT";
         case TokenType::FloatLit:
             return "FLOAT_LIT";
-        case TokenType::BoolLit:
-            return "BOOL_LIT";
+        // case TokenType::BoolLit:
+        //     return "BOOL_LIT";
         case TokenType::StringLit:
             return "STRING_LIT";
         case TokenType::Ident:
@@ -200,6 +200,8 @@ const char* token_type_name(TokenType kind) {
             return "DEDENT";
         case TokenType::Newline:
             return "NEWLINE";
+        case TokenType::None:
+            return "None";
         case TokenType::Eof:
             return "EOF";
     }

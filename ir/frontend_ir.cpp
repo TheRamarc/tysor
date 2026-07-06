@@ -173,8 +173,6 @@ std::string fe_type_to_string(const FeType& type) {
         }
         case FeTypeKind::Callable:
             return "callable -> " + (type.callable_return ? fe_type_to_string(*type.callable_return) : "void");
-        case FeTypeKind::Void:
-            return "void";
         case FeTypeKind::None:
             return "none";
     }
@@ -603,6 +601,7 @@ FeExprPtr FeExpr::if_then_else(FeExprPtr condition, FeExprPtr then_expr, FeExprP
 }
 
 FeType lower_type(const Type& type) {
+    // here do we need the None 
     switch (type.base) {
         case TypeBase::Unknown:
             return FeType::unknown();
@@ -651,8 +650,8 @@ FeType lower_type(const Type& type) {
         case TypeBase::Callable:
             return FeType::callable(type.callable_return ? lower_type(*type.callable_return)
                                                          : FeType::void_type());
-        case TypeBase::Void:
-            return FeType::void_type();
+        case TypeBase::None:
+            return FeType::none();
     }
     return FeType::unknown();
 }

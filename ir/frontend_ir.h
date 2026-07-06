@@ -32,7 +32,6 @@ enum class FeTypeKind {
     Tuple,
     List,
     Callable,
-    Void,
     None,
     Str,
 };
@@ -40,7 +39,7 @@ enum class FeTypeKind {
 // Lowered type. This is similar to parser Type, but belongs to Frontend IR so
 // later compiler stages do not need to keep consulting AST nodes.
 struct FeType {
-    FeTypeKind kind = FeTypeKind::Void;
+    FeTypeKind kind = FeTypeKind::None;
     std::vector<FeType> elements;
     std::shared_ptr<FeType> callable_return;
     std::optional<std::string> scalar_dtype;

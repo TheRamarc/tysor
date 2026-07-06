@@ -75,6 +75,7 @@ enum class TokenType {
     Indent,         // Block indentation increase
     Dedent,         // Block indentation decrease
     Newline,        // \n
+    None,           // None
     Eof             // End of file
 };
 
