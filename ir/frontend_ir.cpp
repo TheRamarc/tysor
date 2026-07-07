@@ -537,64 +537,64 @@ FeValue FeValue::list_value(std::vector<FeValue> values) {
     return result;
 }
 
-FeExprPtr FeExpr::constant(FeValue value, FeType type) {
-    auto expr = std::make_shared<FeExpr>();
+FeExprPtr FeExpr::constant(Arena& arena, FeValue value, FeType type) {
+    auto expr = arena.allocate<FeExpr>();
     expr->type = std::move(type);
     expr->kind = FeConstantExpr{std::move(value)};
     return expr;
 }
 
-FeExprPtr FeExpr::var(std::string symbol, FeType type) {
-    auto expr = std::make_shared<FeExpr>();
+FeExprPtr FeExpr::var(Arena& arena, std::string symbol, FeType type) {
+    auto expr = arena.allocate<FeExpr>();
     expr->type = std::move(type);
     expr->kind = FeVarExpr{std::move(symbol)};
     return expr;
 }
 
-FeExprPtr FeExpr::call(std::string callee, std::vector<FeCallArg> args, FeType type) {
-    auto expr = std::make_shared<FeExpr>();
+FeExprPtr FeExpr::call(Arena& arena, std::string callee, std::vector<FeCallArg> args, FeType type) {
+    auto expr = arena.allocate<FeExpr>();
     expr->type = std::move(type);
     expr->kind = FeCallExpr{std::move(callee), std::move(args)};
     return expr;
 }
 
-FeExprPtr FeExpr::layer_ctor(std::string callee, std::vector<FeCallArg> args, FeType type) {
-    auto expr = std::make_shared<FeExpr>();
+FeExprPtr FeExpr::layer_ctor(Arena& arena, std::string callee, std::vector<FeCallArg> args, FeType type) {
+    auto expr = arena.allocate<FeExpr>();
     expr->type = std::move(type);
     expr->kind = FeLayerCtorExpr{std::move(callee), std::move(args)};
     return expr;
 }
 
-FeExprPtr FeExpr::apply(FeExprPtr callee, std::vector<FeCallArg> args, FeType type) {
-    auto expr = std::make_shared<FeExpr>();
+FeExprPtr FeExpr::apply(Arena& arena, FeExprPtr callee, std::vector<FeCallArg> args, FeType type) {
+    auto expr = arena.allocate<FeExpr>();
     expr->type = std::move(type);
     expr->kind = FeApplyExpr{std::move(callee), std::move(args)};
     return expr;
 }
 
-FeExprPtr FeExpr::tuple(std::vector<FeExprPtr> elements, FeType type) {
-    auto expr = std::make_shared<FeExpr>();
+FeExprPtr FeExpr::tuple(Arena& arena, std::vector<FeExprPtr> elements, FeType type) {
+    auto expr = arena.allocate<FeExpr>();
     expr->type = std::move(type);
     expr->kind = FeTupleExpr{std::move(elements)};
     return expr;
 }
 
-FeExprPtr FeExpr::list(std::vector<FeExprPtr> elements, FeType type) {
-    auto expr = std::make_shared<FeExpr>();
+FeExprPtr FeExpr::list(Arena& arena, std::vector<FeExprPtr> elements, FeType type) {
+    auto expr = arena.allocate<FeExpr>();
     expr->type = std::move(type);
     expr->kind = FeListExpr{std::move(elements)};
     return expr;
 }
 
-FeExprPtr FeExpr::binary(FeBinaryOp op, FeExprPtr lhs, FeExprPtr rhs, FeType type) {
-    auto expr = std::make_shared<FeExpr>();
+FeExprPtr FeExpr::binary(Arena& arena, FeBinaryOp op, FeExprPtr lhs, FeExprPtr rhs, FeType type) {
+    auto expr = arena.allocate<FeExpr>();
     expr->type = std::move(type);
     expr->kind = FeBinaryExpr{op, std::move(lhs), std::move(rhs)};
     return expr;
 }
 
-FeExprPtr FeExpr::if_then_else(FeExprPtr condition, FeExprPtr then_expr, FeExprPtr else_expr, FeType type) {
-    auto expr = std::make_shared<FeExpr>();
+FeExprPtr FeExpr::if_then_else(Arena& arena, FeExprPtr condition, FeExprPtr then_expr, FeExprPtr else_expr, FeType type) {
+    auto expr = arena.allocate<FeExpr>();
     expr->type = std::move(type);
     expr->kind = FeIfThenElseExpr{std::move(condition), std::move(then_expr), std::move(else_expr)};
     return expr;
@@ -693,7 +693,7 @@ std::variant<FeBinaryOp, Diagnostic> lower_binary_op(TokenType token, const Sour
 }
 
 FrontendLowerer::FrontendLowerer(const Program& program, const SemanticInfo& semantic_info)
-    : program_(program), semantic_info_(semantic_info) {
+    : program_(program), semantic_info_(semantic_info), arena_(std::make_unique<Arena>()) {
     for (const auto& config : program_.configs) {
         config_defs_[config.name] = &config;
         for (const auto& field : config.fields) {
@@ -777,16 +777,16 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_expr(const Expr& expr
         [&](const auto& value) -> std::variant<FeExprPtr, Diagnostic> {
             using T = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<T, IntLiteral>) {
-                return FeExpr::constant(FeValue::int_value(value.value), FeType::int_type());
+                return FeExpr::constant(*arena_, FeValue::int_value(value.value), FeType::int_type());
             } else if constexpr (std::is_same_v<T, FloatLiteral>) {
-                return FeExpr::constant(FeValue::float_value(value.value), FeType::float_type());
+                return FeExpr::constant(*arena_, FeValue::float_value(value.value), FeType::float_type());
             } else if constexpr (std::is_same_v<T, BoolLiteral>) {
-                return FeExpr::constant(FeValue::bool_value(value.value), FeType::bool_type());
+                return FeExpr::constant(*arena_, FeValue::bool_value(value.value), FeType::bool_type());
             } else if constexpr (std::is_same_v<T, StringLiteral>) {
-                return FeExpr::constant(FeValue::string_value(value.value), FeType::void_type());
+                return FeExpr::constant(*arena_, FeValue::string_value(value.value), FeType::void_type());
             } else if constexpr (std::is_same_v<T, IdentifierExpr>) {
                 if (value.name == "None") {
-                    return FeExpr::constant(FeValue::none(), FeType::none());
+                    return FeExpr::constant(*arena_, FeValue::none(), FeType::none());
                 }
                 auto identifier = semantic_identifier_for_expr(expr, value.name);
                 if (!identifier) {
@@ -795,7 +795,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_expr(const Expr& expr
                 if (identifier->target == SemanticSymbolKind::Config) {
                     return error_span(expr.span, "Config object '" + value.name + "' cannot appear directly in lowered IR");
                 }
-                return FeExpr::var(value.name, lower_type(identifier->type));
+                return FeExpr::var(*arena_, value.name, lower_type(identifier->type));
             } else if constexpr (std::is_same_v<T, CallExpr>) {
                 auto call = semantic_call_for_expr(expr, value.callee);
                 if (!call) {
@@ -815,12 +815,12 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_expr(const Expr& expr
                     if (!symbol) {
                         return error_span(expr.span, "Frontend lowering could not resolve callable '" + value.callee + "'");
                     }
-                    return FeExpr::apply(FeExpr::var(value.callee, *symbol), std::move(args), result_type);
+                    return FeExpr::apply(*arena_, FeExpr::var(*arena_, value.callee, *symbol), std::move(args), result_type);
                 }
                 if (is_callable_library_op(value.callee) && result_type.kind == FeTypeKind::Callable) {
-                    return FeExpr::layer_ctor(value.callee, std::move(args), result_type);
+                    return FeExpr::layer_ctor(*arena_, value.callee, std::move(args), result_type);
                 }
-                return FeExpr::call(value.callee, std::move(args), result_type);
+                return FeExpr::call(*arena_, value.callee, std::move(args), result_type);
             } else if constexpr (std::is_same_v<T, RepeatExpr>) {
                 return error_span(expr.span, "Repeat suffix '[n]' is only valid inside arrow pipeline stages");
             } else if constexpr (std::is_same_v<T, BinaryExpr>) {
@@ -833,7 +833,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_expr(const Expr& expr
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&constant)) {
                         return *diagnostic;
                     }
-                    return FeExpr::constant(std::get<FeValue>(std::move(constant)), lower_type(access->field_type));
+                    return FeExpr::constant(*arena_, std::get<FeValue>(std::move(constant)), lower_type(access->field_type));
                 }
                 auto op = lower_binary_op(value.op, expr.span);
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&op)) {
@@ -851,7 +851,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_expr(const Expr& expr
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
                     return *diagnostic;
                 }
-                return FeExpr::binary(std::get<FeBinaryOp>(op), std::get<FeExprPtr>(std::move(lhs)), std::get<FeExprPtr>(std::move(rhs)), std::get<FeType>(std::move(type)));
+                return FeExpr::binary(*arena_, std::get<FeBinaryOp>(op), std::get<FeExprPtr>(std::move(lhs)), std::get<FeExprPtr>(std::move(rhs)), std::get<FeType>(std::move(type)));
             } else if constexpr (std::is_same_v<T, UnaryExpr>) {
                 auto operand = lower_expr(*value.operand);
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&operand)) {
@@ -862,9 +862,9 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_expr(const Expr& expr
                     return *diagnostic;
                 }
                 if (value.op == TokenType::Minus) {
-                    return FeExpr::binary(
+                    return FeExpr::binary(*arena_, 
                         FeBinaryOp::Sub,
-                        FeExpr::constant(FeValue::int_value(0), FeType::int_type()),
+                        FeExpr::constant(*arena_, FeValue::int_value(0), FeType::int_type()),
                         std::get<FeExprPtr>(std::move(operand)),
                         std::get<FeType>(std::move(type))
                     );
@@ -873,10 +873,10 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_expr(const Expr& expr
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&op)) {
                     return *diagnostic;
                 }
-                return FeExpr::binary(
+                return FeExpr::binary(*arena_, 
                     std::get<FeBinaryOp>(op),
                     std::get<FeExprPtr>(std::move(operand)),
-                    FeExpr::constant(FeValue::bool_value(false), FeType::bool_type()),
+                    FeExpr::constant(*arena_, FeValue::bool_value(false), FeType::bool_type()),
                     std::get<FeType>(std::move(type))
                 );
             } else if constexpr (std::is_same_v<T, TernaryExpr>) {
@@ -896,7 +896,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_expr(const Expr& expr
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
                     return *diagnostic;
                 }
-                return FeExpr::if_then_else(
+                return FeExpr::if_then_else(*arena_, 
                     std::get<FeExprPtr>(std::move(condition)),
                     std::get<FeExprPtr>(std::move(then_expr)),
                     std::get<FeExprPtr>(std::move(else_expr)),
@@ -915,7 +915,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_expr(const Expr& expr
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
                     return *diagnostic;
                 }
-                return FeExpr::tuple(std::move(elements), std::get<FeType>(std::move(type)));
+                return FeExpr::tuple(*arena_, std::move(elements), std::get<FeType>(std::move(type)));
             } else if constexpr (std::is_same_v<T, ListExpr>) {
                 std::vector<FeExprPtr> elements;
                 for (const auto& element : value.elements) {
@@ -929,7 +929,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_expr(const Expr& expr
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
                     return *diagnostic;
                 }
-                return FeExpr::list(std::move(elements), std::get<FeType>(std::move(type)));
+                return FeExpr::list(*arena_, std::move(elements), std::get<FeType>(std::move(type)));
             } else if constexpr (std::is_same_v<T, ArrowExpr>) {
                 return lower_arrow_expr(expr);
             }
@@ -993,7 +993,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_semantic_arrow_call_s
             }
             apply_args.push_back(FeCallArg{arg.name, std::get<FeExprPtr>(std::move(lowered))});
         }
-        return FeExpr::apply(FeExpr::var(callee, *symbol), std::move(apply_args), result_type);
+        return FeExpr::apply(*arena_, FeExpr::var(*arena_, callee, *symbol), std::move(apply_args), result_type);
     }
 
     if (call.target == SemanticCallTargetKind::BuiltinFunction || call.target == SemanticCallTargetKind::Function) {
@@ -1008,9 +1008,9 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_semantic_arrow_call_s
                 ctor_args.push_back(FeCallArg{arg.name, std::get<FeExprPtr>(std::move(lowered))});
             }
             FeExprPtr callee_expr = is_callable_library_op(callee)
-                ? FeExpr::layer_ctor(callee, std::move(ctor_args), global->second)
-                : FeExpr::call(callee, std::move(ctor_args), global->second);
-            return FeExpr::apply(callee_expr, std::vector<FeCallArg>{{std::nullopt, std::move(current)}}, result_type);
+                ? FeExpr::layer_ctor(*arena_, callee, std::move(ctor_args), global->second)
+                : FeExpr::call(*arena_, callee, std::move(ctor_args), global->second);
+            return FeExpr::apply(*arena_, callee_expr, std::vector<FeCallArg>{{std::nullopt, std::move(current)}}, result_type);
         }
     }
 
@@ -1022,7 +1022,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_semantic_arrow_call_s
         }
         lowered_args.push_back(FeCallArg{arg.name, std::get<FeExprPtr>(std::move(lowered))});
     }
-    return FeExpr::call(callee, std::move(lowered_args), result_type);
+    return FeExpr::call(*arena_, callee, std::move(lowered_args), result_type);
 }
 
 std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_arrow_stage_expr(const Expr& expr, FeExprPtr current) {
@@ -1071,7 +1071,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_arrow_stage_expr(cons
         if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
             return *diagnostic;
         }
-        return FeExpr::binary(
+        return FeExpr::binary(*arena_, 
             std::get<FeBinaryOp>(op),
             std::get<FeExprPtr>(std::move(lhs)),
             std::get<FeExprPtr>(std::move(rhs)),
@@ -1089,9 +1089,9 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_arrow_stage_expr(cons
             return *diagnostic;
         }
         if (unary->op == TokenType::Minus) {
-            return FeExpr::binary(
+            return FeExpr::binary(*arena_, 
                 FeBinaryOp::Sub,
-                FeExpr::constant(FeValue::int_value(0), FeType::int_type()),
+                FeExpr::constant(*arena_, FeValue::int_value(0), FeType::int_type()),
                 std::get<FeExprPtr>(std::move(operand)),
                 std::get<FeType>(std::move(type))
             );
@@ -1100,10 +1100,10 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_arrow_stage_expr(cons
         if (const auto* diagnostic = std::get_if<Diagnostic>(&op)) {
             return *diagnostic;
         }
-        return FeExpr::binary(
+        return FeExpr::binary(*arena_, 
             std::get<FeBinaryOp>(op),
             std::get<FeExprPtr>(std::move(operand)),
-            FeExpr::constant(FeValue::bool_value(false), FeType::bool_type()),
+            FeExpr::constant(*arena_, FeValue::bool_value(false), FeType::bool_type()),
             std::get<FeType>(std::move(type))
         );
     }
@@ -1130,7 +1130,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_arrow_stage_expr(cons
         if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
             return *diagnostic;
         }
-        return FeExpr::if_then_else(
+        return FeExpr::if_then_else(*arena_, 
             std::get<FeExprPtr>(std::move(condition)),
             std::get<FeExprPtr>(std::move(then_expr)),
             std::get<FeExprPtr>(std::move(else_expr)),
@@ -1151,7 +1151,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_arrow_stage_expr(cons
         if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
             return *diagnostic;
         }
-        return FeExpr::tuple(std::move(elements), std::get<FeType>(std::move(type)));
+        return FeExpr::tuple(*arena_, std::move(elements), std::get<FeType>(std::move(type)));
     }
     if (const auto* list = std::get_if<ListExpr>(&expr.kind)) {
         std::vector<FeExprPtr> elements;
@@ -1167,7 +1167,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lower_arrow_stage_expr(cons
         if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
             return *diagnostic;
         }
-        return FeExpr::list(std::move(elements), std::get<FeType>(std::move(type)));
+        return FeExpr::list(*arena_, std::move(elements), std::get<FeType>(std::move(type)));
     }
     if (count_arrow_stage_sites(expr) == 0) {
         return lower_expr(expr);
@@ -1214,7 +1214,7 @@ std::variant<FeStmt, Diagnostic> FrontendLowerer::lower_stmt(const Stmt& stmt) {
                 if (!declaration) {
                     return error_span(stmt.span, "Frontend lowering missing semantic declaration info for '" + value.name + "'");
                 }
-                FeExprPtr lowered_value;
+                FeExprPtr lowered_value = nullptr;
                 bool has_value = false;
                 if (value.init) {
                     auto lowered = lower_expr(*value.init);

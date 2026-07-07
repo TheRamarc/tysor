@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arena.h"
 #include "diagnostic.h"
 #include "lexer.h"
 #include "parser.h"
@@ -129,6 +130,7 @@ struct FeValue {
 
 // Compiler-level binary operators. These replace raw parser TokenType operators
 // like Plus, Minus, EqualEqual, etc.
+// this is used by graph node, why this enum also include lt, gt.
 enum class FeBinaryOp {
     Add,
     Sub,
@@ -147,7 +149,7 @@ enum class FeBinaryOp {
 };
 
 struct FeExpr;
-using FeExprPtr = std::shared_ptr<FeExpr>;
+using FeExprPtr = FeExpr*;
 
 // Lowered call argument. `name` preserves keyword arguments; `value` is already
 // lowered and typed.
@@ -286,15 +288,15 @@ struct FeExpr {
     FeExprKind kind;
 
     // Factory methods for creating specific FeExpr nodes.
-    static FeExprPtr constant(FeValue value, FeType type);
-    static FeExprPtr var(std::string symbol, FeType type);
-    static FeExprPtr call(std::string callee, std::vector<FeCallArg> args, FeType type);
-    static FeExprPtr layer_ctor(std::string callee, std::vector<FeCallArg> args, FeType type);
-    static FeExprPtr apply(FeExprPtr callee, std::vector<FeCallArg> args, FeType type);
-    static FeExprPtr tuple(std::vector<FeExprPtr> elements, FeType type);
-    static FeExprPtr list(std::vector<FeExprPtr> elements, FeType type);
-    static FeExprPtr binary(FeBinaryOp op, FeExprPtr lhs, FeExprPtr rhs, FeType type);
-    static FeExprPtr if_then_else(FeExprPtr condition, FeExprPtr then_expr, FeExprPtr else_expr, FeType type);
+    static FeExprPtr constant(Arena& arena, FeValue value, FeType type);
+    static FeExprPtr var(Arena& arena, std::string symbol, FeType type);
+    static FeExprPtr call(Arena& arena, std::string callee, std::vector<FeCallArg> args, FeType type);
+    static FeExprPtr layer_ctor(Arena& arena, std::string callee, std::vector<FeCallArg> args, FeType type);
+    static FeExprPtr apply(Arena& arena, FeExprPtr callee, std::vector<FeCallArg> args, FeType type);
+    static FeExprPtr tuple(Arena& arena, std::vector<FeExprPtr> elements, FeType type);
+    static FeExprPtr list(Arena& arena, std::vector<FeExprPtr> elements, FeType type);
+    static FeExprPtr binary(Arena& arena, FeBinaryOp op, FeExprPtr lhs, FeExprPtr rhs, FeType type);
+    static FeExprPtr if_then_else(Arena& arena, FeExprPtr condition, FeExprPtr then_expr, FeExprPtr else_expr, FeType type);
 };
 
 struct FeStmt;
@@ -534,6 +536,8 @@ struct FeExecutionPlan {
 
 // Full lowered module produced by FrontendLowerer.
 struct LoweredModule {
+    // Arena containing all Frontend IR nodes
+    std::unique_ptr<Arena> arena;
     // Why it exists: To store global configurations for use by the runtime or model.
     // What it tracks: Lowered configuration blocks.
     // What mutates it: Appended to as the module is built.
@@ -599,6 +603,8 @@ private:
     // What it tracks: A mapping from config block names to their AST definitions.
     // What mutates it: Populated during initialization of the lowerer.
     std::map<std::string, const Config*> config_defs_;
+    // Arena for all allocated FeExprs during lowering
+    std::unique_ptr<Arena> arena_;
     // Why it exists: To store memoized field results and prevent redundant work.
     // What it tracks: Evaluated states for each field in each config block.
     // What mutates it: Updated as each config field is evaluated.

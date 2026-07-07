@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arena.h"
 #include "diagnostic.h"
 #include "lexer.h"
 #include "source.h"
@@ -133,7 +134,7 @@ struct Type {
 struct Expr;
 struct Stmt;
 
-using ExprPtr = std::unique_ptr<Expr>;
+using ExprPtr = Expr*;
 using StmtPtr = std::unique_ptr<Stmt>;
 
 /**
@@ -815,40 +816,11 @@ struct Config {
 // Top-level module form. Configs may become train configs during lowering,
 // while layers/functions are candidates for graph construction.
 struct Program {
-    /**
-     * @brief Configuration blocks defined in the program.
-     * 
-     * Why it exists: Stores hyperparameter/training config blocks.
-     * What it tracks: A list of Config nodes.
-     * What mutates/updates it: Appended to during parsing of top-level items.
-     */
+    // Arena containing all AST nodes
+    std::unique_ptr<Arena> arena;
     std::vector<Config> configs;
-
-    /**
-     * @brief Layer definitions.
-     * 
-     * Why it exists: Stores custom neural network modules.
-     * What it tracks: A list of Layer nodes.
-     * What mutates/updates it: Appended to during parsing of top-level items.
-     */
     std::vector<Layer> layers;
-
-    /**
-     * @brief Function definitions.
-     * 
-     * Why it exists: Stores standard callable blocks.
-     * What it tracks: A list of Function nodes.
-     * What mutates/updates it: Appended to during parsing of top-level items.
-     */
     std::vector<Function> functions;
-
-    /**
-     * @brief Global statements outside any function or layer.
-     * 
-     * Why it exists: Handles top-level scripting (e.g. global variable definitions).
-     * What it tracks: A list of Stmt nodes.
-     * What mutates/updates it: Appended to during parsing of top-level items.
-     */
     std::vector<Stmt> globals;
 };
 
@@ -860,12 +832,13 @@ class Parser {
 public:
     explicit Parser(std::vector<Token> tokens);
 
-    ParseResult parse_program();
+    std::variant<Program, Diagnostic> parse_program();
     [[nodiscard]] std::optional<Diagnostic> take_last_diagnostic();
 
 private:
     std::vector<Token> tokens_;
     std::size_t index_ = 0;
+    std::unique_ptr<Arena> arena_;
     std::optional<Diagnostic> last_diagnostic_;
 
     ExprPtr parse_expression();
@@ -881,6 +854,7 @@ private:
     ExprPtr parse_member_access_expression();
     ExprPtr parse_primary_expression();
     ExprPtr parse_list_expression();
+    ExprPtr make_expr(SourceSpan span, ExprKind kind);
 
     Stmt parse_stmt();
     Stmt parse_scope();

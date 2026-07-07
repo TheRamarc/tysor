@@ -17,13 +17,6 @@ SourceSpan span_of(const Token& token) {
     return SourceSpan{token.line, token.column};
 }
 
-ExprPtr make_expr(SourceSpan span, ExprKind kind) {
-    auto expr = std::make_unique<Expr>();
-    expr->span = span;
-    expr->kind = std::move(kind);
-    return expr;
-}
-
 Stmt make_stmt(SourceSpan span, StmtKind kind) {
     Stmt stmt;
     stmt.span = span;
@@ -475,7 +468,12 @@ Type Type::callable(std::optional<Type> return_type) {
     return type;
 }
 
-Parser::Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)) {}
+Parser::Parser(std::vector<Token> tokens)
+    : tokens_(std::move(tokens)), arena_(std::make_unique<Arena>()) {}
+
+ExprPtr Parser::make_expr(SourceSpan span, ExprKind kind) {
+    return arena_->allocate<Expr>(Expr{span, std::move(kind)});
+}
 
 std::optional<Diagnostic> Parser::take_last_diagnostic() {
     auto diagnostic = last_diagnostic_;
@@ -499,6 +497,7 @@ ParseResult Parser::parse_program() {
                     consume();
                     break;
                 case TokenType::Eof:
+                    program.arena = std::move(arena_);
                     return program;
                 case TokenType::Layer:
                     program.layers.push_back(parse_layer());
@@ -522,6 +521,7 @@ ParseResult Parser::parse_program() {
                     fail_here("Unexpected token at top level");
             }
         }
+        program.arena = std::move(arena_);
         return program;
     } catch (const ParseFailure&) {
         return last_diagnostic_.value_or(Diagnostic::error("parser", "P0001", "Parser error"));
@@ -1156,7 +1156,7 @@ Config Parser::parse_config() {
                 consume();
                 type = parse_type();
             }
-            ExprPtr init;
+            ExprPtr init = nullptr;
             if (peek_kind(0) == TokenType::Eq) {
                 consume();
                 init = parse_expression();
@@ -1180,7 +1180,7 @@ std::vector<Arg> Parser::parse_callable_args() {
                 consume();
                 type = parse_type();
             }
-            ExprPtr default_value;
+            ExprPtr default_value = nullptr;
             if (peek_kind(0) == TokenType::Eq) {
                 consume();
                 default_value = parse_expression();

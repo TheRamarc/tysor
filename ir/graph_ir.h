@@ -163,6 +163,7 @@ struct GraphNode {
 
 // GraphFunction is the executable shape of a function/layer. named_values keeps
 // source symbols available for train objectives and user-facing output lookup.
+// i think we need to change this name GraphFunction to GraphLayer and remove this is_layer feild.
 struct GraphFunction {
     // Why it exists: To identify the function or layer.
     // What it tracks: The name of the defined callable.

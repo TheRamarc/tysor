@@ -1229,10 +1229,10 @@ std::optional<Diagnostic> SemanticAnalyzer::validate_train_config(const Config& 
         std::vector<const Expr*> objective_exprs;
         if (const auto* tuple = std::get_if<TupleExpr>(&field.init->kind)) {
             for (const auto& element : tuple->elements) {
-                objective_exprs.push_back(element.get());
+                objective_exprs.push_back(element);
             }
         } else {
-            objective_exprs.push_back(field.init.get());
+            objective_exprs.push_back(field.init);
         }
 
         for (const Expr* expr : objective_exprs) {

@@ -25,6 +25,7 @@ include_dirs = include_directories(
 )
 
 frontend_sources = files(
+  'core/arena.cpp',
   'core/diagnostic.cpp',
   'frontend/lexer.cpp',
   'frontend/ops.cpp',
@@ -114,6 +115,7 @@ ops_smoke = executable(
   'cpptysor_ops_smoke',
   files(
     'tests/ops_smoke.cpp',
+    'core/arena.cpp',
     'core/diagnostic.cpp',
     'frontend/lexer.cpp',
     'frontend/ops.cpp',
