@@ -746,7 +746,7 @@ FrontendResult FrontendLowerer::lower() {
         if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
             return *diagnostic;
         }
-        module.functions.push_back(std::get<FeFunction>(std::move(lowered)));
+        module.layers.push_back(std::get<FeLayer>(std::move(lowered)));
     }
     for (const auto& function : program_.functions) {
         auto lowered = lower_function(function);
@@ -756,8 +756,8 @@ FrontendResult FrontendLowerer::lower() {
         module.functions.push_back(std::get<FeFunction>(std::move(lowered)));
     }
 
-    const bool has_model_layer = std::any_of(module.functions.begin(), module.functions.end(), [](const FeFunction& function) {
-        return function.is_layer && function.name == "model";
+    const bool has_model_layer = std::any_of(module.layers.begin(), module.layers.end(), [](const FeLayer& layer) {
+        return layer.name == "model";
     });
     const bool has_model_train = std::any_of(module.trains.begin(), module.trains.end(), [](const FeTrain& train) {
         return train.name == "model";
@@ -1287,7 +1287,6 @@ std::variant<FeStmt, Diagnostic> FrontendLowerer::lower_stmt(const Stmt& stmt) {
 std::variant<FeFunction, Diagnostic> FrontendLowerer::lower_function(const Function& function) {
     FeFunction lowered;
     lowered.name = function.name;
-    lowered.is_layer = false;
     lowered.return_type = lower_type(function.return_type);
     auto saved_symbols = current_symbols_;
     auto saved_owner = current_owner_;
@@ -1308,10 +1307,9 @@ std::variant<FeFunction, Diagnostic> FrontendLowerer::lower_function(const Funct
     return lowered;
 }
 
-std::variant<FeFunction, Diagnostic> FrontendLowerer::lower_layer(const Layer& layer) {
-    FeFunction lowered;
+std::variant<FeLayer, Diagnostic> FrontendLowerer::lower_layer(const Layer& layer) {
+    FeLayer lowered;
     lowered.name = layer.name;
-    lowered.is_layer = true;
     lowered.return_type = lower_type(layer.return_type);
     auto saved_symbols = current_symbols_;
     auto saved_owner = current_owner_;
@@ -1407,13 +1405,13 @@ std::variant<FeTrain, Diagnostic> FrontendLowerer::lower_train_config(const Conf
 }
 
 std::variant<FeExecutionPlan, Diagnostic> FrontendLowerer::build_execution_plan(const LoweredModule& module) {
-    auto model = std::find_if(module.functions.begin(), module.functions.end(), [](const FeFunction& function) {
-        return function.is_layer && function.name == "model";
+    auto model = std::find_if(module.layers.begin(), module.layers.end(), [](const FeLayer& layer) {
+        return layer.name == "model";
     });
     auto train = std::find_if(module.trains.begin(), module.trains.end(), [](const FeTrain& item) {
         return item.name == "model";
     });
-    if (model == module.functions.end() || train == module.trains.end()) {
+    if (model == module.layers.end() || train == module.trains.end()) {
         return error("Training config lowering requires layer model and config model");
     }
     FeExecutionPlan plan;
@@ -1897,8 +1895,21 @@ std::string frontend_ir_to_string(const LoweredModule& module) {
     for (const auto& train : module.trains) {
         out << "train " << train.name << " variants=" << train.variant_count << '\n';
     }
+    for (const auto& layer : module.layers) {
+        out << "layer " << layer.name << '(';
+        for (std::size_t index = 0; index < layer.params.size(); ++index) {
+            if (index != 0) {
+                out << ", ";
+            }
+            out << layer.params[index].first << ": " << fe_type_to_string(layer.params[index].second);
+        }
+        out << ") -> " << fe_type_to_string(layer.return_type) << '\n';
+        for (const auto& stmt : layer.body) {
+            append_stmt(out, stmt, 2);
+        }
+    }
     for (const auto& function : module.functions) {
-        out << (function.is_layer ? "layer " : "fn ") << function.name << '(';
+        out << "fn " << function.name << '(';
         for (std::size_t index = 0; index < function.params.size(); ++index) {
             if (index != 0) {
                 out << ", ";

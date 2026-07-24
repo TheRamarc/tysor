@@ -161,19 +161,13 @@ struct GraphNode {
     std::vector<std::size_t> inputs;
 };
 
-// GraphFunction is the executable shape of a function/layer. named_values keeps
-// source symbols available for train objectives and user-facing output lookup.
-// i think we need to change this name GraphFunction to GraphLayer and remove this is_layer feild.
+// GraphFunction is the executable shape of a pure, stateless function.
 struct GraphFunction {
-    // Why it exists: To identify the function or layer.
+    // Why it exists: To identify the function.
     // What it tracks: The name of the defined callable.
     // What mutates it: Set during parsing/lowering.
     std::string name;
-    // Why it exists: To differentiate standard functions from trainable network layers.
-    // What it tracks: True if the function represents a model layer with parameters/state.
-    // What mutates it: Inferred from the defining AST node (e.g., `layer` keyword vs `def`).
-    bool is_layer = false;
-    // Why it exists: To enforce type safety on function/layer outputs.
+    // Why it exists: To enforce type safety on function outputs.
     // What it tracks: The declared or inferred return type of the callable.
     // What mutates it: Resolved during semantic analysis.
     FeType return_type;
@@ -181,16 +175,50 @@ struct GraphFunction {
     // What it tracks: Metadata for every value ID referenced in the function.
     // What mutates it: Appended to sequentially as expressions are lowered.
     std::vector<GraphValue> values;
-    // Why it exists: To list the persistent state items required by this graph.
-    // What it tracks: Parameter metadata tying specific value IDs to weights/biases.
-    // What mutates it: Appended to when layer constuctors are encountered.
-    std::vector<GraphParameter> parameters;
     // Why it exists: To form the execution trace of the function.
     // What it tracks: The topologically sorted list of operations to execute.
     // What mutates it: Appended to sequentially as statements/expressions are lowered.
     std::vector<GraphNode> nodes;
+    // Why it exists: To identify which values are required as input parameters.
+    // What it tracks: Input value IDs.
+    std::vector<std::size_t> inputs;
     // Why it exists: To identify which values are yielded when the function returns.
     // What it tracks: The value IDs returned by the function.
+    // What mutates it: Populated upon encountering return statements.
+    std::vector<std::size_t> outputs;
+    // Why it exists: To bridge source-level symbols with graph IDs.
+    // What it tracks: A mapping from original variable names to their graph value IDs.
+    // What mutates it: Inserted into whenever a named variable is declared or assigned.
+    std::map<std::string, std::size_t> named_values;
+};
+
+// GraphLayer is the executable shape of a stateful layer module with parameters.
+struct GraphLayer {
+    // Why it exists: To identify the layer.
+    // What it tracks: The name of the defined layer module.
+    // What mutates it: Set during parsing/lowering.
+    std::string name;
+    // Why it exists: To enforce type safety on layer outputs.
+    // What it tracks: The declared or inferred return type of the layer.
+    // What mutates it: Resolved during semantic analysis.
+    FeType return_type;
+    // Why it exists: To serve as the registry of all variables/dataflow edges in the graph.
+    // What it tracks: Metadata for every value ID referenced in the layer.
+    // What mutates it: Appended to sequentially as expressions are lowered.
+    std::vector<GraphValue> values;
+    // Why it exists: To list the persistent state/weights required by this layer graph.
+    // What it tracks: Parameter metadata tying specific value IDs to weights/biases.
+    // What mutates it: Appended to when layer constructors are encountered.
+    std::vector<GraphParameter> parameters;
+    // Why it exists: To form the execution trace of the layer forward pass.
+    // What it tracks: The topologically sorted list of operations to execute.
+    // What mutates it: Appended to sequentially as statements/expressions are lowered.
+    std::vector<GraphNode> nodes;
+    // Why it exists: To identify which values are required as input arguments.
+    // What it tracks: Input value IDs.
+    std::vector<std::size_t> inputs;
+    // Why it exists: To identify which values are yielded when the layer returns.
+    // What it tracks: The value IDs returned by the layer.
     // What mutates it: Populated upon encountering return statements.
     std::vector<std::size_t> outputs;
     // Why it exists: To bridge source-level symbols with graph IDs for debugging and objectives.
@@ -200,8 +228,8 @@ struct GraphFunction {
 };
 
 struct GraphBuildSkipped {
-    // Why it exists: To identify which function failed to compile.
-    // What it tracks: The original name of the function skipped.
+    // Why it exists: To identify which function or layer failed to compile.
+    // What it tracks: The original name of the callable skipped.
     // What mutates it: Set upon encountering a build failure.
     std::string function_name;
     // Why it exists: To inform the user why graph generation was skipped.
@@ -211,44 +239,40 @@ struct GraphBuildSkipped {
 };
 
 struct GraphModule {
-    // Why it exists: To contain the successfully compiled graph components.
-    // What it tracks: The fully lowered graph representations of functions/layers.
+    // Why it exists: To contain successfully compiled stateless graph functions.
+    // What it tracks: Fully lowered graph representations of functions.
     // What mutates it: Accumulated as the builder processes the frontend module.
     std::vector<GraphFunction> functions;
+    // Why it exists: To contain successfully compiled stateful graph layers.
+    // What it tracks: Fully lowered graph representations of layers.
+    // What mutates it: Accumulated as the builder processes the frontend module.
+    std::vector<GraphLayer> layers;
     // Why it exists: To keep a record of what could not be compiled without halting entirely.
-    // What it tracks: Information about functions skipped during graph building.
-    // What mutates it: Pushed into when function lowering returns a diagnostic.
+    // What it tracks: Information about functions/layers skipped during graph building.
+    // What mutates it: Pushed into when lowering returns a diagnostic.
     std::vector<GraphBuildSkipped> skipped;
 };
 
 using GraphFunctionResult = std::variant<GraphFunction, Diagnostic>;
+using GraphLayerResult = std::variant<GraphLayer, Diagnostic>;
 
-// Lowers Frontend IR functions into Graph IR functions.
-// This builder traverses the linear list of frontend statements and converts
-// expressions into an ordered series of GraphNode dependencies.
-class GraphBuilder {
-public:
-    explicit GraphBuilder(const FeFunction& function);
+inline GraphModule make_graph_module(GraphLayer layer) {
+    GraphModule module;
+    module.layers.push_back(std::move(layer));
+    return module;
+}
 
-    // Orchestrates the graph lowering process.
-    GraphFunctionResult build();
-
-private:
-    // Why it exists: To provide access to the frontend function AST/IR.
-    // What it tracks: The function node currently being built into a graph.
-    // What mutates it: Passed via constructor; immutable reference.
-    const FeFunction& function_;
-
-    // Lowers a frontend expression into one or more graph nodes and returns the value id.
-    std::variant<std::size_t, Diagnostic> lower_expr(const FeExprPtr& expr, GraphFunction& graph) const;
-
-    // Looks up the numeric value ID associated with a named symbol in the graph.
-    std::variant<std::size_t, Diagnostic> lookup_named_value(const std::string& name, const GraphFunction& graph) const;
-};
+inline GraphModule make_graph_module(GraphFunction function) {
+    GraphModule module;
+    module.functions.push_back(std::move(function));
+    return module;
+}
 
 GraphFunctionResult build_graph_function(const FeFunction& function);
+GraphLayerResult build_graph_layer(const FeLayer& layer);
 std::variant<GraphModule, Diagnostic> build_graph_module(const LoweredModule& module);
 std::optional<Diagnostic> validate_graph_function(const GraphFunction& graph);
+std::optional<Diagnostic> validate_graph_layer(const GraphLayer& graph);
 std::string graph_dim_to_string(const GraphDim& dim);
 std::string graph_tensor_type_to_string(const GraphTensorType& type);
 std::string graph_module_summary(const GraphModule& module);

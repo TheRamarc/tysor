@@ -295,8 +295,9 @@ GraphTensorType unknown_tensor(std::optional<std::string> dtype = std::nullopt) 
     return tensor;
 }
 
+template <typename GraphT>
 std::variant<GraphTensorType, Diagnostic> require_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     std::size_t value_id,
     const std::string& label
 ) {
@@ -310,7 +311,8 @@ std::variant<GraphTensorType, Diagnostic> require_tensor_type(
     return *value.tensor_type;
 }
 
-std::optional<std::int64_t> constant_int_value(const GraphFunction& graph, std::size_t value_id) {
+template <typename GraphT>
+std::optional<std::int64_t> constant_int_value(const GraphT& graph, std::size_t value_id) {
     for (const auto& node : graph.nodes) {
         if (node.output != value_id || node.kind != GraphNodeKind::Constant) {
             continue;
@@ -323,7 +325,8 @@ std::optional<std::int64_t> constant_int_value(const GraphFunction& graph, std::
     return std::nullopt;
 }
 
-std::optional<bool> constant_bool_value(const GraphFunction& graph, std::size_t value_id) {
+template <typename GraphT>
+std::optional<bool> constant_bool_value(const GraphT& graph, std::size_t value_id) {
     for (const auto& node : graph.nodes) {
         if (node.output != value_id || node.kind != GraphNodeKind::Constant) {
             continue;
@@ -336,7 +339,8 @@ std::optional<bool> constant_bool_value(const GraphFunction& graph, std::size_t 
     return std::nullopt;
 }
 
-const GraphNode* producer_node(const GraphFunction& graph, std::size_t value_id) {
+template <typename GraphT>
+const GraphNode* producer_node(const GraphT& graph, std::size_t value_id) {
     auto found = std::find_if(graph.nodes.begin(), graph.nodes.end(), [&](const GraphNode& node) {
         return node.output == value_id;
     });
@@ -482,7 +486,8 @@ GraphTensorType merge_tensor_metadata(const GraphTensorType& existing, GraphTens
     return inferred;
 }
 
-std::size_t append_value(GraphFunction& graph, std::string name, FeType type, bool is_parameter) {
+template <typename GraphT>
+std::size_t append_value(GraphT& graph, std::string name, FeType type, bool is_parameter) {
     const std::size_t id = graph.values.size();
     const bool requires_grad = is_parameter && type.kind == FeTypeKind::Tensor;
     const auto tensor_type = tensor_type_from_fe_type(type);
@@ -517,8 +522,9 @@ FeType fe_tensor_type_from_graph_tensor(const GraphTensorType& tensor) {
     return FeType::tensor(tensor.dtype, shape_expr, tensor.has_known_rank ? std::optional<std::size_t>{tensor.shape.size()} : std::nullopt);
 }
 
+template <typename GraphT>
 std::size_t append_tensor_value(
-    GraphFunction& graph,
+    GraphT& graph,
     std::string name,
     GraphTensorType tensor_type,
     bool is_model_parameter
@@ -544,42 +550,55 @@ std::string graph_embedding_weight_name(std::size_t owner_value) {
     return "embedding_" + std::to_string(owner_value) + "_weight";
 }
 
-bool graph_has_parameter(const GraphFunction& graph, const std::string& name) {
-    return std::any_of(graph.parameters.begin(), graph.parameters.end(), [&](const GraphParameter& parameter) {
-        return parameter.name == name;
-    });
+template <typename GraphT>
+bool graph_has_parameter(const GraphT& graph, const std::string& name) {
+    if constexpr (std::is_same_v<GraphT, GraphLayer>) {
+        return std::any_of(graph.parameters.begin(), graph.parameters.end(), [&](const GraphParameter& parameter) {
+            return parameter.name == name;
+        });
+    } else {
+        return false;
+    }
 }
 
+template <typename GraphT>
 const GraphParameter* find_graph_parameter(
-    const GraphFunction& graph,
+    const GraphT& graph,
     std::size_t owner_value,
     const std::string& role
 ) {
-    auto found = std::find_if(graph.parameters.begin(), graph.parameters.end(), [&](const GraphParameter& parameter) {
-        return parameter.owner_value == owner_value && parameter.role == role;
-    });
-    return found == graph.parameters.end() ? nullptr : &*found;
+    if constexpr (std::is_same_v<GraphT, GraphLayer>) {
+        auto found = std::find_if(graph.parameters.begin(), graph.parameters.end(), [&](const GraphParameter& parameter) {
+            return parameter.owner_value == owner_value && parameter.role == role;
+        });
+        return found == graph.parameters.end() ? nullptr : &*found;
+    } else {
+        return nullptr;
+    }
 }
 
+template <typename GraphT>
 void append_graph_parameter(
-    GraphFunction& graph,
+    GraphT& graph,
     std::string name,
     std::string role,
     std::size_t owner_value,
     std::size_t value_id,
     GraphTensorType tensor_type
 ) {
-    if (graph_has_parameter(graph, name)) {
-        return;
+    if constexpr (std::is_same_v<GraphT, GraphLayer>) {
+        if (graph_has_parameter(graph, name)) {
+            return;
+        }
+        graph.parameters.push_back(GraphParameter{
+            std::move(name),
+            std::move(role),
+            owner_value,
+            value_id,
+            std::move(tensor_type),
+            true
+        });
     }
-    graph.parameters.push_back(GraphParameter{
-        std::move(name),
-        std::move(role),
-        owner_value,
-        value_id,
-        std::move(tensor_type),
-        true,
-    });
 }
 
 std::optional<GraphDim> last_dim(const GraphTensorType& tensor) {
@@ -600,7 +619,8 @@ GraphTensorType parameter_tensor(
     return tensor;
 }
 
-std::optional<bool> linear_with_bias(const GraphFunction& graph, const GraphNode& ctor) {
+template <typename GraphT>
+std::optional<bool> linear_with_bias(const GraphT& graph, const GraphNode& ctor) {
     if (ctor.inputs.size() == 1) {
         return true;
     }
@@ -616,14 +636,16 @@ std::optional<bool> linear_with_bias(const GraphFunction& graph, const GraphNode
     return true;
 }
 
-std::optional<std::int64_t> linear_in_features(const GraphFunction& graph, const GraphNode& ctor) {
+template <typename GraphT>
+std::optional<std::int64_t> linear_in_features(const GraphT& graph, const GraphNode& ctor) {
     if (ctor.inputs.size() >= 2 && !constant_bool_value(graph, ctor.inputs[1]).has_value()) {
         return constant_int_value(graph, ctor.inputs[0]);
     }
     return std::nullopt;
 }
 
-std::optional<std::int64_t> linear_out_features(const GraphFunction& graph, const GraphNode& ctor) {
+template <typename GraphT>
+std::optional<std::int64_t> linear_out_features(const GraphT& graph, const GraphNode& ctor) {
     if (ctor.inputs.empty()) {
         return std::nullopt;
     }
@@ -636,8 +658,9 @@ std::optional<std::int64_t> linear_out_features(const GraphFunction& graph, cons
     return constant_int_value(graph, ctor.inputs[1]);
 }
 
+template <typename GraphT>
 void append_linear_parameters_for_apply(
-    GraphFunction& graph,
+    GraphT& graph,
     const GraphNode& ctor,
     const GraphTensorType& input
 ) {
@@ -683,8 +706,9 @@ void append_linear_parameters_for_apply(
     }
 }
 
+template <typename GraphT>
 void append_embedding_parameters_for_apply(
-    GraphFunction& graph,
+    GraphT& graph,
     const GraphNode& ctor,
     const GraphTensorType& output
 ) {
@@ -696,7 +720,10 @@ void append_embedding_parameters_for_apply(
     if (!num_embeddings || !embedding_dim) {
         return;
     }
-    const GraphTensorType weight_type = parameter_tensor(output.dtype, {GraphDim::known(*num_embeddings), GraphDim::known(*embedding_dim)});
+    const GraphTensorType weight_type = parameter_tensor(
+        output.dtype,
+        {GraphDim::known(*num_embeddings), GraphDim::known(*embedding_dim)}
+    );
     const std::string weight_name = graph_embedding_weight_name(ctor.output);
     if (find_graph_parameter(graph, ctor.output, "weight") == nullptr) {
         const std::size_t weight_value = append_tensor_value(graph, weight_name, weight_type, true);
@@ -711,8 +738,9 @@ void append_embedding_parameters_for_apply(
     }
 }
 
+template <typename GraphT>
 void append_trainable_parameters_for_node(
-    GraphFunction& graph,
+    GraphT& graph,
     const GraphNode& node,
     const std::optional<GraphTensorType>& inferred
 ) {
@@ -734,12 +762,11 @@ void append_trainable_parameters_for_node(
     }
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_binary_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& node
 ) {
-    // Infers the output shape for a binary operation by comparing the two input shapes.
-    // Supports trailing vector broadcasts (e.g. adding a bias to a rank-2 matrix).
     const auto& lhs = graph.values[node.inputs[0]].tensor_type;
     const auto& rhs = graph.values[node.inputs[1]].tensor_type;
     if (lhs && rhs) {
@@ -767,8 +794,9 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_binary_tensor_typ
     return std::optional<GraphTensorType>{};
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_matmul_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& node
 ) {
     auto lhs = require_tensor_type(graph, node.inputs[0], "matmul lhs");
@@ -795,8 +823,9 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_matmul_tensor_typ
     return unknown_tensor(lhs_tensor.dtype ? lhs_tensor.dtype : rhs_tensor.dtype);
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_reshape_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& node
 ) {
     auto input = require_tensor_type(graph, node.inputs[0], "reshape input");
@@ -822,8 +851,9 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_reshape_tensor_ty
     return tensor_with_shape(input_tensor, std::move(shape));
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_transpose_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& node
 ) {
     auto input = require_tensor_type(graph, node.inputs[0], "transpose input");
@@ -839,8 +869,9 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_transpose_tensor_
     return tensor;
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_reduce_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& node
 ) {
     auto input = require_tensor_type(graph, node.inputs[0], node.op + " input");
@@ -872,8 +903,9 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_reduce_tensor_typ
     return tensor_with_shape(input_tensor, std::move(shape));
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_cross_entropy_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& node
 ) {
     auto logits = require_tensor_type(graph, node.inputs[0], "cross_entropy logits");
@@ -895,8 +927,9 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_cross_entropy_ten
     return tensor_with_shape(logits_tensor, {multiply_dims(prefix), GraphDim::known(1)});
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_flatten_heads_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& node
 ) {
     auto input = require_tensor_type(graph, node.inputs[0], "flatten_heads input");
@@ -910,8 +943,9 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_flatten_heads_ten
     return tensor_with_shape(input_tensor, std::move(shape));
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_repeat_kv_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& node
 ) {
     auto input = require_tensor_type(graph, node.inputs[0], "repeat_kv input");
@@ -954,8 +988,9 @@ std::optional<Diagnostic> validate_last_dim(
     return std::nullopt;
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_linear_apply_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& ctor,
     const GraphTensorType& input
 ) {
@@ -991,8 +1026,9 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_linear_apply_tens
     return tensor_with_shape(input, std::move(shape));
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_embedding_apply_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& ctor,
     const GraphTensorType& input
 ) {
@@ -1016,8 +1052,9 @@ bool is_shape_preserving_callable(const std::string& op) {
            op == "Softmax" || op == "Dropout" || op == "RMSNorm";
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_apply_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& node
 ) {
     auto input = require_tensor_type(graph, node.inputs[1], "apply input");
@@ -1039,8 +1076,9 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_apply_tensor_type
     return input_tensor;
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_library_call_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& node
 ) {
     if (node.op == "reshape") {
@@ -1081,8 +1119,9 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_library_call_tens
     return input_tensor;
 }
 
+template <typename GraphT>
 std::variant<std::optional<GraphTensorType>, Diagnostic> infer_node_tensor_type(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const GraphNode& node
 ) {
     if (node.kind == GraphNodeKind::Constant || node.kind == GraphNodeKind::LibraryCtor) {
@@ -1108,8 +1147,9 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_node_tensor_type(
     return std::optional<GraphTensorType>{};
 }
 
+template <typename GraphT>
 std::optional<Diagnostic> apply_inferred_tensor_type(
-    GraphFunction& graph,
+    GraphT& graph,
     const GraphNode& node,
     const std::optional<GraphTensorType>& inferred
 ) {
@@ -1136,9 +1176,8 @@ std::optional<Diagnostic> apply_inferred_tensor_type(
 
 std::optional<std::string> graph_op_id_name(const std::string& name);
 
-std::optional<Diagnostic> append_node(GraphFunction& graph, GraphNode node) {
-    // Validates shape inference for the node, applies the inferred tensor type to its output,
-    // and registers any newly required parameters before appending the node to the graph.
+template <typename GraphT>
+std::optional<Diagnostic> append_node(GraphT& graph, GraphNode node) {
     auto inferred = infer_node_tensor_type(graph, node);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&inferred)) {
         return *diagnostic;
@@ -1151,8 +1190,9 @@ std::optional<Diagnostic> append_node(GraphFunction& graph, GraphNode node) {
     return std::nullopt;
 }
 
+template <typename GraphT>
 std::variant<std::optional<std::size_t>, Diagnostic> try_lower_linear_apply(
-    GraphFunction& graph,
+    GraphT& graph,
     std::size_t callee_id,
     std::size_t input_id,
     const FeType& output_type
@@ -1244,8 +1284,9 @@ bool is_frontend_only_expr(const FeExprPtr& expr) {
     return expr && std::holds_alternative<FeListExpr>(expr->kind);
 }
 
+template <typename GraphT>
 std::optional<Diagnostic> validate_node_shape(
-    const GraphFunction& graph,
+    const GraphT& graph,
     std::size_t index,
     GraphNodeKind kind,
     std::size_t input_count
@@ -1275,215 +1316,237 @@ void append_inputs(std::ostringstream& out, const std::vector<std::size_t>& inpu
 
 } // namespace
 
-GraphBuilder::GraphBuilder(const FeFunction& function) : function_(function) {}
+template <typename FeCallableT, typename GraphT>
+class GraphBuilder {
+public:
+    explicit GraphBuilder(const FeCallableT& callable) : callable_(callable) {}
 
-GraphFunctionResult GraphBuilder::build() {
-    GraphFunction graph;
-    graph.name = function_.name;
-    graph.is_layer = function_.is_layer;
-    graph.return_type = function_.return_type;
+    std::variant<GraphT, Diagnostic> build() {
+        GraphT graph;
+        graph.name = callable_.name;
+        graph.return_type = callable_.return_type;
 
-    for (const auto& param : function_.params) {
-        append_value(graph, param.first, param.second, true);
-    }
+        for (const auto& param : callable_.params) {
+            append_value(graph, param.first, param.second, true);
+            graph.inputs.push_back(graph.values.back().id);
+        }
 
-    for (const auto& stmt : function_.body) {
-        if (const auto* decl = std::get_if<FeVarDeclStmt>(&stmt.kind)) {
-            if (is_frontend_only_expr(decl->value)) {
-                continue;
+        for (const auto& stmt : callable_.body) {
+            if (const auto* decl = std::get_if<FeVarDeclStmt>(&stmt.kind)) {
+                if (is_frontend_only_expr(decl->value)) {
+                    continue;
+                }
+                if (!decl->has_value || !decl->value) {
+                    return graph_error("Graph builder expected value");
+                }
+                auto value_id = lower_expr(decl->value, graph);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&value_id)) {
+                    return *diagnostic;
+                }
+                graph.named_values[decl->name] = std::get<std::size_t>(value_id);
+                graph.values[std::get<std::size_t>(value_id)].name = decl->name;
+            } else if (const auto* assign = std::get_if<FeAssignStmt>(&stmt.kind)) {
+                if (is_frontend_only_expr(assign->value)) {
+                    continue;
+                }
+                auto value_id = lower_expr(assign->value, graph);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&value_id)) {
+                    return *diagnostic;
+                }
+                graph.named_values[assign->name] = std::get<std::size_t>(value_id);
+                graph.values[std::get<std::size_t>(value_id)].name = assign->name;
+            } else if (const auto* ret = std::get_if<FeReturnStmt>(&stmt.kind)) {
+                auto output_id = lower_expr(ret->value, graph);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&output_id)) {
+                    return *diagnostic;
+                }
+                graph.outputs.push_back(std::get<std::size_t>(output_id));
+            } else {
+                return graph_error("Graph builder currently supports straight-line statements only");
             }
-            if (!decl->has_value || !decl->value) {
-                return graph_error("Graph builder expected value");
-            }
-            auto value_id = lower_expr(decl->value, graph);
-            if (const auto* diagnostic = std::get_if<Diagnostic>(&value_id)) {
+        }
+
+        if constexpr (std::is_same_v<GraphT, GraphLayer>) {
+            if (auto diagnostic = validate_graph_layer(graph)) {
                 return *diagnostic;
             }
-            graph.named_values[decl->name] = std::get<std::size_t>(value_id);
-            graph.values[std::get<std::size_t>(value_id)].name = decl->name;
-        } else if (const auto* assign = std::get_if<FeAssignStmt>(&stmt.kind)) {
-            if (is_frontend_only_expr(assign->value)) {
-                continue;
-            }
-            auto value_id = lower_expr(assign->value, graph);
-            if (const auto* diagnostic = std::get_if<Diagnostic>(&value_id)) {
-                return *diagnostic;
-            }
-            graph.named_values[assign->name] = std::get<std::size_t>(value_id);
-            graph.values[std::get<std::size_t>(value_id)].name = assign->name;
-        } else if (const auto* ret = std::get_if<FeReturnStmt>(&stmt.kind)) {
-            auto output_id = lower_expr(ret->value, graph);
-            if (const auto* diagnostic = std::get_if<Diagnostic>(&output_id)) {
-                return *diagnostic;
-            }
-            graph.outputs.push_back(std::get<std::size_t>(output_id));
         } else {
-            return graph_error("Graph builder currently supports straight-line statements only");
+            if (auto diagnostic = validate_graph_function(graph)) {
+                return *diagnostic;
+            }
         }
+        return graph;
     }
 
-    if (auto diagnostic = validate_graph_function(graph)) {
-        return *diagnostic;
-    }
-    return graph;
-}
+private:
+    const FeCallableT& callable_;
 
-std::variant<std::size_t, Diagnostic> GraphBuilder::lookup_named_value(
-    const std::string& name,
-    const GraphFunction& graph
-) const {
-    auto found = graph.named_values.find(name);
-    if (found == graph.named_values.end()) {
-        return graph_error("Graph builder could not resolve symbol '" + name + "'");
+    std::variant<std::size_t, Diagnostic> lower_expr(const FeExprPtr& expr, GraphT& graph) const {
+        if (!expr) {
+            return graph_error("Graph builder expected expression");
+        }
+        if (const auto* constant = std::get_if<FeConstantExpr>(&expr->kind)) {
+            const std::size_t output = append_value(graph, std::string{}, expr->type, false);
+            GraphNode node{
+                GraphNodeKind::Constant,
+                output,
+                std::string{},
+                std::nullopt,
+                FeBinaryOp::Add,
+                constant->value,
+                {},
+            };
+            if (auto diagnostic = append_node(graph, std::move(node))) {
+                return *diagnostic;
+            }
+            return output;
+        }
+        if (const auto* var = std::get_if<FeVarExpr>(&expr->kind)) {
+            return lookup_named_value(var->symbol, graph);
+        }
+        if (const auto* binary = std::get_if<FeBinaryExpr>(&expr->kind)) {
+            auto lhs = lower_expr(binary->lhs, graph);
+            if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs)) {
+                return *diagnostic;
+            }
+            auto rhs = lower_expr(binary->rhs, graph);
+            if (const auto* diagnostic = std::get_if<Diagnostic>(&rhs)) {
+                return *diagnostic;
+            }
+            const std::size_t output = append_value(graph, std::string{}, expr->type, false);
+            GraphNode node{
+                GraphNodeKind::Binary,
+                output,
+                std::string{},
+                std::nullopt,
+                binary->op,
+                FeValue::none(),
+                {std::get<std::size_t>(lhs), std::get<std::size_t>(rhs)},
+            };
+            if (auto diagnostic = append_node(graph, std::move(node))) {
+                return *diagnostic;
+            }
+            return output;
+        }
+        if (const auto* call = std::get_if<FeCallExpr>(&expr->kind)) {
+            std::vector<std::size_t> inputs;
+            for (const auto& arg : call->args) {
+                auto lowered = lower_expr(arg.value, graph);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
+                    return *diagnostic;
+                }
+                inputs.push_back(std::get<std::size_t>(lowered));
+            }
+            const std::size_t output = append_value(graph, std::string{}, expr->type, false);
+            GraphNode node{
+                is_primitive_tensor_op(call->callee) ? GraphNodeKind::PrimitiveCall : GraphNodeKind::LibraryCall,
+                output,
+                call->callee,
+                graph_op_id_name(call->callee),
+                FeBinaryOp::Add,
+                FeValue::none(),
+                std::move(inputs),
+            };
+            if (auto diagnostic = append_node(graph, std::move(node))) {
+                return *diagnostic;
+            }
+            return output;
+        }
+        if (const auto* ctor = std::get_if<FeLayerCtorExpr>(&expr->kind)) {
+            std::vector<std::size_t> inputs;
+            for (const auto& arg : ctor->args) {
+                auto lowered = lower_expr(arg.value, graph);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
+                    return *diagnostic;
+                }
+                inputs.push_back(std::get<std::size_t>(lowered));
+            }
+            const std::size_t output = append_value(graph, std::string{}, expr->type, false);
+            GraphNode node{
+                GraphNodeKind::LibraryCtor,
+                output,
+                ctor->callee,
+                graph_op_id_name(ctor->callee),
+                FeBinaryOp::Add,
+                FeValue::none(),
+                std::move(inputs),
+            };
+            if (auto diagnostic = append_node(graph, std::move(node))) {
+                return *diagnostic;
+            }
+            return output;
+        }
+        if (const auto* apply = std::get_if<FeApplyExpr>(&expr->kind)) {
+            std::vector<std::size_t> inputs;
+            auto callee = lower_expr(apply->callee, graph);
+            if (const auto* diagnostic = std::get_if<Diagnostic>(&callee)) {
+                return *diagnostic;
+            }
+            inputs.push_back(std::get<std::size_t>(callee));
+            for (const auto& arg : apply->args) {
+                auto lowered = lower_expr(arg.value, graph);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
+                    return *diagnostic;
+                }
+                inputs.push_back(std::get<std::size_t>(lowered));
+            }
+            if (inputs.size() == 2) {
+                auto lowered_linear = try_lower_linear_apply(graph, inputs[0], inputs[1], expr->type);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered_linear)) {
+                    return *diagnostic;
+                }
+                if (const auto lowered_output = std::get<std::optional<std::size_t>>(lowered_linear)) {
+                    return *lowered_output;
+                }
+            }
+            const std::size_t output = append_value(graph, std::string{}, expr->type, false);
+            GraphNode node{
+                GraphNodeKind::Apply,
+                output,
+                std::string{},
+                std::nullopt,
+                FeBinaryOp::Add,
+                FeValue::none(),
+                std::move(inputs),
+            };
+            if (auto diagnostic = append_node(graph, std::move(node))) {
+                return *diagnostic;
+            }
+            return output;
+        }
+        if (std::holds_alternative<FeListExpr>(expr->kind)) {
+            return graph_error("Graph builder does not support list expressions yet");
+        }
+        return graph_error("Graph builder does not support this FE expression kind yet");
     }
-    return found->second;
-}
 
-std::variant<std::size_t, Diagnostic> GraphBuilder::lower_expr(const FeExprPtr& expr, GraphFunction& graph) const {
-    if (!expr) {
-        return graph_error("Graph builder expected expression");
+    std::variant<std::size_t, Diagnostic> lookup_named_value(const std::string& name, const GraphT& graph) const {
+        auto found = graph.named_values.find(name);
+        if (found == graph.named_values.end()) {
+            return graph_error("Graph builder could not resolve symbol '" + name + "'");
+        }
+        return found->second;
     }
-    if (const auto* constant = std::get_if<FeConstantExpr>(&expr->kind)) {
-        const std::size_t output = append_value(graph, std::string{}, expr->type, false);
-        GraphNode node{
-            GraphNodeKind::Constant,
-            output,
-            std::string{},
-            std::nullopt,
-            FeBinaryOp::Add,
-            constant->value,
-            {},
-        };
-        if (auto diagnostic = append_node(graph, std::move(node))) {
-            return *diagnostic;
-        }
-        return output;
-    }
-    if (const auto* var = std::get_if<FeVarExpr>(&expr->kind)) {
-        return lookup_named_value(var->symbol, graph);
-    }
-    if (const auto* binary = std::get_if<FeBinaryExpr>(&expr->kind)) {
-        auto lhs = lower_expr(binary->lhs, graph);
-        if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs)) {
-            return *diagnostic;
-        }
-        auto rhs = lower_expr(binary->rhs, graph);
-        if (const auto* diagnostic = std::get_if<Diagnostic>(&rhs)) {
-            return *diagnostic;
-        }
-        const std::size_t output = append_value(graph, std::string{}, expr->type, false);
-        GraphNode node{
-            GraphNodeKind::Binary,
-            output,
-            std::string{},
-            std::nullopt,
-            binary->op,
-            FeValue::none(),
-            {std::get<std::size_t>(lhs), std::get<std::size_t>(rhs)},
-        };
-        if (auto diagnostic = append_node(graph, std::move(node))) {
-            return *diagnostic;
-        }
-        return output;
-    }
-    if (const auto* call = std::get_if<FeCallExpr>(&expr->kind)) {
-        std::vector<std::size_t> inputs;
-        for (const auto& arg : call->args) {
-            auto lowered = lower_expr(arg.value, graph);
-            if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-                return *diagnostic;
-            }
-            inputs.push_back(std::get<std::size_t>(lowered));
-        }
-        const std::size_t output = append_value(graph, std::string{}, expr->type, false);
-        GraphNode node{
-            is_primitive_tensor_op(call->callee) ? GraphNodeKind::PrimitiveCall : GraphNodeKind::LibraryCall,
-            output,
-            call->callee,
-            graph_op_id_name(call->callee),
-            FeBinaryOp::Add,
-            FeValue::none(),
-            std::move(inputs),
-        };
-        if (auto diagnostic = append_node(graph, std::move(node))) {
-            return *diagnostic;
-        }
-        return output;
-    }
-    if (const auto* ctor = std::get_if<FeLayerCtorExpr>(&expr->kind)) {
-        std::vector<std::size_t> inputs;
-        for (const auto& arg : ctor->args) {
-            auto lowered = lower_expr(arg.value, graph);
-            if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-                return *diagnostic;
-            }
-            inputs.push_back(std::get<std::size_t>(lowered));
-        }
-        const std::size_t output = append_value(graph, std::string{}, expr->type, false);
-        GraphNode node{
-            GraphNodeKind::LibraryCtor,
-            output,
-            ctor->callee,
-            graph_op_id_name(ctor->callee),
-            FeBinaryOp::Add,
-            FeValue::none(),
-            std::move(inputs),
-        };
-        if (auto diagnostic = append_node(graph, std::move(node))) {
-            return *diagnostic;
-        }
-        return output;
-    }
-    if (const auto* apply = std::get_if<FeApplyExpr>(&expr->kind)) {
-        std::vector<std::size_t> inputs;
-        auto callee = lower_expr(apply->callee, graph);
-        if (const auto* diagnostic = std::get_if<Diagnostic>(&callee)) {
-            return *diagnostic;
-        }
-        inputs.push_back(std::get<std::size_t>(callee));
-        for (const auto& arg : apply->args) {
-            auto lowered = lower_expr(arg.value, graph);
-            if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-                return *diagnostic;
-            }
-            inputs.push_back(std::get<std::size_t>(lowered));
-        }
-        if (inputs.size() == 2) {
-            auto lowered_linear = try_lower_linear_apply(graph, inputs[0], inputs[1], expr->type);
-            if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered_linear)) {
-                return *diagnostic;
-            }
-            if (const auto lowered_output = std::get<std::optional<std::size_t>>(lowered_linear)) {
-                return *lowered_output;
-            }
-        }
-        const std::size_t output = append_value(graph, std::string{}, expr->type, false);
-        GraphNode node{
-            GraphNodeKind::Apply,
-            output,
-            std::string{},
-            std::nullopt,
-            FeBinaryOp::Add,
-            FeValue::none(),
-            std::move(inputs),
-        };
-        if (auto diagnostic = append_node(graph, std::move(node))) {
-            return *diagnostic;
-        }
-        return output;
-    }
-    if (std::holds_alternative<FeListExpr>(expr->kind)) {
-        return graph_error("Graph builder does not support list expressions yet");
-    }
-    return graph_error("Graph builder does not support this FE expression kind yet");
-}
+};
 
 GraphFunctionResult build_graph_function(const FeFunction& function) {
-    return GraphBuilder(function).build();
+    return GraphBuilder<FeFunction, GraphFunction>(function).build();
+}
+
+GraphLayerResult build_graph_layer(const FeLayer& layer) {
+    return GraphBuilder<FeLayer, GraphLayer>(layer).build();
 }
 
 std::variant<GraphModule, Diagnostic> build_graph_module(const LoweredModule& module) {
     GraphModule graph_module;
+    for (const auto& layer : module.layers) {
+        auto graph = build_graph_layer(layer);
+        if (const auto* diagnostic = std::get_if<Diagnostic>(&graph)) {
+            graph_module.skipped.push_back(GraphBuildSkipped{layer.name, diagnostic->message});
+            continue;
+        }
+        graph_module.layers.push_back(std::get<GraphLayer>(std::move(graph)));
+    }
     for (const auto& function : module.functions) {
         auto graph = build_graph_function(function);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&graph)) {
@@ -1525,7 +1588,8 @@ std::string graph_tensor_type_to_string(const GraphTensorType& type) {
     return out.str();
 }
 
-std::optional<Diagnostic> validate_graph_function(const GraphFunction& graph) {
+template <typename GraphT>
+std::optional<Diagnostic> validate_graph_impl(const GraphT& graph) {
     std::set<std::size_t> value_ids;
     for (const auto& value : graph.values) {
         value_ids.insert(value.id);
@@ -1560,28 +1624,30 @@ std::optional<Diagnostic> validate_graph_function(const GraphFunction& graph) {
             );
         }
     }
-    std::set<std::string> parameter_names;
-    for (const auto& parameter : graph.parameters) {
-        if (parameter.name.empty()) {
-            return graph_error("Graph '" + graph.name + "' has an unnamed parameter");
-        }
-        if (parameter.role.empty()) {
-            return graph_error("Graph '" + graph.name + "' parameter '" + parameter.name + "' has an empty role");
-        }
-        if (value_ids.find(parameter.owner_value) == value_ids.end()) {
-            return graph_error(
-                "Graph '" + graph.name + "' parameter '" + parameter.name +
-                "' references missing owner value " + std::to_string(parameter.owner_value)
-            );
-        }
-        if (value_ids.find(parameter.value_id) == value_ids.end()) {
-            return graph_error(
-                "Graph '" + graph.name + "' parameter '" + parameter.name +
-                "' references missing value " + std::to_string(parameter.value_id)
-            );
-        }
-        if (!parameter_names.insert(parameter.name).second) {
-            return graph_error("Graph '" + graph.name + "' has duplicate parameter '" + parameter.name + "'");
+    if constexpr (std::is_same_v<GraphT, GraphLayer>) {
+        std::set<std::string> parameter_names;
+        for (const auto& parameter : graph.parameters) {
+            if (parameter.name.empty()) {
+                return graph_error("Graph '" + graph.name + "' has an unnamed parameter");
+            }
+            if (parameter.role.empty()) {
+                return graph_error("Graph '" + graph.name + "' parameter '" + parameter.name + "' has an empty role");
+            }
+            if (value_ids.find(parameter.owner_value) == value_ids.end()) {
+                return graph_error(
+                    "Graph '" + graph.name + "' parameter '" + parameter.name +
+                    "' references missing owner value " + std::to_string(parameter.owner_value)
+                );
+            }
+            if (value_ids.find(parameter.value_id) == value_ids.end()) {
+                return graph_error(
+                    "Graph '" + graph.name + "' parameter '" + parameter.name +
+                    "' references missing value " + std::to_string(parameter.value_id)
+                );
+            }
+            if (!parameter_names.insert(parameter.name).second) {
+                return graph_error("Graph '" + graph.name + "' has duplicate parameter '" + parameter.name + "'");
+            }
         }
     }
 
@@ -1632,42 +1698,51 @@ std::optional<Diagnostic> validate_graph_function(const GraphFunction& graph) {
     return std::nullopt;
 }
 
+std::optional<Diagnostic> validate_graph_function(const GraphFunction& graph) {
+    return validate_graph_impl(graph);
+}
+
+std::optional<Diagnostic> validate_graph_layer(const GraphLayer& graph) {
+    return validate_graph_impl(graph);
+}
+
 std::string graph_module_summary(const GraphModule& module) {
     std::ostringstream out;
-    out << "graph=functions:" << module.functions.size() << " skipped:" << module.skipped.size();
+    out << "graph=layers:" << module.layers.size() << " functions:" << module.functions.size() << " skipped:" << module.skipped.size();
     return out.str();
 }
 
-std::string graph_ir_to_string(const GraphModule& module) {
-    std::ostringstream out;
-    out << graph_module_summary(module) << '\n';
-    for (const auto& graph : module.functions) {
-        out << (graph.is_layer ? "graph layer " : "graph fn ") << graph.name
-            << " values=" << graph.values.size()
-            << " parameters=" << graph.parameters.size()
-            << " nodes=" << graph.nodes.size()
-            << " outputs=" << graph.outputs.size()
-            << " -> " << fe_type_to_graph_string(graph.return_type) << '\n';
-        for (const auto& value : graph.values) {
-            out << "  %" << value.id;
-            if (!value.name.empty()) {
-                out << ' ' << value.name;
-            }
-            out << ": " << fe_type_to_graph_string(value.type);
-            if (value.tensor_type) {
-                out << " tensor=" << graph_tensor_type_to_string(*value.tensor_type);
-            }
-            if (value.is_parameter) {
-                out << " param";
-            }
-            if (value.requires_grad) {
-                out << " requires_grad";
-            }
-            if (value.is_model_parameter) {
-                out << " model_param";
-            }
-            out << '\n';
+template <typename GraphT>
+void format_graph_body(std::ostringstream& out, const GraphT& graph, const std::string& prefix) {
+    out << prefix << graph.name
+        << " values=" << graph.values.size();
+    if constexpr (std::is_same_v<GraphT, GraphLayer>) {
+        out << " parameters=" << graph.parameters.size();
+    }
+    out << " nodes=" << graph.nodes.size()
+        << " outputs=" << graph.outputs.size()
+        << " -> " << fe_type_to_graph_string(graph.return_type) << '\n';
+    for (const auto& value : graph.values) {
+        out << "  %" << value.id;
+        if (!value.name.empty()) {
+            out << ' ' << value.name;
         }
+        out << ": " << fe_type_to_graph_string(value.type);
+        if (value.tensor_type) {
+            out << " tensor=" << graph_tensor_type_to_string(*value.tensor_type);
+        }
+        if (value.is_parameter) {
+            out << " param";
+        }
+        if (value.requires_grad) {
+            out << " requires_grad";
+        }
+        if (value.is_model_parameter) {
+            out << " model_param";
+        }
+        out << '\n';
+    }
+    if constexpr (std::is_same_v<GraphT, GraphLayer>) {
         for (const auto& parameter : graph.parameters) {
             out << "  param " << parameter.name
                 << " role=" << parameter.role
@@ -1679,29 +1754,40 @@ std::string graph_ir_to_string(const GraphModule& module) {
             }
             out << '\n';
         }
-        for (std::size_t index = 0; index < graph.nodes.size(); ++index) {
-            const auto& node = graph.nodes[index];
-            out << "  node #" << index << ' ' << graph_node_kind_name(node.kind)
-                << " -> %" << node.output;
-            if (!node.op.empty()) {
-                out << " op=" << node.op;
-            }
-            if (node.op_id) {
-                out << " op_id=" << *node.op_id;
-            }
-            if (node.kind == GraphNodeKind::Binary) {
-                out << " op=" << fe_binary_op_to_graph_string(node.binary_op);
-            }
-            if (node.kind == GraphNodeKind::Constant) {
-                out << " value=" << fe_value_to_graph_string(node.constant);
-            }
-            out << " inputs=";
-            append_inputs(out, node.inputs);
-            out << '\n';
+    }
+    for (std::size_t index = 0; index < graph.nodes.size(); ++index) {
+        const auto& node = graph.nodes[index];
+        out << "  node #" << index << ' ' << graph_node_kind_name(node.kind)
+            << " -> %" << node.output;
+        if (!node.op.empty()) {
+            out << " op=" << node.op;
         }
-        out << "  outputs=";
-        append_inputs(out, graph.outputs);
+        if (node.op_id) {
+            out << " op_id=" << *node.op_id;
+        }
+        if (node.kind == GraphNodeKind::Binary) {
+            out << " op=" << fe_binary_op_to_graph_string(node.binary_op);
+        }
+        if (node.kind == GraphNodeKind::Constant) {
+            out << " value=" << fe_value_to_graph_string(node.constant);
+        }
+        out << " inputs=";
+        append_inputs(out, node.inputs);
         out << '\n';
+    }
+    out << "  outputs=";
+    append_inputs(out, graph.outputs);
+    out << '\n';
+}
+
+std::string graph_ir_to_string(const GraphModule& module) {
+    std::ostringstream out;
+    out << graph_module_summary(module) << '\n';
+    for (const auto& graph : module.layers) {
+        format_graph_body(out, graph, "graph layer ");
+    }
+    for (const auto& graph : module.functions) {
+        format_graph_body(out, graph, "graph fn ");
     }
     for (const auto& skipped : module.skipped) {
         out << "// graph function: " << skipped.function_name << "\n"

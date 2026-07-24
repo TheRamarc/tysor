@@ -311,8 +311,11 @@ using ExecutionPlanResult = std::variant<ExecutionPlan, Diagnostic>;
 using PlanModuleResult = std::variant<PlanModule, Diagnostic>;
 
 ExecutionPlan compile_execution_plan(const GraphFunction& graph, BackendKind backend);
+ExecutionPlan compile_execution_plan(const GraphLayer& graph, BackendKind backend);
 ExecutionPlan compile_local_execution_plan(const GraphFunction& graph);
+ExecutionPlan compile_local_execution_plan(const GraphLayer& graph);
 ExecutionPlan compile_metal_execution_plan(const GraphFunction& graph);
+ExecutionPlan compile_metal_execution_plan(const GraphLayer& graph);
 PlanModuleResult compile_plan_module(const GraphModule& graph_module, BackendKind backend);
 ExecutionPlan optimize_execution_plan(ExecutionPlan plan, const PlanOptimizationOptions& options);
 PlanModule optimize_plan_module(PlanModule module, const PlanOptimizationOptions& options);

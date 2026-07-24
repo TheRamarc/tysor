@@ -389,30 +389,49 @@ struct FeStmt {
     FeStmtKind kind;
 };
 
-// Lowered function or layer. Both share the same shape after lowering; `is_layer`
-// keeps the frontend distinction for graph/runtime stages.
+// Lowered function. Represents a pure, stateless callable.
 struct FeFunction {
-    // Why it exists: To identify the function or layer.
+    // Why it exists: To identify the function.
     // What it tracks: The name of the defined callable.
     // What mutates it: Set during parsing/lowering.
     std::string name;
-    // Why it exists: To differentiate standard functions from trainable network layers.
-    // What it tracks: True if the function represents a model layer with parameters/state.
-    // What mutates it: Inferred from the defining AST node (e.g., `layer` keyword vs `def`).
-    bool is_layer = false;
-    // Why it exists: To enforce type safety on function/layer outputs.
+    // Why it exists: To enforce type safety on function outputs.
     // What it tracks: The declared or inferred return type of the callable.
     // What mutates it: Resolved during semantic analysis.
     FeType return_type;
-    // Why it exists: To define the input signature of the function/layer.
+    // Why it exists: To define the input signature of the function.
     // What it tracks: An ordered list of parameter names and their resolved types.
     // What mutates it: Populated by lowering function arguments.
     std::vector<std::pair<std::string, FeType>> params;
-    // Why it exists: To support multiple or named return values common in ML models.
+    // Why it exists: To support multiple or named return values.
     // What it tracks: Names and types of output bindings.
     // What mutates it: Extracted from function signatures.
     std::vector<std::pair<std::string, FeType>> named_outputs;
-    // Why it exists: To hold the executable logic of a function, layer, or control flow block.
+    // Why it exists: To hold the executable logic of a function.
+    // What it tracks: The ordered list of statements comprising the block.
+    // What mutates it: Built during block traversal and scope lowering.
+    std::vector<FeStmt> body;
+};
+
+// Lowered layer. Represents a stateful neural network module.
+struct FeLayer {
+    // Why it exists: To identify the layer.
+    // What it tracks: The name of the defined layer module.
+    // What mutates it: Set during parsing/lowering.
+    std::string name;
+    // Why it exists: To enforce type safety on layer outputs.
+    // What it tracks: The declared or inferred return type of the layer.
+    // What mutates it: Resolved during semantic analysis.
+    FeType return_type;
+    // Why it exists: To define the input signature of the layer forward pass.
+    // What it tracks: An ordered list of parameter names and their resolved types.
+    // What mutates it: Populated by lowering layer arguments.
+    std::vector<std::pair<std::string, FeType>> params;
+    // Why it exists: To support multiple or named return values from the layer.
+    // What it tracks: Names and types of output bindings.
+    // What mutates it: Extracted from layer signatures.
+    std::vector<std::pair<std::string, FeType>> named_outputs;
+    // Why it exists: To hold the forward pass executable logic of the layer.
     // What it tracks: The ordered list of statements comprising the block.
     // What mutates it: Built during block traversal and scope lowering.
     std::vector<FeStmt> body;
@@ -546,10 +565,14 @@ struct LoweredModule {
     // What it tracks: Lowered training blocks.
     // What mutates it: Appended to as the module is built.
     std::vector<FeTrain> trains;
-    // Why it exists: To hold all executable definitions.
-    // What it tracks: Lowered functions and layers available in this module.
+    // Why it exists: To hold all executable function definitions.
+    // What it tracks: Lowered functions available in this module.
     // What mutates it: Collected during module parsing and lowering.
     std::vector<FeFunction> functions;
+    // Why it exists: To hold all stateful layer definitions.
+    // What it tracks: Lowered layers available in this module.
+    // What mutates it: Collected during module parsing and lowering.
+    std::vector<FeLayer> layers;
     // Why it exists: To handle module-level variable declarations or assignments.
     // What it tracks: Stmt forms of global variable initializations.
     // What mutates it: Inserted during module lowering.
@@ -644,7 +667,7 @@ private:
     std::variant<std::vector<FeStmt>, Diagnostic> lower_scope(const Stmt& stmt);
     std::variant<FeStmt, Diagnostic> lower_stmt(const Stmt& stmt);
     std::variant<FeFunction, Diagnostic> lower_function(const Function& function);
-    std::variant<FeFunction, Diagnostic> lower_layer(const Layer& layer);
+    std::variant<FeLayer, Diagnostic> lower_layer(const Layer& layer);
     std::variant<FeConfig, Diagnostic> lower_config(const Config& config);
     std::variant<FeTrain, Diagnostic> lower_train_config(const Config& config);
     std::variant<FeExecutionPlan, Diagnostic> build_execution_plan(const LoweredModule& module);

@@ -88,7 +88,9 @@ bool graph_ok(const std::string& name, const std::string& source, std::size_t gr
         return false;
     }
     const GraphModule& module = std::get<GraphModule>(graph_result);
-    if (module.functions.size() != graphs || module.functions.front().nodes.size() != nodes) {
+    std::size_t total_graphs = module.functions.size() + module.layers.size();
+    std::size_t actual_nodes = !module.layers.empty() ? module.layers.front().nodes.size() : (!module.functions.empty() ? module.functions.front().nodes.size() : 0);
+    if (total_graphs != graphs || actual_nodes != nodes) {
         std::cerr << name << ": unexpected graph shape: " << graph_module_summary(module) << '\n'
                   << graph_ir_to_string(module) << '\n';
         return false;
@@ -96,19 +98,36 @@ bool graph_ok(const std::string& name, const std::string& source, std::size_t gr
     return true;
 }
 
-std::variant<GraphFunction, Diagnostic> graph_from_source(const std::string& source) {
+std::variant<GraphLayer, Diagnostic> graph_from_source(const std::string& source) {
     auto lowered = lower_module(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
         return *diagnostic;
     }
     LoweredModule module = std::get<LoweredModule>(std::move(lowered));
-    if (module.functions.empty()) {
-        return Diagnostic::error(DiagnosticCode::TestError, "expected lowered function");
+    if (!module.layers.empty()) {
+        return build_graph_layer(module.layers.front());
     }
-    return build_graph_function(module.functions.front());
+    if (!module.functions.empty()) {
+        auto res = build_graph_function(module.functions.front());
+        if (const auto* diagnostic = std::get_if<Diagnostic>(&res)) {
+            return *diagnostic;
+        }
+        auto g_fn = std::get<GraphFunction>(res);
+        GraphLayer layer;
+        layer.name = g_fn.name;
+        layer.return_type = g_fn.return_type;
+        layer.values = g_fn.values;
+        layer.nodes = g_fn.nodes;
+        layer.inputs = g_fn.inputs;
+        layer.outputs = g_fn.outputs;
+        layer.named_values = g_fn.named_values;
+        return layer;
+    }
+    return Diagnostic::error(DiagnosticCode::TestError, "expected lowered layer");
 }
 
-const GraphTensorType* named_tensor_type(const GraphFunction& graph, const std::string& name) {
+template <typename GraphT>
+const GraphTensorType* named_tensor_type(const GraphT& graph, const std::string& name) {
     auto found = graph.named_values.find(name);
     if (found == graph.named_values.end()) {
         return nullptr;
@@ -119,37 +138,41 @@ const GraphTensorType* named_tensor_type(const GraphFunction& graph, const std::
     return graph.values[found->second].tensor_type ? &*graph.values[found->second].tensor_type : nullptr;
 }
 
+template <typename GraphT>
 bool expect_named_tensor(
     const std::string& test_name,
-    const GraphFunction& graph,
+    const GraphT& graph,
     const std::string& value_name,
     const std::string& expected
 ) {
     const GraphTensorType* tensor = named_tensor_type(graph, value_name);
     if (tensor == nullptr) {
-        std::cerr << test_name << ": missing tensor metadata for '" << value_name << "'\n"
-                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+        std::cerr << test_name << ": missing tensor metadata for '" << value_name << "'\n";
         return false;
     }
     const std::string actual = graph_tensor_type_to_string(*tensor);
     if (actual != expected) {
         std::cerr << test_name << ": expected '" << value_name << "' tensor " << expected
-                  << ", got " << actual << '\n'
-                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+                  << ", got " << actual << '\n';
         return false;
     }
     return true;
 }
 
+template <typename GraphT>
 const GraphParameter* find_graph_parameter(
-    const GraphFunction& graph,
+    const GraphT& graph,
     const std::string& role,
     std::size_t owner_value
 ) {
-    auto found = std::find_if(graph.parameters.begin(), graph.parameters.end(), [&](const GraphParameter& parameter) {
-        return parameter.role == role && parameter.owner_value == owner_value;
-    });
-    return found == graph.parameters.end() ? nullptr : &*found;
+    if constexpr (std::is_same_v<GraphT, GraphLayer>) {
+        auto found = std::find_if(graph.parameters.begin(), graph.parameters.end(), [&](const GraphParameter& parameter) {
+            return parameter.role == role && parameter.owner_value == owner_value;
+        });
+        return found == graph.parameters.end() ? nullptr : &*found;
+    } else {
+        return nullptr;
+    }
 }
 
 const PlanParameter* find_plan_parameter(
@@ -163,9 +186,10 @@ const PlanParameter* find_plan_parameter(
     return found == plan.parameters.end() ? nullptr : &*found;
 }
 
+template <typename GraphT>
 bool expect_parameter(
     const std::string& test_name,
-    const GraphFunction& graph,
+    const GraphT& graph,
     const std::string& role,
     std::size_t owner_value,
     const std::string& expected_name,
@@ -174,22 +198,19 @@ bool expect_parameter(
     const GraphParameter* parameter = find_graph_parameter(graph, role, owner_value);
     if (parameter == nullptr) {
         std::cerr << test_name << ": missing graph parameter role=" << role
-                  << " owner=%" << owner_value << '\n'
-                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+                  << " owner=%" << owner_value << '\n';
         return false;
     }
     if (parameter->value_id >= graph.values.size() || !graph.values[parameter->value_id].is_model_parameter) {
         std::cerr << test_name << ": parameter " << parameter->name
-                  << " does not reference a model parameter value\n"
-                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+                  << " does not reference a model parameter value\n";
         return false;
     }
     if (parameter->name != expected_name ||
         graph_tensor_type_to_string(parameter->tensor_type) != expected_tensor ||
         !parameter->trainable) {
         std::cerr << test_name << ": unexpected parameter " << parameter->name
-                  << " tensor=" << graph_tensor_type_to_string(parameter->tensor_type) << '\n'
-                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+                  << " tensor=" << graph_tensor_type_to_string(parameter->tensor_type) << '\n';
         return false;
     }
     return true;
@@ -211,11 +232,11 @@ bool matmul_relu_graph_ok() {
         return false;
     }
     const GraphModule& module = std::get<GraphModule>(graph_result);
-    if (module.functions.size() != 1 || module.functions.front().nodes.size() != 2) {
+    if (module.layers.size() != 1 || module.layers.front().nodes.size() != 2) {
         std::cerr << "matmul-relu-graph: unexpected graph shape\n" << graph_ir_to_string(module) << '\n';
         return false;
     }
-    const GraphFunction& graph = module.functions.front();
+    const GraphLayer& graph = module.layers.front();
     if (graph.nodes[0].kind != GraphNodeKind::PrimitiveCall || graph.nodes[0].op != "matmul") {
         std::cerr << "matmul-relu-graph: expected first node to be primitive matmul\n";
         return false;
@@ -242,7 +263,7 @@ bool graph_infers_linear_symbolic_shape() {
         std::cerr << "linear-shape-inference: graph lowering failed: " << diagnostic->to_string() << '\n';
         return false;
     }
-    const GraphFunction& graph = std::get<GraphFunction>(graph_result);
+    const GraphLayer& graph = std::get<GraphLayer>(graph_result);
     if (!expect_named_tensor("linear-shape-inference", graph, "x", "float32[batch, 3]")) {
         return false;
     }
@@ -251,7 +272,7 @@ bool graph_infers_linear_symbolic_shape() {
     }
     if (graph.parameters.size() != 2) {
         std::cerr << "linear-shape-inference: expected weight and bias parameters\n"
-                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+                  << graph_ir_to_string(make_graph_module(graph)) << '\n';
         return false;
     }
     const std::size_t owner = graph.named_values.at("proj");
@@ -272,7 +293,7 @@ bool graph_infers_linear_symbolic_shape() {
     });
     if (has_apply || !has_matmul || !has_bias_add) {
         std::cerr << "linear-shape-inference: expected linear apply to lower to matmul plus bias add\n"
-                  << graph_ir_to_string(GraphModule{{graph}, {}}) << '\n';
+                  << graph_ir_to_string(make_graph_module(graph)) << '\n';
         return false;
     }
     ExecutionPlan plan = compile_local_execution_plan(graph);
@@ -303,7 +324,7 @@ bool graph_infers_reshape_and_flatten_shapes() {
         std::cerr << "reshape-flatten-shape-inference: graph lowering failed: " << diagnostic->to_string() << '\n';
         return false;
     }
-    const GraphFunction& graph = std::get<GraphFunction>(graph_result);
+    const GraphLayer& graph = std::get<GraphLayer>(graph_result);
     return expect_named_tensor("reshape-flatten-shape-inference", graph, "flat", "float32[2, 12]") &&
            expect_named_tensor("reshape-flatten-shape-inference", graph, "reshaped", "float32[4, 6]");
 }
@@ -319,7 +340,7 @@ bool graph_records_embedding_parameter() {
         std::cerr << "embedding-parameter: graph lowering failed: " << diagnostic->to_string() << '\n';
         return false;
     }
-    const GraphFunction& graph = std::get<GraphFunction>(graph_result);
+    const GraphLayer& graph = std::get<GraphLayer>(graph_result);
     if (!expect_named_tensor("embedding-parameter", graph, "y", "float32[batch, 8]")) {
         return false;
     }
@@ -425,7 +446,7 @@ bool graph_module_skips_non_straight_line() {
         return false;
     }
     const GraphModule& module = std::get<GraphModule>(graph_result);
-    if (!module.functions.empty() || module.skipped.size() != 1 ||
+    if (!module.layers.empty() || module.skipped.size() != 1 ||
         module.skipped.front().reason.find("straight-line") == std::string::npos) {
         std::cerr << "skip-if-graph: expected one skipped graph\n" << graph_ir_to_string(module) << '\n';
         return false;
@@ -449,8 +470,8 @@ bool frontend_only_list_decl_is_skipped() {
         return false;
     }
     const GraphModule& module = std::get<GraphModule>(graph_result);
-    if (module.functions.size() != 1 || !module.skipped.empty() ||
-        module.functions.front().values.size() != 1 || !module.functions.front().nodes.empty()) {
+    if (module.layers.size() != 1 || !module.skipped.empty() ||
+        module.layers.front().values.size() != 1 || !module.layers.front().nodes.empty()) {
         std::cerr << "list-decl-skip: expected list declaration to stay frontend-only\n"
                   << graph_ir_to_string(module) << '\n';
         return false;

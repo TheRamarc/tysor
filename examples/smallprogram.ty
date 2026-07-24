@@ -1,1 +1,1 @@
-x : tensor  = tensor(5, 5)
+y : callable = linear(5, 5)

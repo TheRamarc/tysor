@@ -53,7 +53,7 @@ bool lower_ok(const std::string& name, const std::string& source, std::size_t fu
     }
 
     const LoweredModule& module = std::get<LoweredModule>(frontend_result);
-    if (module.functions.size() != functions || module.trains.size() != trains) {
+    if ((module.functions.size() + module.layers.size()) != functions || module.trains.size() != trains) {
         std::cerr << name << ": unexpected lowered shape: "
                   << lowered_module_summary(module) << '\n';
         return false;

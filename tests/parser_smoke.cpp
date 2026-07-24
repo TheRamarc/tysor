@@ -83,9 +83,9 @@ int main() {
             "else\n"
         ),
         parse_fails(
-            "old-global-declaration",
-            "x: tensor[float16]\n",
-            "Top-level variable declarations must start with 'let'"
+            "invalid-top-level",
+            "123 = 45\n",
+            "Unexpected token at top level"
         ),
     };
 

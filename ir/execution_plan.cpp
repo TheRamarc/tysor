@@ -286,16 +286,19 @@ PlanOp lower_plan_op(const GraphNode& node, BackendKind backend) {
     };
 }
 
-ExecutionPlan make_base_plan(const GraphFunction& graph, BackendKind backend) {
+template <typename GraphT>
+ExecutionPlan make_base_plan(const GraphT& graph, BackendKind backend) {
     ExecutionPlan plan;
     plan.backend = backend;
     plan.name = graph.name;
     plan.return_type = graph.return_type;
     plan.outputs = graph.outputs;
     plan.named_values = graph.named_values;
-    plan.parameters.reserve(graph.parameters.size());
-    for (const auto& parameter : graph.parameters) {
-        plan.parameters.push_back(lower_plan_parameter(parameter));
+    if constexpr (std::is_same_v<GraphT, GraphLayer>) {
+        plan.parameters.reserve(graph.parameters.size());
+        for (const auto& parameter : graph.parameters) {
+            plan.parameters.push_back(lower_plan_parameter(parameter));
+        }
     }
     return plan;
 }
@@ -541,7 +544,8 @@ std::optional<Diagnostic> validate_step(const ExecutionPlan& plan, const std::se
 
 } // namespace
 
-ExecutionPlan compile_local_execution_plan(const GraphFunction& graph) {
+template <typename GraphT>
+ExecutionPlan compile_local_execution_plan_impl(const GraphT& graph) {
     ExecutionPlan plan = make_base_plan(graph, BackendKind::Local);
     for (const auto& value : graph.values) {
         plan.values.push_back(lower_plan_value(value, Placement::Host));
@@ -557,7 +561,16 @@ ExecutionPlan compile_local_execution_plan(const GraphFunction& graph) {
     return plan;
 }
 
-ExecutionPlan compile_metal_execution_plan(const GraphFunction& graph) {
+ExecutionPlan compile_local_execution_plan(const GraphFunction& graph) {
+    return compile_local_execution_plan_impl(graph);
+}
+
+ExecutionPlan compile_local_execution_plan(const GraphLayer& graph) {
+    return compile_local_execution_plan_impl(graph);
+}
+
+template <typename GraphT>
+ExecutionPlan compile_metal_execution_plan_impl(const GraphT& graph) {
     ExecutionPlan plan = make_base_plan(graph, BackendKind::Metal);
     for (const auto& value : graph.values) {
         const Placement placement =
@@ -587,7 +600,16 @@ ExecutionPlan compile_metal_execution_plan(const GraphFunction& graph) {
     return plan;
 }
 
-ExecutionPlan compile_execution_plan(const GraphFunction& graph, BackendKind backend) {
+ExecutionPlan compile_metal_execution_plan(const GraphFunction& graph) {
+    return compile_metal_execution_plan_impl(graph);
+}
+
+ExecutionPlan compile_metal_execution_plan(const GraphLayer& graph) {
+    return compile_metal_execution_plan_impl(graph);
+}
+
+template <typename GraphT>
+ExecutionPlan compile_execution_plan_impl(const GraphT& graph, BackendKind backend) {
     switch (backend) {
         case BackendKind::Metal:
             return compile_metal_execution_plan(graph);
@@ -603,7 +625,17 @@ ExecutionPlan compile_execution_plan(const GraphFunction& graph, BackendKind bac
             return plan;
         }
     }
-    return compile_local_execution_plan(graph);
+    ExecutionPlan plan = compile_local_execution_plan(graph);
+    plan.backend = backend;
+    return plan;
+}
+
+ExecutionPlan compile_execution_plan(const GraphFunction& graph, BackendKind backend) {
+    return compile_execution_plan_impl(graph, backend);
+}
+
+ExecutionPlan compile_execution_plan(const GraphLayer& graph, BackendKind backend) {
+    return compile_execution_plan_impl(graph, backend);
 }
 
 ExecutionPlan optimize_execution_plan(ExecutionPlan plan, const PlanOptimizationOptions& options) {
@@ -659,15 +691,18 @@ PlanModuleResult compile_plan_module(const GraphModule& graph_module, BackendKin
     PlanModule module;
     module.backend = backend;
     std::vector<std::string> callable_functions;
-    callable_functions.reserve(graph_module.functions.size());
+    callable_functions.reserve(graph_module.layers.size() + graph_module.functions.size());
+    for (const auto& graph : graph_module.layers) {
+        callable_functions.push_back(graph.name);
+    }
     for (const auto& graph : graph_module.functions) {
         callable_functions.push_back(graph.name);
     }
 
-    for (const auto& graph : graph_module.functions) {
+    auto compile_item = [&](const auto& graph) -> std::optional<Diagnostic> {
         ExecutionPlan plan = compile_execution_plan(graph, backend);
         if (auto diagnostic = validate_execution_plan(plan)) {
-            return *diagnostic;
+            return diagnostic;
         }
         for (std::size_t index = 0; index < plan.ops.size(); ++index) {
             CapabilityCheck check = check_plan_op_capability_with_callables(backend, plan.ops[index], callable_functions);
@@ -680,6 +715,18 @@ PlanModuleResult compile_plan_module(const GraphModule& graph_module, BackendKin
             }
         }
         module.plans.push_back(std::move(plan));
+        return std::nullopt;
+    };
+
+    for (const auto& graph : graph_module.layers) {
+        if (auto diagnostic = compile_item(graph)) {
+            return *diagnostic;
+        }
+    }
+    for (const auto& graph : graph_module.functions) {
+        if (auto diagnostic = compile_item(graph)) {
+            return *diagnostic;
+        }
     }
     for (const auto& skipped : graph_module.skipped) {
         module.skipped.push_back(PlanBuildSkipped{skipped.function_name, skipped.reason});
