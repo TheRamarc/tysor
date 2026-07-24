@@ -14,7 +14,7 @@
 namespace {
 
 Diagnostic train_error(std::string message) {
-    return Diagnostic::error("runtime", "R0004", std::move(message));
+    return Diagnostic::error(DiagnosticCode::RuntimeTrainError, std::move(message));
 }
 
 struct LinearSpec {

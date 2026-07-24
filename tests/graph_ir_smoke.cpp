@@ -103,7 +103,7 @@ std::variant<GraphFunction, Diagnostic> graph_from_source(const std::string& sou
     }
     LoweredModule module = std::get<LoweredModule>(std::move(lowered));
     if (module.functions.empty()) {
-        return Diagnostic::error("test", "T0001", "expected lowered function");
+        return Diagnostic::error(DiagnosticCode::TestError, "expected lowered function");
     }
     return build_graph_function(module.functions.front());
 }
@@ -369,7 +369,7 @@ bool validation_rejects_missing_output() {
     graph.outputs = {42};
 
     auto diagnostic = validate_graph_function(graph);
-    if (!diagnostic || diagnostic->stage != "graph_ir" || diagnostic->code != "G0001" ||
+    if (!diagnostic || diagnostic->code != DiagnosticCode::GraphIrError ||
         diagnostic->severity != DiagnosticSeverity::Error || !diagnostic->help ||
         diagnostic->message.find("output 42") == std::string::npos) {
         std::cerr << "validation-missing-output: expected structured output diagnostic\n";

@@ -68,7 +68,7 @@ struct RuntimeExecutionState {
 };
 
 Diagnostic runtime_error(std::string message) {
-    return Diagnostic::error("runtime", "R0001", std::move(message));
+    return Diagnostic::error(DiagnosticCode::RuntimeError, std::move(message));
 }
 
 std::variant<double, Diagnostic> require_number(const RuntimeValue& value) {

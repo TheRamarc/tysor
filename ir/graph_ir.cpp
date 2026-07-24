@@ -25,7 +25,7 @@ GraphDim GraphDim::symbolic(std::string name) {
 namespace {
 
 Diagnostic graph_error(std::string message) {
-    return Diagnostic::error("graph_ir", "G0001", std::move(message))
+    return Diagnostic::error(DiagnosticCode::GraphIrError, std::move(message))
         .with_help("Graph IR validation failed before backend planning. This usually means frontend lowering produced an invalid graph boundary.");
 }
 

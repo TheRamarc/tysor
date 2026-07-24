@@ -11,7 +11,7 @@
 namespace {
 
 Diagnostic backward_error(std::string message) {
-    return Diagnostic::error("runtime", "R0003", std::move(message));
+    return Diagnostic::error(DiagnosticCode::RuntimeBackwardError, std::move(message));
 }
 
 const ExecutionPlan* find_plan(const PlanModule& module, const std::string& entry) {

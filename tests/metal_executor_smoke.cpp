@@ -29,8 +29,7 @@ bool unsupported_plan_rejects_before_native_context() {
     auto result = execute_metal_plan_module(module, "model", GraphExecutorOptions{});
     const auto* diagnostic = std::get_if<Diagnostic>(&result);
     if (diagnostic == nullptr ||
-        diagnostic->stage != "runtime" ||
-        diagnostic->code != "R0002" ||
+        diagnostic->code != DiagnosticCode::RuntimeExecutionError ||
         diagnostic->message.find("unsupported_metal_op") == std::string::npos) {
         std::cerr << "metal-executor: expected unsupported op diagnostic before native context\n";
         return false;
@@ -48,7 +47,7 @@ bool metal_device_probe_reports_status() {
         return true;
     }
     const auto* diagnostic = std::get_if<Diagnostic>(&result);
-    if (diagnostic == nullptr || diagnostic->message.empty() || diagnostic->code != "R0002") {
+    if (diagnostic == nullptr || diagnostic->message.empty() || diagnostic->code != DiagnosticCode::RuntimeExecutionError) {
         std::cerr << "metal-executor: device probe returned an invalid diagnostic\n";
         return false;
     }

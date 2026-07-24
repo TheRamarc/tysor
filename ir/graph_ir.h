@@ -241,7 +241,7 @@ private:
 
     // Lowers a frontend expression into one or more graph nodes and returns the value id.
     std::variant<std::size_t, Diagnostic> lower_expr(const FeExprPtr& expr, GraphFunction& graph) const;
-    
+
     // Looks up the numeric value ID associated with a named symbol in the graph.
     std::variant<std::size_t, Diagnostic> lookup_named_value(const std::string& name, const GraphFunction& graph) const;
 };

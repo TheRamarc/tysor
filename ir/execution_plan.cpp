@@ -13,14 +13,13 @@ namespace {
 const char* plan_backend_name(BackendKind backend);
 
 Diagnostic plan_error(std::string message) {
-    return Diagnostic::error("backend", "B0001", std::move(message))
+    return Diagnostic::error(DiagnosticCode::BackendError, std::move(message))
         .with_help("Execution plan validation failed before runtime/backend execution.");
 }
 
 Diagnostic capability_error(BackendKind backend, std::size_t op_index, std::string reason) {
     return Diagnostic::error(
-               "backend",
-               "B0001",
+               DiagnosticCode::BackendError,
                std::string("Backend capability error in ") + plan_backend_name(backend) +
                    " op #" + std::to_string(op_index) + ": " + reason
            )

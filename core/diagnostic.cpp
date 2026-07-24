@@ -4,38 +4,66 @@
 #include <sstream>
 #include <utility>
 
+const char* get_diagnostic_stage_string(DiagnosticCode code) {
+    switch (code) {
+        case DiagnosticCode::LexerError: return "lexer";
+        case DiagnosticCode::ParserError: return "parser";
+        case DiagnosticCode::SemanticError: return "semantic";
+        case DiagnosticCode::FrontendIrError: return "frontend_ir";
+        case DiagnosticCode::GraphIrError: return "graph_ir";
+        case DiagnosticCode::BackendError: return "backend";
+        case DiagnosticCode::RuntimeError:
+        case DiagnosticCode::RuntimeExecutionError:
+        case DiagnosticCode::RuntimeBackwardError:
+        case DiagnosticCode::RuntimeTrainError: return "runtime";
+        case DiagnosticCode::CliError:
+        case DiagnosticCode::CliFileError:
+        case DiagnosticCode::CliArgsError: return "cli";
+        case DiagnosticCode::TestError: return "test";
+    }
+    return "unknown";
+}
+
+const char* get_diagnostic_code_string(DiagnosticCode code) {
+    switch (code) {
+        case DiagnosticCode::LexerError: return "L0001";
+        case DiagnosticCode::ParserError: return "P0001";
+        case DiagnosticCode::SemanticError: return "S0001";
+        case DiagnosticCode::FrontendIrError: return "F0001";
+        case DiagnosticCode::GraphIrError: return "G0001";
+        case DiagnosticCode::BackendError: return "B0001";
+        case DiagnosticCode::RuntimeError: return "R0001";
+        case DiagnosticCode::RuntimeExecutionError: return "R0002";
+        case DiagnosticCode::RuntimeBackwardError: return "R0003";
+        case DiagnosticCode::RuntimeTrainError: return "R0004";
+        case DiagnosticCode::CliError: return "C0001";
+        case DiagnosticCode::CliFileError: return "C0002";
+        case DiagnosticCode::CliArgsError: return "C0003";
+        case DiagnosticCode::TestError: return "T0001";
+    }
+    return "U0000";
+}
+
 namespace {
 
-/**
- * @brief Helper function to format the internal stage name into a human-readable string.
- * 
- * Maps internal stage identifiers to their capitalized display names.
- * Unrecognized stages are returned as-is.
- * 
- * @param stage The internal stage string.
- * @return A human-readable display string for the stage.
- */
-std::string display_stage(const std::string& stage) {
-    if (stage == "lexer") {
-        return "Lexer";
+std::string display_stage(DiagnosticCode code) {
+    switch (code) {
+        case DiagnosticCode::LexerError: return "Lexer";
+        case DiagnosticCode::ParserError: return "Parser";
+        case DiagnosticCode::SemanticError: return "Semantic";
+        case DiagnosticCode::FrontendIrError: return "Frontend IR";
+        case DiagnosticCode::GraphIrError: return "Graph IR";
+        case DiagnosticCode::BackendError: return "Backend";
+        case DiagnosticCode::RuntimeError:
+        case DiagnosticCode::RuntimeExecutionError:
+        case DiagnosticCode::RuntimeBackwardError:
+        case DiagnosticCode::RuntimeTrainError: return "Runtime";
+        case DiagnosticCode::CliError:
+        case DiagnosticCode::CliFileError:
+        case DiagnosticCode::CliArgsError: return "CLI";
+        case DiagnosticCode::TestError: return "Test";
     }
-    if (stage == "parser") {
-        return "Parser";
-    }
-    if (stage == "semantic") {
-        return "Semantic";
-    }
-    if (stage == "frontend_ir") {
-        return "Frontend IR";
-    }
-    if (stage == "graph_ir") {
-        return "Graph IR";
-    }
-    if (stage == "backend") {
-        return "Backend";
-    }
-    // Fallback: return the original string if no mapping matches.
-    return std::string(stage);
+    return "Unknown";
 }
 
 /**
@@ -46,14 +74,12 @@ std::string display_stage(const std::string& stage) {
  */
 Diagnostic make_diagnostic(
     DiagnosticSeverity severity,
-    std::string stage,
-    std::string code,
+    DiagnosticCode code,
     std::string message
 ) {
     Diagnostic diagnostic;
     diagnostic.severity = severity;
-    diagnostic.stage = std::move(stage);
-    diagnostic.code = std::move(code);
+    diagnostic.code = code;
     diagnostic.message = std::move(message);
     return diagnostic;
 }
@@ -73,29 +99,26 @@ const char* diagnostic_severity_name(DiagnosticSeverity severity) {
     return "Error";
 }
 
-Diagnostic Diagnostic::error(std::string stage, std::string code, std::string message) {
+Diagnostic Diagnostic::error(DiagnosticCode code, std::string message) {
     return make_diagnostic(
         DiagnosticSeverity::Error,
-        std::move(stage),
-        std::move(code),
+        code,
         std::move(message)
     );
 }
 
-Diagnostic Diagnostic::warning(std::string stage, std::string code, std::string message) {
+Diagnostic Diagnostic::warning(DiagnosticCode code, std::string message) {
     return make_diagnostic(
         DiagnosticSeverity::Warning,
-        std::move(stage),
-        std::move(code),
+        code,
         std::move(message)
     );
 }
 
-Diagnostic Diagnostic::note(std::string stage, std::string code, std::string message) {
+Diagnostic Diagnostic::note(DiagnosticCode code, std::string message) {
     return make_diagnostic(
         DiagnosticSeverity::Note,
-        std::move(stage),
-        std::move(code),
+        code,
         std::move(message)
     );
 }
@@ -120,7 +143,7 @@ Diagnostic Diagnostic::with_help(std::string help_text) const {
 }
 
 std::string Diagnostic::stage_label() const {
-    return display_stage(stage);
+    return display_stage(code);
 }
 
 std::string Diagnostic::to_string() const {
@@ -143,10 +166,8 @@ std::ostream& operator<<(std::ostream& out, const Diagnostic& diagnostic) {
         out << " at " << diagnostic.span->line << ':' << diagnostic.span->column;
     }
 
-    // Append error/diagnostic code if provided
-    if (!diagnostic.code.empty()) {
-        out << " [" << diagnostic.code << ']';
-    }
+    // Append error/diagnostic code
+    out << " [" << get_diagnostic_code_string(diagnostic.code) << ']';
 
     // Append help message on a new line if available
     if (diagnostic.help.has_value() && !diagnostic.help->empty()) {

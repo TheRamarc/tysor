@@ -13,7 +13,7 @@
 namespace {
 
 Diagnostic runtime_error(std::string message) {
-    return Diagnostic::error("runtime", "R0001", std::move(message));
+    return Diagnostic::error(DiagnosticCode::RuntimeError, std::move(message));
 }
 
 std::vector<std::int64_t> copy_shape(ShapeView shape) {

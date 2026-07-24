@@ -27,6 +27,29 @@ enum class DiagnosticSeverity {
 const char* diagnostic_severity_name(DiagnosticSeverity severity);
 
 /**
+ * @brief Represents all possible diagnostic error codes across the compiler.
+ */
+enum class DiagnosticCode : uint16_t {
+    LexerError,           // L0001
+    ParserError,          // P0001
+    SemanticError,        // S0001
+    FrontendIrError,      // F0001
+    GraphIrError,         // G0001
+    BackendError,         // B0001
+    RuntimeError,         // R0001
+    RuntimeExecutionError,// R0002
+    RuntimeBackwardError, // R0003
+    RuntimeTrainError,    // R0004
+    CliError,             // C0001
+    CliFileError,         // C0002
+    CliArgsError,         // C0003
+    TestError             // T0001
+};
+
+const char* get_diagnostic_code_string(DiagnosticCode code);
+const char* get_diagnostic_stage_string(DiagnosticCode code);
+
+/**
  * @brief Represents a diagnostic message generated during various compilation stages.
  * 
  * This structure holds all necessary information to report errors, warnings,
@@ -35,22 +58,13 @@ const char* diagnostic_severity_name(DiagnosticSeverity severity);
  */
 struct Diagnostic {
     /**
-     * @brief A unique code identifying the specific type of diagnostic (e.g., "E001").
+     * @brief A unique code identifying the specific type of diagnostic.
      * 
      * Why it exists: Allows programmatic filtering and easy referencing of known issues.
-     * What it tracks: A fixed string representation of the error category.
-     * What mutates/updates it: Initialized on creation by static factory methods (e.g., error(), warning()) and usually unchanged.
+     * What it tracks: The exact category of failure.
+     * What mutates/updates it: Set on creation, immutable.
      */
-    std::string code;
-    
-    /**
-     * @brief The compilation stage where the diagnostic was generated (e.g., "lexer", "parser").
-     * 
-     * Why it exists: Helps developers isolate which phase of compilation failed.
-     * What it tracks: The name of the subsystem that emitted this diagnostic.
-     * What mutates/updates it: Set during instantiation and immutable afterwards.
-     */
-    std::string stage;
+    DiagnosticCode code;
     
     /**
      * @brief The severity of the diagnostic, defaulting to Error.
@@ -94,32 +108,29 @@ struct Diagnostic {
     /**
      * @brief Creates a diagnostic representing an error.
      * 
-     * @param stage The stage of compilation.
      * @param code The error code.
      * @param message The detailed error message.
      * @return A new Diagnostic instance with Error severity.
      */
-    [[nodiscard]] static Diagnostic error(std::string stage, std::string code, std::string message);
+    [[nodiscard]] static Diagnostic error(DiagnosticCode code, std::string message);
 
     /**
      * @brief Creates a diagnostic representing a warning.
      * 
-     * @param stage The stage of compilation.
      * @param code The warning code.
      * @param message The detailed warning message.
      * @return A new Diagnostic instance with Warning severity.
      */
-    [[nodiscard]] static Diagnostic warning(std::string stage, std::string code, std::string message);
+    [[nodiscard]] static Diagnostic warning(DiagnosticCode code, std::string message);
 
     /**
      * @brief Creates a diagnostic representing an informational note.
      * 
-     * @param stage The stage of compilation.
      * @param code The note code.
      * @param message The detailed note message.
      * @return A new Diagnostic instance with Note severity.
      */
-    [[nodiscard]] static Diagnostic note(std::string stage, std::string code, std::string message);
+    [[nodiscard]] static Diagnostic note(DiagnosticCode code, std::string message);
 
     /**
      * @brief Creates a copy of this diagnostic with a specified source location.

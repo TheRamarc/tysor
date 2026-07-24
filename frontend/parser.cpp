@@ -524,7 +524,7 @@ ParseResult Parser::parse_program() {
         program.arena = std::move(arena_);
         return program;
     } catch (const ParseFailure&) {
-        return last_diagnostic_.value_or(Diagnostic::error("parser", "P0001", "Parser error"));
+        return last_diagnostic_.value_or(Diagnostic::error(DiagnosticCode::ParserError, "Parser error"));
     }
 }
 
@@ -1293,7 +1293,7 @@ void Parser::fail_here(const std::string& message) {
     if (!tokens_.empty()) {
         const Token& last = tokens_.back();
         record(
-            Diagnostic::error("parser", "P0001", message)
+            Diagnostic::error(DiagnosticCode::ParserError, message)
                 .with_span(last.line, last.column)
                 .with_help(
                     "Reached end of file after " + std::to_string(last.line) + ":" +
@@ -1302,7 +1302,7 @@ void Parser::fail_here(const std::string& message) {
         );
     } else {
         record(
-            Diagnostic::error("parser", "P0001", message)
+            Diagnostic::error(DiagnosticCode::ParserError, message)
                 .with_help("The parser did not receive any tokens")
         );
     }
@@ -1310,7 +1310,7 @@ void Parser::fail_here(const std::string& message) {
 }
 
 void Parser::fail_token(const std::string& message, const Token& token) {
-    record(Diagnostic::error("parser", "P0001", message).with_span(token.line, token.column));
+    record(Diagnostic::error(DiagnosticCode::ParserError, message).with_span(token.line, token.column));
     throw ParseFailure(message);
 }
 

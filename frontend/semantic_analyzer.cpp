@@ -1504,7 +1504,7 @@ std::optional<Diagnostic> SemanticAnalyzer::ensure_call_allowed(
 }
 
 Diagnostic SemanticAnalyzer::error(const SourceSpan& span, const std::string& message) {
-    Diagnostic diagnostic = Diagnostic::error("semantic", "S0001", message).with_source_span(span);
+    Diagnostic diagnostic = Diagnostic::error(DiagnosticCode::SemanticError, message).with_source_span(span);
     last_diagnostic_ = diagnostic;
     return diagnostic;
 }

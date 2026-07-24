@@ -39,7 +39,7 @@ void push_token(
  * @return A constructed Diagnostic object for the lexer stage.
  */
 Diagnostic lexer_error(std::string message, std::size_t line, std::size_t column) {
-    return Diagnostic::error("lexer", "L0001", std::move(message)).with_span(line, column);
+    return Diagnostic::error(DiagnosticCode::LexerError, std::move(message)).with_span(line, column);
 }
 
 /**

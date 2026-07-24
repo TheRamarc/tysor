@@ -164,7 +164,7 @@ namespace {
 
 // Helper to construct a unified diagnostic error for Metal backend failures
 Diagnostic metal_error(std::string message) {
-    return Diagnostic::error("runtime", "R0002", std::move(message));
+    return Diagnostic::error(DiagnosticCode::RuntimeExecutionError, std::move(message));
 }
 
 // Locates a specific execution plan by its entry function name

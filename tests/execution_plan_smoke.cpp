@@ -318,8 +318,7 @@ bool capability_validation_returns_structured_backend_diagnostic() {
         std::cerr << "capability-validation: expected unknown op diagnostic\n";
         return false;
     }
-    if (diagnostic->stage != "backend" ||
-        diagnostic->code != "B0001" ||
+    if (diagnostic->code != DiagnosticCode::BackendError ||
         diagnostic->severity != DiagnosticSeverity::Error ||
         diagnostic->message.find("not_a_real_op") == std::string::npos ||
         !diagnostic->help) {

@@ -20,7 +20,7 @@ namespace {
 std::variant<std::string, Diagnostic> read_source_file(const std::string& path) {
     std::ifstream input(path);
     if (!input) {
-        return Diagnostic::error("cli", "C0002", "could not read " + path);
+        return Diagnostic::error(DiagnosticCode::CliFileError, "could not read " + path);
     }
     std::ostringstream buffer;
     buffer << input.rdbuf();
@@ -85,14 +85,14 @@ std::optional<Diagnostic> unsupported_requested_actions(const CliOptions& option
     for (const auto& action : actions) {
         message << ' ' << action;
     }
-    return Diagnostic::error("cli", "C0003", message.str())
+    return Diagnostic::error(DiagnosticCode::CliArgsError, message.str())
         .with_help("cpptysor currently supports compiler pipeline dumps and local --run execution");
 }
 
 // Executes the compiled entry function using the appropriate backend runtime
 std::optional<Diagnostic> run_entry_function(const CompiledProgram& compiled, const CliOptions& options) {
     if (!compiled.plan) {
-        return Diagnostic::error("runtime", "R0001", "execution plan was not built for --run");
+        return Diagnostic::error(DiagnosticCode::RuntimeError, "execution plan was not built for --run");
     }
 
     GraphExecutorOptions executor_options;
@@ -109,10 +109,10 @@ std::optional<Diagnostic> run_entry_function(const CompiledProgram& compiled, co
     
     const GraphExecutionResult& result = std::get<GraphExecutionResult>(execution);
     if (result.outputs.empty()) {
-        return Diagnostic::error("runtime", "R0001", "Entry function did not return a value");
+        return Diagnostic::error(DiagnosticCode::RuntimeError, "Entry function did not return a value");
     }
     if (result.outputs.size() != 1) {
-        return Diagnostic::error("runtime", "R0001", "Runtime interpreter currently supports a single return value");
+        return Diagnostic::error(DiagnosticCode::RuntimeError, "Runtime interpreter currently supports a single return value");
     }
     
     // Print the result to stdout
@@ -165,7 +165,7 @@ int run_program(CliOptions options) {
     if (options.backward) {
         if (!compiled.plan) {
             std::cout.flush();
-            std::cerr << Diagnostic::error("runtime", "R0003", "execution plan was not built for --backward").to_string() << '\n';
+            std::cerr << Diagnostic::error(DiagnosticCode::RuntimeBackwardError, "execution plan was not built for --backward").to_string() << '\n';
             return 1;
         }
         GraphExecutorOptions executor_options;
@@ -181,7 +181,7 @@ int run_program(CliOptions options) {
     if (options.train) {
         if (!compiled.plan) {
             std::cout.flush();
-            std::cerr << Diagnostic::error("runtime", "R0004", "execution plan was not built for --train").to_string() << '\n';
+            std::cerr << Diagnostic::error(DiagnosticCode::RuntimeTrainError, "execution plan was not built for --train").to_string() << '\n';
             return 1;
         }
         GraphExecutorOptions executor_options;

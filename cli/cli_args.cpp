@@ -9,7 +9,7 @@ namespace {
 
 // Helper function to create standard CLI diagnostic errors
 Diagnostic cli_error(std::string message) {
-    return Diagnostic::error("cli", "C0001", std::move(message));
+    return Diagnostic::error(DiagnosticCode::CliError, std::move(message));
 }
 
 // Parses a string backend identifier into the corresponding BackendKind enum.

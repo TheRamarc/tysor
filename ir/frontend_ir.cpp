@@ -81,21 +81,21 @@ std::variant<double, Diagnostic> as_double(const FeValue& value, const SourceSpa
     if (const auto* float_value = std::get_if<double>(&value.value)) {
         return *float_value;
     }
-    return Diagnostic::error("frontend_ir", "F0001", "Expected numeric constant").with_source_span(span);
+    return Diagnostic::error(DiagnosticCode::FrontendIrError, "Expected numeric constant").with_source_span(span);
 }
 
 std::variant<std::int64_t, Diagnostic> as_int(const FeValue& value, const SourceSpan& span) {
     if (const auto* int_value = std::get_if<std::int64_t>(&value.value)) {
         return *int_value;
     }
-    return Diagnostic::error("frontend_ir", "F0001", "Expected integer constant").with_source_span(span);
+    return Diagnostic::error(DiagnosticCode::FrontendIrError, "Expected integer constant").with_source_span(span);
 }
 
 std::variant<bool, Diagnostic> as_bool(const FeValue& value, const SourceSpan& span) {
     if (const auto* bool_value = std::get_if<bool>(&value.value)) {
         return *bool_value;
     }
-    return Diagnostic::error("frontend_ir", "F0001", "Expected boolean constant").with_source_span(span);
+    return Diagnostic::error(DiagnosticCode::FrontendIrError, "Expected boolean constant").with_source_span(span);
 }
 
 std::optional<FeValue> pick_broadcast_value(const std::vector<FeValue>& values, std::size_t index) {
@@ -688,7 +688,7 @@ std::variant<FeBinaryOp, Diagnostic> lower_binary_op(TokenType token, const Sour
         case TokenType::Bang:
             return FeBinaryOp::Not;
         default:
-            return Diagnostic::error("frontend_ir", "F0001", "unsupported binary operator").with_source_span(span);
+            return Diagnostic::error(DiagnosticCode::FrontendIrError, "unsupported binary operator").with_source_span(span);
     }
 }
 
@@ -1867,13 +1867,13 @@ std::optional<FeType> FrontendLowerer::find_symbol(const std::string& name) cons
 }
 
 Diagnostic FrontendLowerer::error(const std::string& message) {
-    Diagnostic diagnostic = Diagnostic::error("frontend_ir", "F0001", message);
+    Diagnostic diagnostic = Diagnostic::error(DiagnosticCode::FrontendIrError, message);
     last_diagnostic_ = diagnostic;
     return diagnostic;
 }
 
 Diagnostic FrontendLowerer::error_span(const SourceSpan& span, const std::string& message) {
-    Diagnostic diagnostic = Diagnostic::error("frontend_ir", "F0001", message).with_source_span(span);
+    Diagnostic diagnostic = Diagnostic::error(DiagnosticCode::FrontendIrError, message).with_source_span(span);
     last_diagnostic_ = diagnostic;
     return diagnostic;
 }

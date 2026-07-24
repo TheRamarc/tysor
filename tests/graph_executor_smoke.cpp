@@ -237,7 +237,7 @@ bool missing_shape_returns_runtime_diagnostic() {
 
     auto execution = execute_plan_module(std::get<PlanModule>(module_result), "model", GraphExecutorOptions{});
     const auto* diagnostic = std::get_if<Diagnostic>(&execution);
-    if (diagnostic == nullptr || diagnostic->stage != "runtime" || diagnostic->message.find("--shape") == std::string::npos) {
+    if (diagnostic == nullptr || diagnostic->code != DiagnosticCode::RuntimeError || diagnostic->message.find("--shape") == std::string::npos) {
         std::cerr << "executor-missing-shape: expected runtime shape diagnostic\n";
         return false;
     }
