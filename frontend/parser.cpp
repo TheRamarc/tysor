@@ -509,10 +509,8 @@ ParseResult Parser::parse_program() {
                     program.configs.push_back(parse_config());
                     break;
                 case TokenType::Ident:
-                    if (peek_kind(1) == TokenType::Eq) {
+                    if (peek_kind(1) == TokenType::Eq || peek_kind(1) == TokenType::Colon) {
                         program.globals.push_back(parse_stmt());
-                    } else if (peek_kind(1) == TokenType::Colon) {
-                        fail_token("Top-level variable declarations must start with 'let'", *token);
                     } else {
                         fail_here("Unexpected token at top level");
                     }
@@ -713,6 +711,7 @@ ExprPtr Parser::parse_primary_expression() {
         case TokenType::Float:
         case TokenType::Bool:
         case TokenType::Layer:
+        case TokenType::Tensor:
         case TokenType::Fn: {
             const Token token = *peek(0);
             if (peek_kind(1) == TokenType::OpenParen) {
@@ -1032,15 +1031,31 @@ Stmt Parser::parse_stmt() {
         // case TokenType::Let:
         //     return parse_let_var_decl();
         case TokenType::Ident:
-            if (peek_kind(1) == TokenType::Colon) {
-                fail_token("Variable declarations must start with 'let'", *token);
-            } else if (peek_kind(1) == TokenType::Eq) {
+            if (peek_kind(1) == TokenType::Colon || peek_kind(1) == TokenType::Eq) {
                 Token start = *token;
                 std::string name = consume_ident("Expected assignment target");
-                consume();
-                auto value = parse_expression();
+                
+                Type type = Type::unknown();
+                if (peek_kind(0) == TokenType::Colon) {
+                    consume();
+                    type = parse_type();
+                }
+                
+                ExprPtr init;
+                if (peek_kind(0) == TokenType::Eq) {
+                    consume();
+                    init = parse_expression();
+                } else if (type.base == TypeBase::Unknown) {
+                    fail_token("Variable declaration needs a type annotation or initializer", start);
+                }
+                
                 consume_terminator();
-                return make_stmt(span_of(start), AssignStmt{std::move(name), std::move(value)});
+                
+                if (type.base != TypeBase::Unknown) {
+                    return make_stmt(span_of(start), VarDecl{std::move(name), std::move(type), std::move(init), std::nullopt});
+                } else {
+                    return make_stmt(span_of(start), AssignStmt{std::move(name), std::move(init)});
+                }
             } else if (peek_kind(1) == TokenType::OpenParen) {
                 Token start = *token;
                 auto expr = parse_expression();
@@ -1270,6 +1285,8 @@ std::string Parser::consume_ident(const std::string& message) {
             return "elif";
         case TokenType::Return:
             return "return";
+        case TokenType::Tensor:
+            return "tensor";
         default:
             fail_token(message, token);
     }
