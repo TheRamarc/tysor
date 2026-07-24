@@ -39,7 +39,7 @@ void push_token(
  * @return A constructed Diagnostic object for the lexer stage.
  */
 Diagnostic lexer_error(std::string message, std::size_t line, std::size_t column) {
-    return Diagnostic::error(DiagnosticCode::LexerError, std::move(message)).with_span(line, column);
+    return Diagnostic::error(DiagnosticCode::LexerError, std::move(message)).withSpan(line, column);
 }
 
 /**
@@ -70,12 +70,12 @@ std::string token_value_to_string(const TokenValue& value) {
     if (std::holds_alternative<std::monostate>(value)) {
         return {};
     }
-    if (const auto* int_value = std::get_if<std::int64_t>(&value)) {
-        return std::to_string(*int_value);
+    if (const auto* intValue = std::get_if<std::int64_t>(&value)) {
+        return std::to_string(*intValue);
     }
-    if (const auto* float_value = std::get_if<double>(&value)) {
+    if (const auto* floatValue = std::get_if<double>(&value)) {
         std::ostringstream out;
-        out << *float_value;
+        out << *floatValue;
         return out.str();
     }
     return std::get<std::string>(value);
@@ -119,7 +119,7 @@ std::optional<TokenType> lookup_keyword(std::string_view text) {
 
 } // namespace
 
-const char* token_type_name(TokenType kind) {
+const char* tokenTypeName(TokenType kind) {
     switch (kind) {
         case TokenType::Return:
             return "RETURN";
@@ -243,9 +243,9 @@ const char* token_type_name(TokenType kind) {
     return "EOF";
 }
 
-std::string token_to_string(const Token& token) {
+std::string tokenToString(const Token& token) {
     std::ostringstream out;
-    out << token_type_name(token.kind);
+    out << tokenTypeName(token.kind);
     if (!std::holds_alternative<std::monostate>(token.value)) {
         out << '(' << token_value_to_string(token.value) << ')';
     }
@@ -253,7 +253,7 @@ std::string token_to_string(const Token& token) {
     return out.str();
 }
 
-TokenizeResult tokenize_with_diagnostic(std::string_view source) {
+TokenizeResult tokenizeWithDiagnostic(std::string_view source) {
     std::vector<Token> tokens;
     std::size_t line = 1;
     std::size_t column = 1;
@@ -649,9 +649,9 @@ TokenizeResult tokenize_with_diagnostic(std::string_view source) {
 }
 
 std::vector<Token> tokenize(std::string_view source) {
-    TokenizeResult result = tokenize_with_diagnostic(source);
+    TokenizeResult result = tokenizeWithDiagnostic(source);
     if (const auto* tokens = std::get_if<std::vector<Token>>(&result)) {
         return *tokens;
     }
-    throw std::runtime_error(std::get<Diagnostic>(result).to_string());
+    throw std::runtime_error(std::get<Diagnostic>(result).toString());
 }

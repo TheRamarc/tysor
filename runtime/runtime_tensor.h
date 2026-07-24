@@ -282,12 +282,12 @@ struct SimpleTensor {
     std::string dtype = "float32";
 
     SimpleTensor() = default;
-    SimpleTensor(std::vector<std::int64_t> tensor_shape, TensorData tensor_data, std::string tensor_dtype = "float32");
-    SimpleTensor(std::vector<std::int64_t> tensor_shape, std::vector<float> tensor_data, std::string tensor_dtype = "float32");
+    SimpleTensor(std::vector<std::int64_t> tensor_shape, TensorData tensor_data, std::string tensorDtype = "float32");
+    SimpleTensor(std::vector<std::int64_t> tensor_shape, std::vector<float> tensor_data, std::string tensorDtype = "float32");
     SimpleTensor(
         std::vector<std::int64_t> tensor_shape,
         std::initializer_list<float> tensor_data,
-        std::string tensor_dtype = "float32"
+        std::string tensorDtype = "float32"
     );
 };
 
@@ -343,7 +343,7 @@ private:
     std::size_t size_ = 0;
 };
 
-std::size_t num_elements(ShapeView shape);
+std::size_t numElements(ShapeView shape);
 bool is_aligned_to(const void* pointer, std::size_t alignment);
 bool tensor_data_is_aligned(const SimpleTensor& tensor);
 bool tensor_data_shares_storage(const SimpleTensor& lhs, const SimpleTensor& rhs);

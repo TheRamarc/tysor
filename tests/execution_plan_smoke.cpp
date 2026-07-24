@@ -28,13 +28,13 @@ PlanOp make_plan_op(PlanOpKind kind, std::string name) {
     };
 }
 
-std::variant<Program, Diagnostic> parse_program(const std::string& source) {
-    TokenizeResult tokenized = tokenize_with_diagnostic(source);
+std::variant<Program, Diagnostic> parseProgram(const std::string& source) {
+    TokenizeResult tokenized = tokenizeWithDiagnostic(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&tokenized)) {
         return *diagnostic;
     }
     Parser parser(std::get<std::vector<Token>>(std::move(tokenized)));
-    ParseResult parsed = parser.parse_program();
+    ParseResult parsed = parser.parseProgram();
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
         return *diagnostic;
     }
@@ -42,13 +42,13 @@ std::variant<Program, Diagnostic> parse_program(const std::string& source) {
 }
 
 std::variant<GraphModule, Diagnostic> graph_module(const std::string& source) {
-    auto parsed = parse_program(source);
+    auto parsed = parseProgram(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
         return *diagnostic;
     }
 
     SemanticAnalyzer analyzer;
-    SemanticResult semantic_result = analyzer.analyze_with_info(std::get<Program>(parsed));
+    SemanticResult semantic_result = analyzer.analyzeWithInfo(std::get<Program>(parsed));
     if (const auto* diagnostic = std::get_if<Diagnostic>(&semantic_result)) {
         return *diagnostic;
     }
@@ -58,7 +58,7 @@ std::variant<GraphModule, Diagnostic> graph_module(const std::string& source) {
     if (const auto* diagnostic = std::get_if<Diagnostic>(&frontend_result)) {
         return *diagnostic;
     }
-    return build_graph_module(std::get<LoweredModule>(std::move(frontend_result)));
+    return buildGraphModule(std::get<LoweredModule>(std::move(frontend_result)));
 }
 
 bool local_matmul_relu_plan_ok() {
@@ -68,13 +68,13 @@ bool local_matmul_relu_plan_ok() {
         "  return relu(y)\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graphs)) {
-        std::cerr << "local-plan: graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "local-plan: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
-    auto module_result = compile_plan_module(std::get<GraphModule>(graphs), BackendKind::Local);
+    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Local);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
-        std::cerr << "local-plan: plan lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "local-plan: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const PlanModule& module = std::get<PlanModule>(module_result);
@@ -84,7 +84,7 @@ bool local_matmul_relu_plan_ok() {
     }
     const ExecutionPlan& plan = module.plans.front();
     if (plan.values.size() != 4 || plan.ops.size() != 2 || plan.outputs.size() != 1) {
-        std::cerr << "local-plan: unexpected plan shape\n" << execution_plan_to_string(module) << '\n';
+        std::cerr << "local-plan: unexpected plan shape\n" << executionPlanToString(module) << '\n';
         return false;
     }
     if (plan.ops[0].kind != PlanOpKind::PrimitiveCall || plan.ops[0].op != "matmul" ||
@@ -92,7 +92,7 @@ bool local_matmul_relu_plan_ok() {
         std::cerr << "local-plan: expected matmul and relu primitive ops\n";
         return false;
     }
-    if (plan.ops[0].resolved_op != OpId::Matmul || plan.ops[1].resolved_op != OpId::Relu) {
+    if (plan.ops[0].resolvedOp != OpId::Matmul || plan.ops[1].resolvedOp != OpId::Relu) {
         std::cerr << "local-plan: expected resolved primitive op ids\n";
         return false;
     }
@@ -116,41 +116,41 @@ bool output_only_optimizer_fuses_matmul_relu() {
         "  return relu(y)\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graphs)) {
-        std::cerr << "optimizer-fusion: graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "optimizer-fusion: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
-    auto module_result = compile_plan_module(std::get<GraphModule>(graphs), BackendKind::Local);
+    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Local);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
-        std::cerr << "optimizer-fusion: plan lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "optimizer-fusion: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
     const ExecutionPlan& plan = std::get<PlanModule>(module_result).plans.front();
     PlanOptimizationOptions options;
-    options.preserve_intermediate_values = false;
-    ExecutionPlan optimized = optimize_execution_plan(plan, options);
-    if (auto diagnostic = validate_execution_plan(optimized)) {
-        std::cerr << "optimizer-fusion: optimized plan failed validation: " << diagnostic->to_string() << '\n';
+    options.preserveIntermediateValues = false;
+    ExecutionPlan optimized = optimizeExecutionPlan(plan, options);
+    if (auto diagnostic = validateExecutionPlan(optimized)) {
+        std::cerr << "optimizer-fusion: optimized plan failed validation: " << diagnostic->toString() << '\n';
         return false;
     }
     if (optimized.ops.size() != 1 || optimized.ops.front().kind != PlanOpKind::PrimitiveCall ||
         optimized.ops.front().op != "matmul_relu" ||
-        optimized.ops.front().resolved_op != OpId::MatmulRelu ||
+        optimized.ops.front().resolvedOp != OpId::MatmulRelu ||
         optimized.ops.front().output != plan.outputs.front() ||
         optimized.ops.front().inputs != std::vector<std::size_t>{0, 1}) {
         std::cerr << "optimizer-fusion: expected one fused matmul_relu op\n";
         return false;
     }
 
-    if (check_plan_op_capability(BackendKind::Local, optimized.ops.front()).status != CapabilityStatus::Supported ||
-        check_plan_op_capability(BackendKind::Metal, optimized.ops.front()).status != CapabilityStatus::Unsupported) {
+    if (checkPlanOpCapability(BackendKind::Local, optimized.ops.front()).status != CapabilityStatus::Supported ||
+        checkPlanOpCapability(BackendKind::Metal, optimized.ops.front()).status != CapabilityStatus::Unsupported) {
         std::cerr << "optimizer-fusion: unexpected fused op capability result\n";
         return false;
     }
 
     PlanOptimizationOptions debug_options;
-    ExecutionPlan debug_plan = optimize_execution_plan(plan, debug_options);
+    ExecutionPlan debug_plan = optimizeExecutionPlan(plan, debug_options);
     if (debug_plan.ops.size() != 2) {
         std::cerr << "optimizer-fusion: default optimization should preserve intermediates\n";
         return false;
@@ -164,13 +164,13 @@ bool metal_plan_uses_device_placement() {
         "  return relu(matmul(x, w))\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graphs)) {
-        std::cerr << "metal-plan: graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "metal-plan: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
-    auto module_result = compile_plan_module(std::get<GraphModule>(graphs), BackendKind::Metal);
+    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Metal);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
-        std::cerr << "metal-plan: plan lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "metal-plan: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const ExecutionPlan& plan = std::get<PlanModule>(module_result).plans.front();
@@ -203,7 +203,7 @@ bool validation_rejects_bad_plan_references() {
     plan.values.push_back(PlanValue{0, "x", FeType::tensor("float16", std::nullopt, std::nullopt), true, true, Placement::Host});
     plan.outputs = {42};
 
-    auto diagnostic = validate_execution_plan(plan);
+    auto diagnostic = validateExecutionPlan(plan);
     if (!diagnostic || diagnostic->message.find("output 42") == std::string::npos) {
         std::cerr << "bad-plan: expected output reference diagnostic\n";
         return false;
@@ -219,12 +219,12 @@ bool skipped_graphs_propagate_to_plan() {
         "  return x\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graphs)) {
-        std::cerr << "skipped-plan: graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "skipped-plan: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
-    auto module_result = compile_plan_module(std::get<GraphModule>(graphs), BackendKind::Local);
+    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Local);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
-        std::cerr << "skipped-plan: plan lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "skipped-plan: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const PlanModule& module = std::get<PlanModule>(module_result);
@@ -244,13 +244,13 @@ bool module_local_function_calls_survive_capability_validation() {
         "  return helper(x)\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graphs)) {
-        std::cerr << "function-call-plan: graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "function-call-plan: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
-    auto module_result = compile_plan_module(std::get<GraphModule>(graphs), BackendKind::Local);
+    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Local);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
-        std::cerr << "function-call-plan: plan lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "function-call-plan: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const PlanModule& module = std::get<PlanModule>(module_result);
@@ -263,17 +263,17 @@ bool module_local_function_calls_survive_capability_validation() {
 }
 
 bool capability_summary_exposes_supported_backend_ops() {
-    BackendCapabilitySummary metal = backend_capability_summary(BackendKind::Metal);
-    BackendCapabilitySummary cuda = backend_capability_summary(BackendKind::Cuda);
-    BackendCapabilitySummary rocm = backend_capability_summary(BackendKind::Rocm);
+    BackendCapabilitySummary metal = backendCapabilitySummary(BackendKind::Metal);
+    BackendCapabilitySummary cuda = backendCapabilitySummary(BackendKind::Cuda);
+    BackendCapabilitySummary rocm = backendCapabilitySummary(BackendKind::Rocm);
 
     const auto contains = [](const std::vector<std::string>& values, const std::string& target) {
         return std::find(values.begin(), values.end(), target) != values.end();
     };
 
-    if (metal.backend != BackendKind::Metal || !metal.supports_binary_ops ||
-        !contains(metal.primitive_ops, "matmul") ||
-        !contains(metal.library_ops, "rms_norm") ||
+    if (metal.backend != BackendKind::Metal || !metal.supportsBinaryOps ||
+        !contains(metal.primitiveOps, "matmul") ||
+        !contains(metal.libraryOps, "rms_norm") ||
         !contains(metal.constructors, "linear")) {
         std::cerr << "capability-summary: missing expected Metal supported ops\n";
         return false;
@@ -293,7 +293,7 @@ bool capability_summary_exposes_supported_backend_ops() {
 }
 
 bool capability_check_rejects_unknown_named_ops() {
-    CapabilityCheck check = check_plan_op_capability(
+    CapabilityCheck check = checkPlanOpCapability(
         BackendKind::PyTorch,
         make_plan_op(PlanOpKind::LibraryCall, "not_a_real_op")
     );
@@ -313,7 +313,7 @@ bool capability_validation_returns_structured_backend_diagnostic() {
     plan.backend = BackendKind::Metal;
     plan.ops.push_back(make_plan_op(PlanOpKind::LibraryCall, "not_a_real_op"));
 
-    auto diagnostic = validate_execution_plan_capabilities(plan);
+    auto diagnostic = validateExecutionPlanCapabilities(plan);
     if (!diagnostic) {
         std::cerr << "capability-validation: expected unknown op diagnostic\n";
         return false;

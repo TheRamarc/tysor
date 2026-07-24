@@ -184,7 +184,7 @@ std::variant<SimpleTensor, Diagnostic> make_tensor_argument(
     if (shape == options.tensor_shapes.end()) {
         return metal_error("Missing --shape for tensor parameter '" + value.name + "'");
     }
-    return make_synthetic_tensor(shape->second, value.type.tensor_dtype.value_or("float32"));
+    return make_synthetic_tensor(shape->second, value.type.tensorDtype.value_or("float32"));
 }
 
 #if defined(__APPLE__)
@@ -685,7 +685,7 @@ std::variant<DeviceTensor, Diagnostic> allocate_device_tensor(
     std::vector<std::int64_t> shape,
     std::string dtype
 ) {
-    void* buffer = tysor_metal_buffer_new_zeroed(context, num_elements(shape));
+    void* buffer = tysor_metal_buffer_new_zeroed(context, numElements(shape));
     if (buffer == nullptr) {
         return metal_error("Metal allocation failed: " + last_metal_error());
     }
@@ -777,8 +777,8 @@ std::variant<LinearClosure, Diagnostic> build_linear_closure(
     std::map<std::size_t, MetalValue>& values
 ) {
     LinearClosure closure;
-    if (output.type.callable_return && output.type.callable_return->tensor_dtype) {
-        closure.dtype = *output.type.callable_return->tensor_dtype;
+    if (output.type.callableReturn && output.type.callableReturn->tensorDtype) {
+        closure.dtype = *output.type.callableReturn->tensorDtype;
     }
     if (op.inputs.size() == 1) {
         auto out_features = require_host_int(values, op.inputs[0], "out_features");
@@ -837,8 +837,8 @@ std::variant<EmbeddingClosure, Diagnostic> build_embedding_closure(
     if (closure.num_embeddings <= 0 || closure.embedding_dim <= 0) {
         return metal_error("Metal Embedding dimensions must be positive");
     }
-    if (output.type.callable_return && output.type.callable_return->tensor_dtype) {
-        closure.dtype = *output.type.callable_return->tensor_dtype;
+    if (output.type.callableReturn && output.type.callableReturn->tensorDtype) {
+        closure.dtype = *output.type.callableReturn->tensorDtype;
     }
     return closure;
 }
@@ -916,7 +916,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
             }
             shape.push_back(std::get<std::int64_t>(dim));
         }
-        if (num_elements(shape) != num_elements(input->tensor.shape)) {
+        if (numElements(shape) != numElements(input->tensor.shape)) {
             return metal_error("Metal reshape requires matching element counts");
         }
         return shape;
@@ -1137,7 +1137,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_unary(
             kernel_name,
             input.buffer.get(),
             out.buffer.get(),
-            static_cast<std::uint32_t>(num_elements(input.tensor.shape))
+            static_cast<std::uint32_t>(numElements(input.tensor.shape))
         )) {
         return metal_error(std::string("Metal unary dispatch failed: ") + last_metal_error());
     }
@@ -1174,7 +1174,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_tensor_tensor_binary(
     void* context,
     const DeviceTensor& lhs,
     const DeviceTensor& rhs,
-    FeBinaryOp binary_op
+    FeBinaryOp binaryOp
 ) {
     if (lhs.tensor.shape != rhs.tensor.shape) {
         return metal_error("Metal binary tensor shape mismatch");
@@ -1184,7 +1184,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_tensor_tensor_binary(
         return *diagnostic;
     }
     DeviceTensor out = std::get<DeviceTensor>(std::move(output));
-    auto kernel = binary_kernel_name(binary_op, "tt");
+    auto kernel = binary_kernel_name(binaryOp, "tt");
     if (const auto* diagnostic = std::get_if<Diagnostic>(&kernel)) {
         return *diagnostic;
     }
@@ -1194,7 +1194,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_tensor_tensor_binary(
             lhs.buffer.get(),
             rhs.buffer.get(),
             out.buffer.get(),
-            static_cast<std::uint32_t>(num_elements(lhs.tensor.shape))
+            static_cast<std::uint32_t>(numElements(lhs.tensor.shape))
         )) {
         return metal_error("Metal tensor/tensor binary dispatch failed: " + last_metal_error());
     }
@@ -1205,7 +1205,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_tensor_scalar_binary(
     void* context,
     const DeviceTensor& tensor,
     double scalar,
-    FeBinaryOp binary_op,
+    FeBinaryOp binaryOp,
     bool scalar_first
 ) {
     auto output = allocate_device_tensor(context, tensor.tensor.shape, tensor.tensor.dtype);
@@ -1213,7 +1213,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_tensor_scalar_binary(
         return *diagnostic;
     }
     DeviceTensor out = std::get<DeviceTensor>(std::move(output));
-    auto kernel = binary_kernel_name(binary_op, scalar_first ? "st" : "ts");
+    auto kernel = binary_kernel_name(binaryOp, scalar_first ? "st" : "ts");
     if (const auto* diagnostic = std::get_if<Diagnostic>(&kernel)) {
         return *diagnostic;
     }
@@ -1223,7 +1223,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_tensor_scalar_binary(
               std::get<std::string>(kernel).c_str(),
               tensor.buffer.get(),
               out.buffer.get(),
-              static_cast<std::uint32_t>(num_elements(tensor.tensor.shape)),
+              static_cast<std::uint32_t>(numElements(tensor.tensor.shape)),
               static_cast<float>(scalar)
           )
         : tysor_metal_dispatch_binary_ts_scalar(
@@ -1231,7 +1231,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_tensor_scalar_binary(
               std::get<std::string>(kernel).c_str(),
               tensor.buffer.get(),
               out.buffer.get(),
-              static_cast<std::uint32_t>(num_elements(tensor.tensor.shape)),
+              static_cast<std::uint32_t>(numElements(tensor.tensor.shape)),
               static_cast<float>(scalar)
           );
     if (!ok) {
@@ -1245,7 +1245,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_copy(
     const DeviceTensor& input,
     std::vector<std::int64_t> output_shape
 ) {
-    if (num_elements(input.tensor.shape) != num_elements(output_shape)) {
+    if (numElements(input.tensor.shape) != numElements(output_shape)) {
         return metal_error("Metal copy requires matching element counts");
     }
     auto output = allocate_device_tensor(context, std::move(output_shape), input.tensor.dtype);
@@ -1258,7 +1258,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_copy(
             "copy_op",
             input.buffer.get(),
             out.buffer.get(),
-            static_cast<std::uint32_t>(num_elements(out.tensor.shape))
+            static_cast<std::uint32_t>(numElements(out.tensor.shape))
         )) {
         return metal_error("Metal copy dispatch failed: " + last_metal_error());
     }
@@ -1318,7 +1318,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_reduction(
             return metal_error("Metal " + op_name + " axis currently supports axis 0 or 1");
         }
     } else {
-        rows = static_cast<std::uint32_t>(num_elements(input.tensor.shape));
+        rows = static_cast<std::uint32_t>(numElements(input.tensor.shape));
         cols = 1;
     }
     auto output = allocate_device_tensor(context, output_shape, input.tensor.dtype);
@@ -1422,7 +1422,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_embedding(
             indices.buffer.get(),
             weight.buffer.get(),
             out.buffer.get(),
-            static_cast<std::uint32_t>(num_elements(indices.tensor.shape)),
+            static_cast<std::uint32_t>(numElements(indices.tensor.shape)),
             static_cast<std::uint32_t>(closure.embedding_dim)
         )) {
         return metal_error("Metal embedding dispatch failed: " + last_metal_error());
@@ -1438,7 +1438,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_softmax(
         return metal_error("Metal softmax requires a tensor with at least one dimension");
     }
     const std::int64_t width = input.tensor.shape.back();
-    if (width <= 0 || num_elements(input.tensor.shape) % static_cast<std::size_t>(width) != 0) {
+    if (width <= 0 || numElements(input.tensor.shape) % static_cast<std::size_t>(width) != 0) {
         return metal_error("Metal softmax requires the last dimension to divide the data length");
     }
     auto output = allocate_device_tensor(context, input.tensor.shape, input.tensor.dtype);
@@ -1446,7 +1446,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_softmax(
         return *diagnostic;
     }
     DeviceTensor out = std::get<DeviceTensor>(std::move(output));
-    const auto rows = static_cast<std::uint32_t>(num_elements(input.tensor.shape) / static_cast<std::size_t>(width));
+    const auto rows = static_cast<std::uint32_t>(numElements(input.tensor.shape) / static_cast<std::size_t>(width));
     if (!tysor_metal_dispatch_softmax(
             context,
             "softmax",
@@ -1578,7 +1578,7 @@ std::variant<DeviceTensor, Diagnostic> dispatch_rms_norm(
         return metal_error("Metal rms_norm hidden size must be positive");
     }
     const auto width = static_cast<std::uint32_t>(hidden_size);
-    const auto rows = static_cast<std::uint32_t>(num_elements(input.tensor.shape) / static_cast<std::size_t>(hidden_size));
+    const auto rows = static_cast<std::uint32_t>(numElements(input.tensor.shape) / static_cast<std::size_t>(hidden_size));
     auto output = allocate_device_tensor(context, input.tensor.shape, input.tensor.dtype);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&output)) {
         return *diagnostic;
@@ -1660,9 +1660,9 @@ std::variant<DeviceTensor, Diagnostic> dispatch_activation(
 
 // Checks if the planned ops are supported by the current Metal backend
 std::optional<Diagnostic> validate_supported_plan(const ExecutionPlan& plan) {
-    auto producer_for = [&](std::size_t value_id) -> const PlanOp* {
+    auto producer_for = [&](std::size_t valueId) -> const PlanOp* {
         auto found = std::find_if(plan.ops.begin(), plan.ops.end(), [&](const PlanOp& item) {
-            return item.output == value_id;
+            return item.output == valueId;
         });
         return found == plan.ops.end() ? nullptr : &*found;
     };
@@ -1724,8 +1724,8 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
         switch (step.kind) {
             case PlanStepKind::AllocateHostValue: {
                 // Initialize synthetic tensor inputs based on CLI flags
-                const PlanValue& value = plan.values[step.value_id];
-                if (value.is_parameter) {
+                const PlanValue& value = plan.values[step.valueId];
+                if (value.isParameter) {
                     if (value.type.kind != FeTypeKind::Tensor) {
                         return metal_error("Metal executor currently supports tensor parameters only");
                     }
@@ -1739,7 +1739,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
             }
             case PlanStepKind::UploadToDevice: {
                 // Transfer a tensor resident in host memory to GPU VRAM
-                auto found = values.find(step.value_id);
+                auto found = values.find(step.valueId);
                 if (found == values.end()) {
                     return metal_error("Metal upload step references an uninitialized host value");
                 }
@@ -1755,16 +1755,16 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&uploaded)) {
                     return *diagnostic;
                 }
-                values[step.value_id] = std::get<DeviceTensor>(std::move(uploaded));
+                values[step.valueId] = std::get<DeviceTensor>(std::move(uploaded));
                 break;
             }
             case PlanStepKind::AllocateDeviceValue:
                 break;
             case PlanStepKind::DispatchDeviceOp: {
-                if (!step.op_index) {
+                if (!step.opIndex) {
                     return metal_error("Metal dispatch step is missing an op index");
                 }
-                const PlanOp& op = plan.ops[*step.op_index];
+                const PlanOp& op = plan.ops[*step.opIndex];
                 if (op.kind == PlanOpKind::Constant) {
                     auto host = constant_to_host_value(op.constant);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&host)) {
@@ -1809,19 +1809,19 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                     DeviceTensor* lhs_tensor = require_device_tensor(values, op.inputs[0], "binary lhs");
                     DeviceTensor* rhs_tensor = require_device_tensor(values, op.inputs[1], "binary rhs");
                     if (lhs_tensor != nullptr && rhs_tensor != nullptr) {
-                        result = dispatch_tensor_tensor_binary(context.get(), *lhs_tensor, *rhs_tensor, op.binary_op);
+                        result = dispatch_tensor_tensor_binary(context.get(), *lhs_tensor, *rhs_tensor, op.binaryOp);
                     } else if (lhs_tensor != nullptr) {
                         auto scalar = require_host_number(values, op.inputs[1], "binary rhs");
                         if (const auto* diagnostic = std::get_if<Diagnostic>(&scalar)) {
                             return *diagnostic;
                         }
-                        result = dispatch_tensor_scalar_binary(context.get(), *lhs_tensor, std::get<double>(scalar), op.binary_op, false);
+                        result = dispatch_tensor_scalar_binary(context.get(), *lhs_tensor, std::get<double>(scalar), op.binaryOp, false);
                     } else if (rhs_tensor != nullptr) {
                         auto scalar = require_host_number(values, op.inputs[0], "binary lhs");
                         if (const auto* diagnostic = std::get_if<Diagnostic>(&scalar)) {
                             return *diagnostic;
                         }
-                        result = dispatch_tensor_scalar_binary(context.get(), *rhs_tensor, std::get<double>(scalar), op.binary_op, true);
+                        result = dispatch_tensor_scalar_binary(context.get(), *rhs_tensor, std::get<double>(scalar), op.binaryOp, true);
                     } else {
                         return metal_error("Metal does not support scalar-scalar binary ops");
                     }
@@ -1966,20 +1966,20 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
             }
             case PlanStepKind::DownloadToHost: {
                 // Read a buffer back from GPU memory into standard CPU memory
-                DeviceTensor* device = require_device_tensor(values, step.value_id, "download value");
+                DeviceTensor* device = require_device_tensor(values, step.valueId, "download value");
                 if (device == nullptr) {
                     return metal_error("Metal download requires a device tensor value");
                 }
                 SimpleTensor host = device->tensor;
-                host.data.assign(num_elements(host.shape), 0.0F);
+                host.data.assign(numElements(host.shape), 0.0F);
                 if (!tysor_metal_buffer_read(device->buffer.get(), host.data.data(), host.data.size())) {
                     return metal_error("Metal readback failed: " + last_metal_error());
                 }
-                values[step.value_id] = HostValue{std::move(host)};
+                values[step.valueId] = HostValue{std::move(host)};
                 break;
             }
             case PlanStepKind::MaterializeOutput: {
-                auto found = values.find(step.value_id);
+                auto found = values.find(step.valueId);
                 if (found == values.end()) {
                     return metal_error("Metal output step references an uninitialized value");
                 }
@@ -1991,7 +1991,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&output)) {
                     return *diagnostic;
                 }
-                outputs[step.value_id] = std::get<GraphRuntimeValue>(std::move(output));
+                outputs[step.valueId] = std::get<GraphRuntimeValue>(std::move(output));
                 break;
             }
             case PlanStepKind::ExecuteOp:

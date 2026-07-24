@@ -11,14 +11,14 @@
 
 namespace {
 
-std::variant<Program, Diagnostic> parse_program(const std::string& source) {
-    TokenizeResult tokenized = tokenize_with_diagnostic(source);
+std::variant<Program, Diagnostic> parseProgram(const std::string& source) {
+    TokenizeResult tokenized = tokenizeWithDiagnostic(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&tokenized)) {
         return *diagnostic;
     }
 
     Parser parser(std::get<std::vector<Token>>(std::move(tokenized)));
-    ParseResult parsed = parser.parse_program();
+    ParseResult parsed = parser.parseProgram();
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
         return *diagnostic;
     }
@@ -26,16 +26,16 @@ std::variant<Program, Diagnostic> parse_program(const std::string& source) {
 }
 
 bool analyze_ok(const std::string& name, const std::string& source, std::size_t min_calls) {
-    auto parsed = parse_program(source);
+    auto parsed = parseProgram(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
-        std::cerr << name << ": parse failed: " << diagnostic->to_string() << '\n';
+        std::cerr << name << ": parse failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
     SemanticAnalyzer analyzer;
-    SemanticResult result = analyzer.analyze_with_info(std::get<Program>(parsed));
+    SemanticResult result = analyzer.analyzeWithInfo(std::get<Program>(parsed));
     if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) {
-        std::cerr << name << ": semantic analysis failed: " << diagnostic->to_string() << '\n';
+        std::cerr << name << ": semantic analysis failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
@@ -49,15 +49,15 @@ bool analyze_ok(const std::string& name, const std::string& source, std::size_t 
 }
 
 bool analyze_fails(const std::string& name, const std::string& source, const std::string& expected) {
-    auto parsed = parse_program(source);
+    auto parsed = parseProgram(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
-        std::cerr << name << ": parse failed before semantic check: " << diagnostic->to_string()
+        std::cerr << name << ": parse failed before semantic check: " << diagnostic->toString()
                   << '\n';
         return false;
     }
 
     SemanticAnalyzer analyzer;
-    SemanticResult result = analyzer.analyze_with_info(std::get<Program>(parsed));
+    SemanticResult result = analyzer.analyzeWithInfo(std::get<Program>(parsed));
     const auto* diagnostic = std::get_if<Diagnostic>(&result);
     if (diagnostic == nullptr) {
         std::cerr << name << ": semantic analysis unexpectedly succeeded\n";
@@ -66,14 +66,14 @@ bool analyze_fails(const std::string& name, const std::string& source, const std
     if (diagnostic->message.find(expected) == std::string::npos) {
         std::cerr << name << ": wrong semantic diagnostic\n";
         std::cerr << "expected: " << expected << '\n';
-        std::cerr << diagnostic->to_string() << '\n';
+        std::cerr << diagnostic->toString() << '\n';
         return false;
     }
     return true;
 }
 
 bool semantic_info_records_core_facts() {
-    auto parsed = parse_program(
+    auto parsed = parseProgram(
         "config settings:\n"
         "  depth: int32 = 2\n"
         "\n"
@@ -86,14 +86,14 @@ bool semantic_info_records_core_facts() {
         "  return y\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
-        std::cerr << "semantic-info-core: parse failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "semantic-info-core: parse failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
     SemanticAnalyzer analyzer;
-    SemanticResult result = analyzer.analyze_with_info(std::get<Program>(parsed));
+    SemanticResult result = analyzer.analyzeWithInfo(std::get<Program>(parsed));
     if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) {
-        std::cerr << "semantic-info-core: analysis failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "semantic-info-core: analysis failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
@@ -109,18 +109,18 @@ bool semantic_info_records_core_facts() {
         });
     };
     const auto has_config_access = std::any_of(
-        info.config_field_accesses.begin(),
-        info.config_field_accesses.end(),
+        info.configFieldAccesses.begin(),
+        info.configFieldAccesses.end(),
         [](const SemanticConfigFieldAccessInfo& access) {
-            return access.config_name == "settings" && access.field_name == "depth" &&
-                   access.field_type.base == TypeBase::Int;
+            return access.configName == "settings" && access.fieldName == "depth" &&
+                   access.fieldType.base == TypeBase::Int;
         }
     );
     const auto has_assignment = std::any_of(
         info.assignments.begin(),
         info.assignments.end(),
         [](const SemanticAssignmentInfo& assignment) {
-            return assignment.target_name == "y" && assignment.target_type.base == TypeBase::Tensor;
+            return assignment.targetName == "y" && assignment.targetType.base == TypeBase::Tensor;
         }
     );
 

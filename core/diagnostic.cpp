@@ -4,7 +4,7 @@
 #include <sstream>
 #include <utility>
 
-const char* get_diagnostic_stage_string(DiagnosticCode code) {
+const char* getDiagnosticStageString(DiagnosticCode code) {
     switch (code) {
         case DiagnosticCode::LexerError: return "lexer";
         case DiagnosticCode::ParserError: return "parser";
@@ -24,7 +24,7 @@ const char* get_diagnostic_stage_string(DiagnosticCode code) {
     return "unknown";
 }
 
-const char* get_diagnostic_code_string(DiagnosticCode code) {
+const char* getDiagnosticCodeString(DiagnosticCode code) {
     switch (code) {
         case DiagnosticCode::LexerError: return "L0001";
         case DiagnosticCode::ParserError: return "P0001";
@@ -46,7 +46,7 @@ const char* get_diagnostic_code_string(DiagnosticCode code) {
 
 namespace {
 
-std::string display_stage(DiagnosticCode code) {
+std::string displayStage(DiagnosticCode code) {
     switch (code) {
         case DiagnosticCode::LexerError: return "Lexer";
         case DiagnosticCode::ParserError: return "Parser";
@@ -66,13 +66,7 @@ std::string display_stage(DiagnosticCode code) {
     return "Unknown";
 }
 
-/**
- * @brief Internal helper to construct a Diagnostic object.
- * 
- * Initializes a Diagnostic object using the provided attributes,
- * using std::move to efficiently transfer ownership of the strings.
- */
-Diagnostic make_diagnostic(
+Diagnostic makeDiagnostic(
     DiagnosticSeverity severity,
     DiagnosticCode code,
     std::string message
@@ -86,7 +80,7 @@ Diagnostic make_diagnostic(
 
 } // namespace
 
-const char* diagnostic_severity_name(DiagnosticSeverity severity) {
+const char* diagnosticSeverityName(DiagnosticSeverity severity) {
     switch (severity) {
         case DiagnosticSeverity::Error:
             return "Error";
@@ -95,12 +89,11 @@ const char* diagnostic_severity_name(DiagnosticSeverity severity) {
         case DiagnosticSeverity::Note:
             return "Note";
     }
-    // Default fallback in case an invalid enum value is somehow passed.
     return "Error";
 }
 
 Diagnostic Diagnostic::error(DiagnosticCode code, std::string message) {
-    return make_diagnostic(
+    return makeDiagnostic(
         DiagnosticSeverity::Error,
         code,
         std::move(message)
@@ -108,7 +101,7 @@ Diagnostic Diagnostic::error(DiagnosticCode code, std::string message) {
 }
 
 Diagnostic Diagnostic::warning(DiagnosticCode code, std::string message) {
-    return make_diagnostic(
+    return makeDiagnostic(
         DiagnosticSeverity::Warning,
         code,
         std::move(message)
@@ -116,60 +109,54 @@ Diagnostic Diagnostic::warning(DiagnosticCode code, std::string message) {
 }
 
 Diagnostic Diagnostic::note(DiagnosticCode code, std::string message) {
-    return make_diagnostic(
+    return makeDiagnostic(
         DiagnosticSeverity::Note,
         code,
         std::move(message)
     );
 }
 
-Diagnostic Diagnostic::with_span(std::size_t line, std::size_t column) const {
-    // Copy the current diagnostic object, set the span, and return the copy.
+Diagnostic Diagnostic::withSpan(std::size_t line, std::size_t column) const {
     Diagnostic diagnostic = *this;
     diagnostic.span = SourceSpan{line, column};
     return diagnostic;
 }
 
-Diagnostic Diagnostic::with_source_span(SourceSpan source_span) const {
+Diagnostic Diagnostic::withSourceSpan(SourceSpan sourceSpan) const {
     Diagnostic diagnostic = *this;
-    diagnostic.span = source_span;
+    diagnostic.span = sourceSpan;
     return diagnostic;
 }
 
-Diagnostic Diagnostic::with_help(std::string help_text) const {
+Diagnostic Diagnostic::withHelp(std::string helpText) const {
     Diagnostic diagnostic = *this;
-    diagnostic.help = std::move(help_text);
+    diagnostic.help = std::move(helpText);
     return diagnostic;
 }
 
-std::string Diagnostic::stage_label() const {
-    return display_stage(code);
+std::string Diagnostic::stageLabel() const {
+    return displayStage(code);
 }
 
-std::string Diagnostic::to_string() const {
-    // Use an ostringstream and the overloaded operator<< to format the diagnostic.
+std::string Diagnostic::toString() const {
     std::ostringstream out;
     out << *this;
     return out.str();
 }
 
 std::ostream& operator<<(std::ostream& out, const Diagnostic& diagnostic) {
-    // Basic format: "Stage Severity: Message"
-    out << diagnostic.stage_label()
+    out << diagnostic.stageLabel()
         << ' '
-        << diagnostic_severity_name(diagnostic.severity)
+        << diagnosticSeverityName(diagnostic.severity)
         << ": "
         << diagnostic.message;
 
-    // Append source location if available
     if (diagnostic.span.has_value()) {
         out << " at " << diagnostic.span->line << ':' << diagnostic.span->column;
     }
 
-    // Append error/diagnostic code
-    out << " [" << get_diagnostic_code_string(diagnostic.code) << ']';
+    out << " [" << getDiagnosticCodeString(diagnostic.code) << ']';
 
-    // Append help message on a new line if available
     if (diagnostic.help.has_value() && !diagnostic.help->empty()) {
         out << "\nhelp: " << *diagnostic.help;
     }

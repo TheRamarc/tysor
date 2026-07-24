@@ -43,7 +43,7 @@ enum class FeTypeKind {
 struct FeType {
     // Why it exists: To allow fast switching on type semantics without string matching or subclass checks.
     // What it tracks: The broad category of the type (e.g., Integer, Tensor, Callable).
-    // What mutates it: Set during construction by factory methods like FeType::int_type() and remains immutable.
+    // What mutates it: Set during construction by factory methods like FeType::intType() and remains immutable.
     FeTypeKind kind = FeTypeKind::None;
     // Why it exists: To enable recursive type checking and structural typing.
     // What it tracks: The types of nested elements, if this type is a composite (e.g., Tuple, List).
@@ -52,36 +52,36 @@ struct FeType {
     // Why it exists: So the type checker can know what type results from invoking a callable value.
     // What it tracks: The return type if this FeType represents a Callable (e.g., a function or layer).
     // What mutates it: Initialized by FeType::callable() and immutable thereafter.
-    std::shared_ptr<FeType> callable_return;
+    std::shared_ptr<FeType> callableReturn;
     // Why it exists: To distinguish exact scalar types beyond just "Int" or "Float".
     // What it tracks: The concrete data type name (e.g., "int32", "float64") for primitive scalars.
     // What mutates it: Assigned during specific type creation and not mutated.
-    std::optional<std::string> scalar_dtype;
+    std::optional<std::string> scalarDtype;
     // Why it exists: To ensure tensor operations only occur between compatible element types.
     // What it tracks: The underlying element data type name (e.g., "float32") for tensors.
     // What mutates it: Assigned by FeType::tensor() and read-only subsequently.
-    std::optional<std::string> tensor_dtype;
+    std::optional<std::string> tensorDtype;
     // Why it exists: To allow symbolic or deferred shape evaluation before graph execution.
     // What it tracks: A string representation of the tensor shape expression, if provided.
     // What mutates it: Set during tensor type parsing and remains unchanged.
-    std::optional<std::string> tensor_shape_expr;
+    std::optional<std::string> tensorShapeExpr;
     // Why it exists: To enforce dimensionality constraints during semantic analysis.
     // What it tracks: The number of dimensions of the tensor, if statically known.
     // What mutates it: Inferred or provided explicitly during tensor type instantiation; immutable.
-    std::optional<std::size_t> tensor_rank;
+    std::optional<std::size_t> tensorRank;
 
     // Factory methods for creating common FeType instances.
     static FeType unknown();
-    static FeType int_type();
+    static FeType intType();
     static FeType int16();
     static FeType int32();
     static FeType int64();
-    static FeType float_type();
+    static FeType floatType();
     static FeType float16();
     static FeType float32();
     static FeType float64();
-    static FeType bool_type();
-    static FeType str_type();
+    static FeType boolType();
+    static FeType strType();
     static FeType tensor(
         std::optional<std::string> dtype,
         std::optional<std::string> shape_expr,
@@ -89,14 +89,14 @@ struct FeType {
     );
     static FeType tuple(std::vector<FeType> elements);
     static FeType list(std::vector<FeType> elements);
-    static FeType callable(FeType return_type);
-    static FeType void_type();
+    static FeType callable(FeType returnType);
+    static FeType voidType();
     static FeType none();
     static FeType str();
 };
 
 // Compile-time value used for constants and evaluated config fields.
-// Example: a config field `hidden = 128` becomes FeValue::int_value(128).
+// Example: a config field `hidden = 128` becomes FeValue::intValue(128).
 struct FeValue;
 struct FeTupleValue {
     // Why it exists: To aggregate multiple values within a tuple.
@@ -120,12 +120,12 @@ struct FeValue {
 
     // Factory methods to create values of different types.
     static FeValue none();
-    static FeValue int_value(std::int64_t value);
-    static FeValue float_value(double value);
-    static FeValue bool_value(bool value);
-    static FeValue string_value(std::string value);
-    static FeValue tuple_value(std::vector<FeValue> values);
-    static FeValue list_value(std::vector<FeValue> values);
+    static FeValue intValue(std::int64_t value);
+    static FeValue floatValue(double value);
+    static FeValue boolValue(bool value);
+    static FeValue stringValue(std::string value);
+    static FeValue tupleValue(std::vector<FeValue> values);
+    static FeValue listValue(std::vector<FeValue> values);
 };
 
 // Compiler-level binary operators. These replace raw parser TokenType operators
@@ -255,11 +255,11 @@ struct FeIfThenElseExpr {
     // Why it exists: To provide the result if the condition is true.
     // What it tracks: The expression evaluated in the true-branch.
     // What mutates it: Set during node creation.
-    FeExprPtr then_expr;
+    FeExprPtr thenExpr;
     // Why it exists: To provide the result if the condition is false.
     // What it tracks: The expression evaluated in the false-branch.
     // What mutates it: Set during node creation.
-    FeExprPtr else_expr;
+    FeExprPtr elseExpr;
 };
 
 using FeExprKind = std::variant<
@@ -291,17 +291,17 @@ struct FeExpr {
     static FeExprPtr constant(Arena& arena, FeValue value, FeType type);
     static FeExprPtr var(Arena& arena, std::string symbol, FeType type);
     static FeExprPtr call(Arena& arena, std::string callee, std::vector<FeCallArg> args, FeType type);
-    static FeExprPtr layer_ctor(Arena& arena, std::string callee, std::vector<FeCallArg> args, FeType type);
+    static FeExprPtr layerCtor(Arena& arena, std::string callee, std::vector<FeCallArg> args, FeType type);
     static FeExprPtr apply(Arena& arena, FeExprPtr callee, std::vector<FeCallArg> args, FeType type);
     static FeExprPtr tuple(Arena& arena, std::vector<FeExprPtr> elements, FeType type);
     static FeExprPtr list(Arena& arena, std::vector<FeExprPtr> elements, FeType type);
     static FeExprPtr binary(Arena& arena, FeBinaryOp op, FeExprPtr lhs, FeExprPtr rhs, FeType type);
-    static FeExprPtr if_then_else(Arena& arena, FeExprPtr condition, FeExprPtr then_expr, FeExprPtr else_expr, FeType type);
+    static FeExprPtr ifThenElse(Arena& arena, FeExprPtr condition, FeExprPtr thenExpr, FeExprPtr elseExpr, FeType type);
 };
 
 struct FeStmt;
 
-// Lowered variable declaration. If has_value is false, value may be null.
+// Lowered variable declaration. If hasValue is false, value may be null.
 // Graph-local declarations usually need a value because graph lowering is
 // expression-driven.
 struct FeVarDeclStmt {
@@ -320,7 +320,7 @@ struct FeVarDeclStmt {
     // Why it exists: To distinguish between an initialized variable and a purely declared one.
     // What it tracks: True if the variable declaration has an initial value.
     // What mutates it: Set based on the presence of an assignment in the AST.
-    bool has_value = false;
+    bool hasValue = false;
 };
 
 struct FeAssignStmt {
@@ -367,15 +367,15 @@ struct FeIfStmt {
     // Why it exists: To group statements executed when the `if` condition holds.
     // What it tracks: The sequence of lowered statements inside the block.
     // What mutates it: Populated during scope lowering.
-    std::vector<FeStmt> then_body;
+    std::vector<FeStmt> thenBody;
     // Why it exists: To handle chained conditional logic without deep nesting.
     // What it tracks: A sequence of `elif` condition-and-body pairs.
     // What mutates it: Constructed from chained `elif` syntax.
-    std::vector<FeElifBody> elif_bodies;
+    std::vector<FeElifBody> elifBodies;
     // Why it exists: To provide fallback execution when all preceding conditions fail.
     // What it tracks: The lowered statements in the `else` block.
     // What mutates it: Populated during scope lowering.
-    std::vector<FeStmt> else_body;
+    std::vector<FeStmt> elseBody;
 };
 
 using FeStmtKind = std::variant<FeVarDeclStmt, FeAssignStmt, FeReturnStmt, FeExprStmt, FeIfStmt>;
@@ -398,7 +398,7 @@ struct FeFunction {
     // Why it exists: To enforce type safety on function outputs.
     // What it tracks: The declared or inferred return type of the callable.
     // What mutates it: Resolved during semantic analysis.
-    FeType return_type;
+    FeType returnType;
     // Why it exists: To define the input signature of the function.
     // What it tracks: An ordered list of parameter names and their resolved types.
     // What mutates it: Populated by lowering function arguments.
@@ -406,7 +406,7 @@ struct FeFunction {
     // Why it exists: To support multiple or named return values.
     // What it tracks: Names and types of output bindings.
     // What mutates it: Extracted from function signatures.
-    std::vector<std::pair<std::string, FeType>> named_outputs;
+    std::vector<std::pair<std::string, FeType>> namedOutputs;
     // Why it exists: To hold the executable logic of a function.
     // What it tracks: The ordered list of statements comprising the block.
     // What mutates it: Built during block traversal and scope lowering.
@@ -422,7 +422,7 @@ struct FeLayer {
     // Why it exists: To enforce type safety on layer outputs.
     // What it tracks: The declared or inferred return type of the layer.
     // What mutates it: Resolved during semantic analysis.
-    FeType return_type;
+    FeType returnType;
     // Why it exists: To define the input signature of the layer forward pass.
     // What it tracks: An ordered list of parameter names and their resolved types.
     // What mutates it: Populated by lowering layer arguments.
@@ -430,7 +430,7 @@ struct FeLayer {
     // Why it exists: To support multiple or named return values from the layer.
     // What it tracks: Names and types of output bindings.
     // What mutates it: Extracted from layer signatures.
-    std::vector<std::pair<std::string, FeType>> named_outputs;
+    std::vector<std::pair<std::string, FeType>> namedOutputs;
     // Why it exists: To hold the forward pass executable logic of the layer.
     // What it tracks: The ordered list of statements comprising the block.
     // What mutates it: Built during block traversal and scope lowering.
@@ -468,11 +468,11 @@ struct FeTrain {
     // Why it exists: To test different learning rate hyperparameters.
     // What it tracks: Evaluated constants for step sizes.
     // What mutates it: Loaded from the train config fields.
-    std::vector<FeValue> learning_rates;
+    std::vector<FeValue> learningRates;
     // Why it exists: To denote which variable/output is being optimized (e.g., the loss).
     // What it tracks: Variable names designated as training objectives.
     // What mutates it: Collected from train config declarations.
-    std::vector<std::string> objective_symbols;
+    std::vector<std::string> objectiveSymbols;
     // Why it exists: To dictate the duration of training runs.
     // What it tracks: Constant integer values representing step counts or epochs.
     // What mutates it: Populated from train config.
@@ -480,11 +480,11 @@ struct FeTrain {
     // Why it exists: To support hyperparameter search over Cartesian products.
     // What it tracks: The total number of unique training configurations derived from lists.
     // What mutates it: Computed by multiplying lengths of hyperparameter arrays.
-    std::size_t variant_count = 1;
+    std::size_t variantCount = 1;
     // Why it exists: To hold arbitrary additional training metadata.
     // What it tracks: Unstructured or custom configuration fields.
     // What mutates it: Inserted during config block evaluation.
-    std::map<std::string, FeValue> extra_properties;
+    std::map<std::string, FeValue> extraProperties;
 };
 
 // Where a train objective symbol came from after resolving it against model
@@ -501,15 +501,15 @@ struct FeExecutionRun {
     // Why it exists: To uniquely identify this specific execution instance.
     // What it tracks: A synthesized name typically based on model and train config.
     // What mutates it: Generated during execution plan creation.
-    std::string run_name;
+    std::string runName;
     // Why it exists: To link the run to its primary model definition.
     // What it tracks: The identifier of the layer/function being executed.
     // What mutates it: Copied from the execution plan entry.
-    std::string model_name;
+    std::string modelName;
     // Why it exists: To link the run to its training configuration.
     // What it tracks: The identifier of the associated `train` block.
     // What mutates it: Set by the execution planner.
-    std::string train_name;
+    std::string trainName;
     // Why it exists: To specify where this specific run executes.
     // What it tracks: The resolved backend choice for this run instance.
     // What mutates it: Plucked from the combinatorial expansion of the train config.
@@ -521,19 +521,19 @@ struct FeExecutionRun {
     // Why it exists: To bind a concrete learning rate for this execution.
     // What it tracks: The chosen learning rate value.
     // What mutates it: Assigned during run generation.
-    std::optional<FeValue> learning_rate;
+    std::optional<FeValue> learningRate;
     // Why it exists: To clarify what is being minimized.
     // What it tracks: The name of the loss or objective variable for this run.
     // What mutates it: Picked from the train config options.
-    std::optional<std::string> objective_symbol;
+    std::optional<std::string> objectiveSymbol;
     // Why it exists: To instruct the backward pass where to fetch the gradient seed.
     // What it tracks: Whether the objective is a parameter, output, or local intermediate.
     // What mutates it: Resolved by checking the symbol against model scope.
-    ObjectiveSource objective_source = ObjectiveSource::Unknown;
+    ObjectiveSource objectiveSource = ObjectiveSource::Unknown;
     // Why it exists: To ensure the objective is mathematically valid for optimization (e.g., a scalar).
     // What it tracks: The resolved type of the objective symbol.
     // What mutates it: Looked up during objective resolution.
-    FeType objective_type;
+    FeType objectiveType;
     // Why it exists: To bound the length of this specific training run.
     // What it tracks: The concrete number of training steps.
     // What mutates it: Plucked from the train config variants.
@@ -546,7 +546,7 @@ struct FeExecutionPlan {
     // Why it exists: To identify the main entry point for graph building.
     // What it tracks: The name of the top-level layer or function to execute.
     // What mutates it: Set when an execution plan is formulated from the module.
-    std::string model_entry;
+    std::string modelEntry;
     // Why it exists: To manage a batch of tasks (like hyperparameter sweeps).
     // What it tracks: A collection of distinct execution runs to be performed.
     // What mutates it: Accumulated by the planner expanding config variants.
@@ -580,7 +580,7 @@ struct LoweredModule {
     // Why it exists: To provide a recipe for executing the program.
     // What it tracks: The synthesized execution strategy tying models to runs.
     // What mutates it: Generated as a final step in frontend lowering.
-    std::optional<FeExecutionPlan> execution_plan;
+    std::optional<FeExecutionPlan> executionPlan;
 };
 
 using FrontendResult = std::variant<LoweredModule, Diagnostic>;
@@ -596,14 +596,14 @@ public:
     FrontendResult lower();
 
     // Retrieves and clears the most recent diagnostic error encountered.
-    [[nodiscard]] std::optional<Diagnostic> take_last_diagnostic();
+    [[nodiscard]] std::optional<Diagnostic> takeLastDiagnostic();
 
 private:
     struct EvaluatedConfigField {
         // Why it exists: To detect circular dependencies in config field evaluation.
         // What it tracks: True while a config field is actively being computed.
         // What mutates it: Set to true when evaluation starts, false when it ends.
-        bool in_progress = false;
+        bool inProgress = false;
         // Why it exists: To memoize evaluated config fields.
         // What it tracks: True if the field has been successfully evaluated.
         // What mutates it: Set to true once evaluation concludes successfully.
@@ -621,81 +621,81 @@ private:
     // Why it exists: To access previously analyzed type/scope information.
     // What it tracks: Name resolution and type metadata from the semantic phase.
     // What mutates it: Passed via constructor; immutable reference.
-    const SemanticInfo& semantic_info_;
+    const SemanticInfo& semanticInfo_;
     // Why it exists: To allow quick lookup of config AST nodes during evaluation.
     // What it tracks: A mapping from config block names to their AST definitions.
     // What mutates it: Populated during initialization of the lowerer.
-    std::map<std::string, const Config*> config_defs_;
+    std::map<std::string, const Config*> configDefs_;
     // Arena for all allocated FeExprs during lowering
     std::unique_ptr<Arena> arena_;
     // Why it exists: To store memoized field results and prevent redundant work.
     // What it tracks: Evaluated states for each field in each config block.
     // What mutates it: Updated as each config field is evaluated.
-    std::map<std::string, std::map<std::string, EvaluatedConfigField>> config_field_cache_;
+    std::map<std::string, std::map<std::string, EvaluatedConfigField>> configFieldCache_;
     // Why it exists: To resolve names at the module level.
     // What it tracks: Types of globally declared symbols.
     // What mutates it: Modified when global variables or functions are encountered.
-    std::map<std::string, FeType> global_symbols_;
+    std::map<std::string, FeType> globalSymbols_;
     // Why it exists: To resolve names within the local scope.
     // What it tracks: Types of symbols active in the current function or block.
     // What mutates it: Pushed/popped or mutated as scopes are entered and exited.
-    std::map<std::string, FeType> current_symbols_;
+    std::map<std::string, FeType> currentSymbols_;
     // Why it exists: To associate context (like layer state) with current evaluation.
     // What it tracks: The name of the layer or function currently being lowered.
     // What mutates it: Set when entering a function/layer; cleared on exit.
-    std::optional<std::string> current_owner_;
+    std::optional<std::string> currentOwner_;
     // Why it exists: To propagate errors gracefully.
     // What it tracks: The most recent error encountered during lowering.
-    // What mutates it: Assigned when a diagnostic is emitted; consumed via take_last_diagnostic().
-    std::optional<Diagnostic> last_diagnostic_;
+    // What mutates it: Assigned when a diagnostic is emitted; consumed via takeLastDiagnostic().
+    std::optional<Diagnostic> lastDiagnostic_;
 
-    std::variant<FeExprPtr, Diagnostic> lower_expr(const Expr& expr);
-    std::variant<FeExprPtr, Diagnostic> lower_arrow_expr(const Expr& expr);
-    std::variant<FeExprPtr, Diagnostic> lower_arrow_stage_expr(const Expr& expr, FeExprPtr current);
-    std::variant<FeExprPtr, Diagnostic> lower_arrow_call_stage(
+    std::variant<FeExprPtr, Diagnostic> lowerExpr(const Expr& expr);
+    std::variant<FeExprPtr, Diagnostic> lowerArrowExpr(const Expr& expr);
+    std::variant<FeExprPtr, Diagnostic> lowerArrowStageExpr(const Expr& expr, FeExprPtr current);
+    std::variant<FeExprPtr, Diagnostic> lowerArrowCallStage(
         const std::string& callee,
         const std::vector<CallArgument>& args,
         const SourceSpan& span,
         FeExprPtr current
     );
-    std::variant<FeExprPtr, Diagnostic> lower_semantic_arrow_call_stage(
+    std::variant<FeExprPtr, Diagnostic> lowerSemanticArrowCallStage(
         const SemanticCallInfo& call,
         const std::string& callee,
         const std::vector<CallArgument>& args,
         FeExprPtr current
     );
-    std::variant<std::vector<FeStmt>, Diagnostic> lower_scope(const Stmt& stmt);
-    std::variant<FeStmt, Diagnostic> lower_stmt(const Stmt& stmt);
-    std::variant<FeFunction, Diagnostic> lower_function(const Function& function);
-    std::variant<FeLayer, Diagnostic> lower_layer(const Layer& layer);
-    std::variant<FeConfig, Diagnostic> lower_config(const Config& config);
-    std::variant<FeTrain, Diagnostic> lower_train_config(const Config& config);
-    std::variant<FeExecutionPlan, Diagnostic> build_execution_plan(const LoweredModule& module);
-    bool resolve_objective_stmt(const FeStmt& stmt, const std::string& objective_symbol, FeExecutionRun& run) const;
-    std::variant<FeValue, Diagnostic> eval_constant_expr(const Expr& expr);
-    std::variant<std::vector<FeValue>, Diagnostic> eval_constant_field_values(const Expr& expr);
-    std::variant<FeValue, Diagnostic> eval_config_field(
-        const std::string& config_name,
-        const std::string& field_name,
+    std::variant<std::vector<FeStmt>, Diagnostic> lowerScope(const Stmt& stmt);
+    std::variant<FeStmt, Diagnostic> lowerStmt(const Stmt& stmt);
+    std::variant<FeFunction, Diagnostic> lowerFunction(const Function& function);
+    std::variant<FeLayer, Diagnostic> lowerLayer(const Layer& layer);
+    std::variant<FeConfig, Diagnostic> lowerConfig(const Config& config);
+    std::variant<FeTrain, Diagnostic> lowerTrainConfig(const Config& config);
+    std::variant<FeExecutionPlan, Diagnostic> buildExecutionPlan(const LoweredModule& module);
+    bool resolveObjectiveStmt(const FeStmt& stmt, const std::string& objectiveSymbol, FeExecutionRun& run) const;
+    std::variant<FeValue, Diagnostic> evalConstantExpr(const Expr& expr);
+    std::variant<std::vector<FeValue>, Diagnostic> evalConstantFieldValues(const Expr& expr);
+    std::variant<FeValue, Diagnostic> evalConfigField(
+        const std::string& configName,
+        const std::string& fieldName,
         const SourceSpan& span
     );
-    std::variant<FeValue, Diagnostic> eval_binary(TokenType op, const FeValue& lhs, const FeValue& rhs, const SourceSpan& span);
-    std::variant<FeValue, Diagnostic> eval_unary(TokenType op, const FeValue& operand, const SourceSpan& span);
-    std::optional<SemanticCallInfo> semantic_call_for_expr(const Expr& expr, const std::string& callee) const;
-    std::optional<SemanticCallInfo> semantic_call_for_arrow_stage(const std::string& callee, const SourceSpan& span) const;
-    std::optional<SemanticIdentifierInfo> semantic_identifier_for_expr(const Expr& expr, const std::string& name) const;
-    std::optional<SemanticAssignmentInfo> semantic_assignment_for_stmt(const Stmt& stmt, const std::string& name) const;
-    std::optional<SemanticConfigFieldAccessInfo> semantic_config_field_access_for_expr(const Expr& expr) const;
-    std::optional<SemanticDeclarationInfo> semantic_declaration_for_stmt(const Stmt& stmt, const std::string& name) const;
-    std::optional<FeType> semantic_type_for_expr(const Expr& expr) const;
-    std::variant<FeType, Diagnostic> required_semantic_type_for_expr(const Expr& expr, const std::string& context);
-    void bind_symbol(const std::string& name, FeType type);
-    std::optional<FeType> find_symbol(const std::string& name) const;
+    std::variant<FeValue, Diagnostic> evalBinary(TokenType op, const FeValue& lhs, const FeValue& rhs, const SourceSpan& span);
+    std::variant<FeValue, Diagnostic> evalUnary(TokenType op, const FeValue& operand, const SourceSpan& span);
+    std::optional<SemanticCallInfo> semanticCallForExpr(const Expr& expr, const std::string& callee) const;
+    std::optional<SemanticCallInfo> semanticCallForArrowStage(const std::string& callee, const SourceSpan& span) const;
+    std::optional<SemanticIdentifierInfo> semanticIdentifierForExpr(const Expr& expr, const std::string& name) const;
+    std::optional<SemanticAssignmentInfo> semanticAssignmentForStmt(const Stmt& stmt, const std::string& name) const;
+    std::optional<SemanticConfigFieldAccessInfo> semanticConfigFieldAccessForExpr(const Expr& expr) const;
+    std::optional<SemanticDeclarationInfo> semanticDeclarationForStmt(const Stmt& stmt, const std::string& name) const;
+    std::optional<FeType> semanticTypeForExpr(const Expr& expr) const;
+    std::variant<FeType, Diagnostic> requiredSemanticTypeForExpr(const Expr& expr, const std::string& context);
+    void bindSymbol(const std::string& name, FeType type);
+    std::optional<FeType> findSymbol(const std::string& name) const;
     Diagnostic error(const std::string& message);
-    Diagnostic error_span(const SourceSpan& span, const std::string& message);
+    Diagnostic errorSpan(const SourceSpan& span, const std::string& message);
 };
 
-FeType lower_type(const Type& type);
-std::variant<FeBinaryOp, Diagnostic> lower_binary_op(TokenType token, const SourceSpan& span);
-std::string lowered_module_summary(const LoweredModule& module);
-std::string frontend_ir_to_string(const LoweredModule& module);
+FeType lowerType(const Type& type);
+std::variant<FeBinaryOp, Diagnostic> lowerBinaryOp(TokenType token, const SourceSpan& span);
+std::string loweredModuleSummary(const LoweredModule& module);
+std::string frontendIrToString(const LoweredModule& module);

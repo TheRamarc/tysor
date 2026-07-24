@@ -63,11 +63,11 @@ struct GraphTensorType {
     // Why it exists: To distinguish between unknown rank and zero-rank (scalar).
     // What it tracks: True if the rank of the tensor is determined.
     // What mutates it: Set to true if shape vector completely describes dimensions.
-    bool has_known_rank = false;
+    bool hasKnownRank = false;
 };
 
 // Represents a trainable or non-trainable parameter associated with a graph value.
-// It links the underlying value_id with parameter metadata such as name and shape.
+// It links the underlying valueId with parameter metadata such as name and shape.
 struct GraphParameter {
     // Why it exists: To declare a new symbol in the local scope.
     // What it tracks: The variable's text identifier.
@@ -80,15 +80,15 @@ struct GraphParameter {
     // Why it exists: To link a parameter to the structure that owns it.
     // What it tracks: The value ID of the layer or tuple that logically owns this parameter.
     // What mutates it: Assigned during graph compilation when layers are flattened.
-    std::size_t owner_value = 0;
+    std::size_t ownerValue = 0;
     // Why it exists: To connect the parameter metadata to its concrete dataflow node.
     // What it tracks: The graph value ID that produces or represents this parameter.
     // What mutates it: Assigned when the parameter node is added to the graph.
-    std::size_t value_id = 0;
+    std::size_t valueId = 0;
     // Why it exists: To enforce shape and type constraints on the parameter.
     // What it tracks: The data type and dimensionality of the parameter buffer.
     // What mutates it: Established during parameter creation.
-    GraphTensorType tensor_type;
+    GraphTensorType tensorType;
     // Why it exists: To determine if gradients should be computed and applied to it.
     // What it tracks: Whether this parameter is subject to optimization updates.
     // What mutates it: Set based on frontend configuration; immutable.
@@ -113,22 +113,22 @@ struct GraphValue {
     // Why it exists: To differentiate computed intermediates from persistent state.
     // What it tracks: True if this value corresponds to a persistent model parameter.
     // What mutates it: Set to true when the value is generated from a layer constructor or explicit param.
-    bool is_parameter = false;
+    bool isParameter = false;
     // Why it exists: To instruct the autodiff engine whether this value needs a gradient.
     // What it tracks: True if a parameter is trainable or if an intermediate depends on a trainable param.
     // What mutates it: Initially set by parameter flags; propagated forward during graph analysis.
-    bool requires_grad = false;
+    bool requiresGrad = false;
     // Why it exists: To identify top-level configuration values passed to the model.
     // What it tracks: True if the value comes directly from the model's signature.
     // What mutates it: Marked true for inputs derived from model function arguments.
-    bool is_model_parameter = false;
+    bool isModelParameter = false;
     // Why it exists: To enforce shape and type constraints on the parameter.
     // What it tracks: The data type and dimensionality of the parameter buffer.
     // What mutates it: Established during parameter creation.
-    std::optional<GraphTensorType> tensor_type = std::nullopt;
+    std::optional<GraphTensorType> tensorType = std::nullopt;
 };
 
-// Operation names are kept for diagnostics/backends, while op_id carries the
+// Operation names are kept for diagnostics/backends, while opId carries the
 // resolved builtin identity when the node maps to a known operation.
 struct GraphNode {
     // Why it exists: To specify how to compute the node.
@@ -146,11 +146,11 @@ struct GraphNode {
     // Why it exists: To bypass string matching for known builtin ops.
     // What it tracks: A stable identifier for resolved primitive operations.
     // What mutates it: Resolved during graph building if a match is found.
-    std::optional<std::string> op_id;
+    std::optional<std::string> opId;
     // Why it exists: To define what arithmetic or logic operation is performed.
     // What it tracks: The specific frontend binary operator (e.g., Add, Mul, Eq).
     // What mutates it: Assigned when parsing/lowering a binary operation.
-    FeBinaryOp binary_op = FeBinaryOp::Add;
+    FeBinaryOp binaryOp = FeBinaryOp::Add;
     // Why it exists: To hold a runtime or compile-time evaluated constant.
     // What it tracks: The exact underlying primitive or composite data value (using std::variant).
     // What mutates it: Constructed by factory methods and typically passed by value; mutable by assignment if needed.
@@ -170,7 +170,7 @@ struct GraphFunction {
     // Why it exists: To enforce type safety on function outputs.
     // What it tracks: The declared or inferred return type of the callable.
     // What mutates it: Resolved during semantic analysis.
-    FeType return_type;
+    FeType returnType;
     // Why it exists: To serve as the registry of all variables/dataflow edges in the graph.
     // What it tracks: Metadata for every value ID referenced in the function.
     // What mutates it: Appended to sequentially as expressions are lowered.
@@ -189,7 +189,7 @@ struct GraphFunction {
     // Why it exists: To bridge source-level symbols with graph IDs.
     // What it tracks: A mapping from original variable names to their graph value IDs.
     // What mutates it: Inserted into whenever a named variable is declared or assigned.
-    std::map<std::string, std::size_t> named_values;
+    std::map<std::string, std::size_t> namedValues;
 };
 
 // GraphLayer is the executable shape of a stateful layer module with parameters.
@@ -201,7 +201,7 @@ struct GraphLayer {
     // Why it exists: To enforce type safety on layer outputs.
     // What it tracks: The declared or inferred return type of the layer.
     // What mutates it: Resolved during semantic analysis.
-    FeType return_type;
+    FeType returnType;
     // Why it exists: To serve as the registry of all variables/dataflow edges in the graph.
     // What it tracks: Metadata for every value ID referenced in the layer.
     // What mutates it: Appended to sequentially as expressions are lowered.
@@ -224,14 +224,14 @@ struct GraphLayer {
     // Why it exists: To bridge source-level symbols with graph IDs for debugging and objectives.
     // What it tracks: A mapping from original variable names to their graph value IDs.
     // What mutates it: Inserted into whenever a named variable is declared or assigned.
-    std::map<std::string, std::size_t> named_values;
+    std::map<std::string, std::size_t> namedValues;
 };
 
 struct GraphBuildSkipped {
     // Why it exists: To identify which function or layer failed to compile.
     // What it tracks: The original name of the callable skipped.
     // What mutates it: Set upon encountering a build failure.
-    std::string function_name;
+    std::string functionName;
     // Why it exists: To inform the user why graph generation was skipped.
     // What it tracks: The error message or unsupported feature reason.
     // What mutates it: Extracted from diagnostics.
@@ -256,24 +256,24 @@ struct GraphModule {
 using GraphFunctionResult = std::variant<GraphFunction, Diagnostic>;
 using GraphLayerResult = std::variant<GraphLayer, Diagnostic>;
 
-inline GraphModule make_graph_module(GraphLayer layer) {
+inline GraphModule makeGraphModule(GraphLayer layer) {
     GraphModule module;
     module.layers.push_back(std::move(layer));
     return module;
 }
 
-inline GraphModule make_graph_module(GraphFunction function) {
+inline GraphModule makeGraphModule(GraphFunction function) {
     GraphModule module;
     module.functions.push_back(std::move(function));
     return module;
 }
 
-GraphFunctionResult build_graph_function(const FeFunction& function);
-GraphLayerResult build_graph_layer(const FeLayer& layer);
-std::variant<GraphModule, Diagnostic> build_graph_module(const LoweredModule& module);
-std::optional<Diagnostic> validate_graph_function(const GraphFunction& graph);
-std::optional<Diagnostic> validate_graph_layer(const GraphLayer& graph);
-std::string graph_dim_to_string(const GraphDim& dim);
-std::string graph_tensor_type_to_string(const GraphTensorType& type);
-std::string graph_module_summary(const GraphModule& module);
-std::string graph_ir_to_string(const GraphModule& module);
+GraphFunctionResult buildGraphFunction(const FeFunction& function);
+GraphLayerResult buildGraphLayer(const FeLayer& layer);
+std::variant<GraphModule, Diagnostic> buildGraphModule(const LoweredModule& module);
+std::optional<Diagnostic> validateGraphFunction(const GraphFunction& graph);
+std::optional<Diagnostic> validateGraphLayer(const GraphLayer& graph);
+std::string graphDimToString(const GraphDim& dim);
+std::string graphTensorTypeToString(const GraphTensorType& type);
+std::string graphModuleSummary(const GraphModule& module);
+std::string graphIrToString(const GraphModule& module);

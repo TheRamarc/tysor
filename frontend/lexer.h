@@ -155,7 +155,7 @@ using TokenizeResult = std::variant<std::vector<Token>, Diagnostic>;
  * @param kind The token type.
  * @return A constant character pointer representing the token's name.
  */
-const char* token_type_name(TokenType kind);
+const char* tokenTypeName(TokenType kind);
 
 /**
  * @brief Converts a Token to a detailed string, including its value and location.
@@ -163,7 +163,7 @@ const char* token_type_name(TokenType kind);
  * @param token The token to convert.
  * @return A string representing the token.
  */
-std::string token_to_string(const Token& token);
+std::string tokenToString(const Token& token);
 
 /**
  * @brief Tokenizes the provided source code, returning diagnostics on error.
@@ -174,7 +174,7 @@ std::string token_to_string(const Token& token);
  * @param source The source code string to tokenize.
  * @return A TokenizeResult containing either the tokens or an error.
  */
-TokenizeResult tokenize_with_diagnostic(std::string_view source);
+TokenizeResult tokenizeWithDiagnostic(std::string_view source);
 
 /**
  * @brief Tokenizes the provided source code, throwing on error.

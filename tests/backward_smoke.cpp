@@ -24,7 +24,7 @@ int main() {
 
     auto compiled_result = compile_source(source, options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&compiled_result)) {
-        std::cerr << diagnostic->to_string() << '\n';
+        std::cerr << diagnostic->toString() << '\n';
         return 1;
     }
     CompiledProgram compiled = std::get<CompiledProgram>(std::move(compiled_result));
@@ -36,7 +36,7 @@ int main() {
     GraphExecutorOptions executor_options;
     executor_options.tensor_shapes = options.tensor_shapes;
     if (auto diagnostic = run_backward_plan_module(compiled.lowered, *compiled.plan, "model", executor_options)) {
-        std::cerr << diagnostic->to_string() << '\n';
+        std::cerr << diagnostic->toString() << '\n';
         return 1;
     }
     return 0;

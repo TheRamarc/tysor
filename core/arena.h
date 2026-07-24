@@ -7,7 +7,7 @@
 
 class Arena {
 public:
-    Arena(std::size_t block_size = 64 * 1024);
+    Arena(std::size_t blockSize = 64 * 1024);
     ~Arena();
 
     // Prevent copying and moving to keep pointers stable
@@ -18,11 +18,11 @@ public:
 
     template <typename T, typename... Args>
     T* allocate(Args&&... args) {
-        void* ptr = allocate_bytes(sizeof(T), alignof(T));
+        void* ptr = allocateBytes(sizeof(T), alignof(T));
         return new (ptr) T(std::forward<Args>(args)...);
     }
 
-    void* allocate_bytes(std::size_t size, std::size_t alignment);
+    void* allocateBytes(std::size_t size, std::size_t alignment);
 
 private:
     struct Block {
@@ -35,5 +35,5 @@ private:
     };
 
     std::vector<Block> blocks_;
-    std::size_t block_size_;
+    std::size_t blockSize_;
 };

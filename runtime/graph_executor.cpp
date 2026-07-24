@@ -151,20 +151,20 @@ std::variant<SimpleTensor, Diagnostic> make_tensor_argument(
     }
     return make_synthetic_tensor(
         shape->second,
-        value.type.tensor_dtype.value_or("float32"),
+        value.type.tensorDtype.value_or("float32"),
         workspace
     );
 }
 
-const PlanParameter* find_plan_parameter_by_value(const ExecutionPlan& plan, std::size_t value_id) {
+const PlanParameter* find_plan_parameter_by_value(const ExecutionPlan& plan, std::size_t valueId) {
     auto found = std::find_if(plan.parameters.begin(), plan.parameters.end(), [&](const PlanParameter& parameter) {
-        return parameter.value_id == value_id;
+        return parameter.valueId == valueId;
     });
     return found == plan.parameters.end() ? nullptr : &*found;
 }
 
 std::optional<std::int64_t> known_graph_dim(const GraphTensorType& type, std::size_t index) {
-    if (!type.has_known_rank || index >= type.shape.size()) {
+    if (!type.hasKnownRank || index >= type.shape.size()) {
         return std::nullopt;
     }
     const GraphDim& dim = type.shape[index];
@@ -183,25 +183,25 @@ std::variant<SimpleTensor, Diagnostic> make_model_parameter_tensor(
     const PlanParameter& parameter,
     RuntimeTensorWorkspace* workspace
 ) {
-    const std::string dtype = parameter.tensor_type.dtype.value_or(value.type.tensor_dtype.value_or("float32"));
+    const std::string dtype = parameter.tensorType.dtype.value_or(value.type.tensorDtype.value_or("float32"));
     if (starts_with(parameter.name, "linear_") && parameter.role == "weight") {
-        auto in_features = known_graph_dim(parameter.tensor_type, 0);
-        auto out_features = known_graph_dim(parameter.tensor_type, 1);
+        auto in_features = known_graph_dim(parameter.tensorType, 0);
+        auto out_features = known_graph_dim(parameter.tensorType, 1);
         if (!in_features || !out_features) {
             return runtime_error("Linear weight parameter '" + parameter.name + "' requires known rank-2 shape");
         }
         return make_linear_weight(*in_features, *out_features, dtype, workspace);
     }
     if (starts_with(parameter.name, "linear_") && parameter.role == "bias") {
-        auto out_features = known_graph_dim(parameter.tensor_type, 0);
+        auto out_features = known_graph_dim(parameter.tensorType, 0);
         if (!out_features) {
             return runtime_error("Linear bias parameter '" + parameter.name + "' requires known rank-1 shape");
         }
         return make_linear_bias(*out_features, dtype, workspace);
     }
     if (starts_with(parameter.name, "embedding_") && parameter.role == "weight") {
-        auto num_embeddings = known_graph_dim(parameter.tensor_type, 0);
-        auto embedding_dim = known_graph_dim(parameter.tensor_type, 1);
+        auto num_embeddings = known_graph_dim(parameter.tensorType, 0);
+        auto embedding_dim = known_graph_dim(parameter.tensorType, 1);
         if (!num_embeddings || !embedding_dim) {
             return runtime_error("Embedding weight parameter '" + parameter.name + "' requires known rank-2 shape");
         }
@@ -245,25 +245,25 @@ std::variant<RuntimeValue, Diagnostic> constant_to_runtime_value(const FeValue& 
 }
 
 std::optional<OpId> resolved_op_id(const PlanOp& op) {
-    if (op.resolved_op) {
-        return op.resolved_op;
+    if (op.resolvedOp) {
+        return op.resolvedOp;
     }
-    return lookup_op_id(op.op);
+    return lookupOpId(op.op);
 }
 
 std::vector<std::size_t> compute_runtime_use_counts(const ExecutionPlan& plan) {
     std::vector<std::size_t> counts(plan.values.size(), 0);
     for (const auto& step : plan.steps) {
-        if (step.kind == PlanStepKind::ExecuteOp && step.op_index) {
-            for (const auto input_id : plan.ops[*step.op_index].inputs) {
+        if (step.kind == PlanStepKind::ExecuteOp && step.opIndex) {
+            for (const auto input_id : plan.ops[*step.opIndex].inputs) {
                 if (input_id < counts.size()) {
                     ++counts[input_id];
                 }
             }
             continue;
         }
-        if (step.kind == PlanStepKind::MaterializeOutput && step.value_id < counts.size()) {
-            ++counts[step.value_id];
+        if (step.kind == PlanStepKind::MaterializeOutput && step.valueId < counts.size()) {
+            ++counts[step.valueId];
         }
     }
     return counts;
@@ -308,11 +308,11 @@ std::variant<RuntimeValue, Diagnostic> execute_primitive(
 ) {
     // Evaluates primitive graph operations such as matmul and relu.
     // Maps the operation to the corresponding runtime tensor kernel.
-    const std::optional<OpId> op_id = resolved_op_id(op);
-    if (!op_id) {
+    const std::optional<OpId> opId = resolved_op_id(op);
+    if (!opId) {
         return runtime_error("Unsupported primitive graph op '" + op.op + "'");
     }
-    switch (*op_id) {
+    switch (*opId) {
         case OpId::Matmul: {
             auto lhs_value = require_value_ref(values, op.inputs[0], "lhs");
             if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs_value)) {
@@ -416,7 +416,7 @@ std::variant<RuntimeValue, Diagnostic> execute_binary(
 
     if (const auto* lhs_tensor = std::get_if<SimpleTensor>(&lhs)) {
         if (const auto* rhs_tensor = std::get_if<SimpleTensor>(&rhs)) {
-            auto result = elementwise_binary(op.binary_op, *lhs_tensor, *rhs_tensor, &workspace);
+            auto result = elementwise_binary(op.binaryOp, *lhs_tensor, *rhs_tensor, &workspace);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) {
                 return *diagnostic;
             }
@@ -426,7 +426,7 @@ std::variant<RuntimeValue, Diagnostic> execute_binary(
         if (const auto* diagnostic = std::get_if<Diagnostic>(&scalar)) {
             return *diagnostic;
         }
-        auto result = tensor_scalar_binary(op.binary_op, *lhs_tensor, std::get<double>(scalar), &workspace);
+        auto result = tensor_scalar_binary(op.binaryOp, *lhs_tensor, std::get<double>(scalar), &workspace);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) {
             return *diagnostic;
         }
@@ -438,7 +438,7 @@ std::variant<RuntimeValue, Diagnostic> execute_binary(
         if (const auto* diagnostic = std::get_if<Diagnostic>(&scalar)) {
             return *diagnostic;
         }
-        auto result = scalar_tensor_binary(op.binary_op, std::get<double>(scalar), *rhs_tensor, &workspace);
+        auto result = scalar_tensor_binary(op.binaryOp, std::get<double>(scalar), *rhs_tensor, &workspace);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) {
             return *diagnostic;
         }
@@ -455,7 +455,7 @@ std::variant<RuntimeValue, Diagnostic> execute_binary(
     }
     const double lhs_number = std::get<double>(left);
     const double rhs_number = std::get<double>(right);
-    switch (op.binary_op) {
+    switch (op.binaryOp) {
         case FeBinaryOp::Add:
             return RuntimeValue{lhs_number + rhs_number};
         case FeBinaryOp::Sub:
@@ -512,11 +512,11 @@ std::variant<RuntimeValue, Diagnostic> execute_library_call(
     const RuntimeValueStore& values,
     RuntimeTensorWorkspace& workspace
 ) {
-    const std::optional<OpId> op_id = resolved_op_id(op);
-    if (!op_id) {
+    const std::optional<OpId> opId = resolved_op_id(op);
+    if (!opId) {
         return runtime_error("Unsupported library graph call '" + op.op + "'");
     }
-    if (*op_id == OpId::RmsNorm) {
+    if (*opId == OpId::RmsNorm) {
         auto input_value = require_value_ref(values, op.inputs[0], "tensor");
         if (const auto* diagnostic = std::get_if<Diagnostic>(&input_value)) {
             return *diagnostic;
@@ -539,7 +539,7 @@ std::variant<RuntimeValue, Diagnostic> execute_library_call(
         }
         return RuntimeValue{std::get<SimpleTensor>(std::move(result))};
     }
-    if (*op_id == OpId::CrossEntropy) {
+    if (*opId == OpId::CrossEntropy) {
         auto logits_value = require_value_ref(values, op.inputs[0], "logits");
         auto target_value = require_value_ref(values, op.inputs[1], "target");
         if (const auto* diagnostic = std::get_if<Diagnostic>(&logits_value)) {
@@ -566,7 +566,7 @@ std::variant<RuntimeValue, Diagnostic> execute_library_call(
         }
         return RuntimeValue{std::get<SimpleTensor>(std::move(result))};
     }
-    if (*op_id == OpId::Reshape) {
+    if (*opId == OpId::Reshape) {
         std::vector<std::int64_t> shape;
         for (std::size_t index = 1; index < op.inputs.size(); ++index) {
             auto dim_value = require_value_ref(values, op.inputs[index], "reshape dim");
@@ -593,10 +593,10 @@ std::variant<RuntimeValue, Diagnostic> execute_library_call(
         }
         return RuntimeValue{std::get<SimpleTensor>(std::move(result))};
     }
-    if (*op_id == OpId::Transpose) {
+    if (*opId == OpId::Transpose) {
         return unary_tensor_result(op, values, "transpose input", workspace, apply_transpose);
     }
-    if (*op_id == OpId::Sum || *op_id == OpId::Mean) {
+    if (*opId == OpId::Sum || *opId == OpId::Mean) {
         auto input_value = require_value_ref(values, op.inputs[0], op.op + " input");
         if (const auto* diagnostic = std::get_if<Diagnostic>(&input_value)) {
             return *diagnostic;
@@ -614,7 +614,7 @@ std::variant<RuntimeValue, Diagnostic> execute_library_call(
             if (const auto* diagnostic = std::get_if<Diagnostic>(&axis)) {
                 return *diagnostic;
             }
-            auto result = *op_id == OpId::Sum
+            auto result = *opId == OpId::Sum
                 ? apply_sum_axis(tensor_ref(input), std::get<std::int64_t>(axis), &workspace)
                 : apply_mean_axis(tensor_ref(input), std::get<std::int64_t>(axis), &workspace);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) {
@@ -623,18 +623,18 @@ std::variant<RuntimeValue, Diagnostic> execute_library_call(
             return RuntimeValue{std::get<SimpleTensor>(std::move(result))};
         }
         return RuntimeValue{
-            *op_id == OpId::Sum
+            *opId == OpId::Sum
                 ? apply_sum(tensor_ref(input), &workspace)
                 : apply_mean(tensor_ref(input), &workspace)
         };
     }
-    if (*op_id == OpId::Sqrt) {
+    if (*opId == OpId::Sqrt) {
         return unary_tensor_result(op, values, "sqrt input", workspace, apply_sqrt);
     }
-    if (*op_id == OpId::Rsqrt) {
+    if (*opId == OpId::Rsqrt) {
         return unary_tensor_result(op, values, "rsqrt input", workspace, apply_rsqrt);
     }
-    if (*op_id == OpId::RepeatKv) {
+    if (*opId == OpId::RepeatKv) {
         auto input_value = require_value_ref(values, op.inputs[0], "repeat_kv input");
         auto repeats_value = require_value_ref(values, op.inputs[1], "repeats");
         if (const auto* diagnostic = std::get_if<Diagnostic>(&input_value)) {
@@ -657,13 +657,13 @@ std::variant<RuntimeValue, Diagnostic> execute_library_call(
         }
         return RuntimeValue{std::get<SimpleTensor>(std::move(result))};
     }
-    if (*op_id == OpId::FlattenHeads) {
+    if (*opId == OpId::FlattenHeads) {
         return unary_tensor_result(op, values, "flatten_heads input", workspace, apply_flatten_heads);
     }
-    if (*op_id == OpId::CausalMask) {
+    if (*opId == OpId::CausalMask) {
         return unary_tensor_result(op, values, "causal_mask input", workspace, apply_causal_mask);
     }
-    if (*op_id == OpId::Rope) {
+    if (*opId == OpId::Rope) {
         auto input_value = require_value_ref(values, op.inputs[0], "rope input");
         auto head_dim_value = require_value_ref(values, op.inputs[1], "rope head_dim");
         auto theta_value = require_value_ref(values, op.inputs[2], "rope theta");
@@ -707,14 +707,14 @@ std::variant<RuntimeValue, Diagnostic> execute_library_ctor(
     const PlanValue& output,
     const RuntimeValueStore& values
 ) {
-    const std::optional<OpId> op_id = resolved_op_id(op);
-    if (!op_id) {
+    const std::optional<OpId> opId = resolved_op_id(op);
+    if (!opId) {
         return runtime_error("Unsupported library constructor '" + op.op + "'");
     }
-    if (*op_id == OpId::Linear) {
+    if (*opId == OpId::Linear) {
         LinearClosure closure;
-        if (output.type.callable_return && output.type.callable_return->tensor_dtype) {
-            closure.dtype = *output.type.callable_return->tensor_dtype;
+        if (output.type.callableReturn && output.type.callableReturn->tensorDtype) {
+            closure.dtype = *output.type.callableReturn->tensorDtype;
         }
         if (op.inputs.size() == 1) {
             auto out_features_value = require_value(values, op.inputs[0], "out_features");
@@ -778,11 +778,11 @@ std::variant<RuntimeValue, Diagnostic> execute_library_ctor(
         }
         return RuntimeValue{closure};
     }
-    if (*op_id == OpId::Silu || *op_id == OpId::Gelu || *op_id == OpId::Tanh ||
-        *op_id == OpId::Sigmoid || *op_id == OpId::Softmax) {
-        return RuntimeValue{ActivationClosure{*op_id, 0.0}};
+    if (*opId == OpId::Silu || *opId == OpId::Gelu || *opId == OpId::Tanh ||
+        *opId == OpId::Sigmoid || *opId == OpId::Softmax) {
+        return RuntimeValue{ActivationClosure{*opId, 0.0}};
     }
-    if (*op_id == OpId::Dropout) {
+    if (*opId == OpId::Dropout) {
         auto probability_value = require_value(values, op.inputs[0], "probability");
         if (const auto* diagnostic = std::get_if<Diagnostic>(&probability_value)) {
             return *diagnostic;
@@ -793,7 +793,7 @@ std::variant<RuntimeValue, Diagnostic> execute_library_ctor(
         }
         return RuntimeValue{ActivationClosure{OpId::Dropout, std::get<double>(probability)}};
     }
-    if (*op_id == OpId::Embedding) {
+    if (*opId == OpId::Embedding) {
         auto num_value = require_value(values, op.inputs[0], "num_embeddings");
         auto dim_value = require_value(values, op.inputs[1], "embedding_dim");
         if (const auto* diagnostic = std::get_if<Diagnostic>(&num_value)) {
@@ -813,15 +813,15 @@ std::variant<RuntimeValue, Diagnostic> execute_library_ctor(
         EmbeddingClosure closure;
         closure.num_embeddings = std::get<std::int64_t>(num);
         closure.embedding_dim = std::get<std::int64_t>(dim);
-        if (output.type.callable_return && output.type.callable_return->tensor_dtype) {
-            closure.dtype = *output.type.callable_return->tensor_dtype;
+        if (output.type.callableReturn && output.type.callableReturn->tensorDtype) {
+            closure.dtype = *output.type.callableReturn->tensorDtype;
         }
         return RuntimeValue{closure};
     }
     return runtime_error("Unsupported library constructor '" + op.op + "'");
 }
 
-std::variant<RuntimeValue, Diagnostic> execute_op(
+std::variant<RuntimeValue, Diagnostic> executeOp(
     const PlanOp& op,
     const ExecutionPlan& plan,
     const PlanValue& output,
@@ -851,7 +851,7 @@ std::variant<RuntimeValue, Diagnostic> execute_op(
         return RuntimeValue{std::get<SimpleTensor>(std::move(result))};
     }
     if (const auto* closure = std::get_if<EmbeddingClosure>(&callee)) {
-        const std::string output_dtype = output.type.tensor_dtype.value_or(closure->dtype);
+        const std::string output_dtype = output.type.tensorDtype.value_or(closure->dtype);
         SimpleTensor weight = make_embedding_weight(closure->num_embeddings, closure->embedding_dim, output_dtype, &workspace);
         auto result = apply_embedding_with_parameters(tensor, weight, closure->num_embeddings, closure->embedding_dim, &workspace);
         workspace.release(std::move(weight));
@@ -924,11 +924,11 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
     for (const auto& step : plan.steps) {
         switch (step.kind) {
             case PlanStepKind::AllocateHostValue: {
-                const PlanValue& value = plan.values[step.value_id];
+                const PlanValue& value = plan.values[step.valueId];
                 if (value.placement != Placement::Host) {
                     return runtime_error("AllocateHostValue step requires a host-resident value");
                 }
-                if (value.is_parameter) {
+                if (value.isParameter) {
                     if (argument_index < arguments.size()) {
                         state.values.set(value.id, arguments[argument_index++]);
                     } else {
@@ -942,7 +942,7 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
                         state.values.set(value.id, std::get<SimpleTensor>(std::move(tensor)));
                     }
                 }
-                if (value.is_model_parameter) {
+                if (value.isModelParameter) {
                     if (value.id >= use_counts.size() || use_counts[value.id] == 0) {
                         break;
                     }
@@ -961,16 +961,16 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
             case PlanStepKind::AllocateDeviceValue:
                 return runtime_error("Local executor does not support device value allocation");
             case PlanStepKind::ExecuteOp: {
-                if (!step.op_index) {
+                if (!step.opIndex) {
                     return runtime_error("ExecuteOp step is missing an op index");
                 }
-                const PlanOp& op = plan.ops[*step.op_index];
+                const PlanOp& op = plan.ops[*step.opIndex];
                 if (op.backend != BackendKind::Local) {
                     return runtime_error("Local executor cannot run non-local plan operations");
                 }
 
                 std::optional<std::variant<RuntimeValue, Diagnostic>> result;
-                if (op.kind == PlanOpKind::LibraryCall && module != nullptr && !op.op_id && !op.resolved_op) {
+                if (op.kind == PlanOpKind::LibraryCall && module != nullptr && !op.opId && !op.resolvedOp) {
                     const ExecutionPlan* callee = find_plan(module, op.op);
                     if (callee != nullptr) {
                         std::vector<RuntimeValue> call_args;
@@ -1012,7 +1012,7 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
                             result = execute_library_ctor(op, plan.values[op.output], state.values);
                             break;
                         case PlanOpKind::Apply:
-                            result = execute_op(op, plan, plan.values[op.output], state.values, workspace);
+                            result = executeOp(op, plan, plan.values[op.output], state.values, workspace);
                             break;
                     }
                 }
@@ -1031,18 +1031,18 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
             }
             case PlanStepKind::MaterializeOutput: {
                 if (options.collect_intermediate_values) {
-                    auto found = require_value(state.values, step.value_id, "graph output value");
+                    auto found = require_value(state.values, step.valueId, "graph output value");
                     if (std::get_if<Diagnostic>(&found) != nullptr) {
                         return runtime_error("Runtime interpreter could not resolve the graph output value");
                     }
-                    state.outputs[step.value_id] = std::get<RuntimeValue>(std::move(found));
+                    state.outputs[step.valueId] = std::get<RuntimeValue>(std::move(found));
                 } else {
-                    RuntimeValue* found = state.values.get_mut(step.value_id);
+                    RuntimeValue* found = state.values.get_mut(step.valueId);
                     if (found == nullptr) {
                         return runtime_error("Runtime interpreter could not resolve the graph output value");
                     }
-                    state.outputs[step.value_id] = std::move(*found);
-                    state.values.reset(step.value_id);
+                    state.outputs[step.valueId] = std::move(*found);
+                    state.values.reset(step.valueId);
                 }
                 break;
             }
@@ -1089,15 +1089,15 @@ GraphExecutionResultVariant execute_execution_plan(const ExecutionPlan& plan, co
     RuntimeTensorWorkspace& workspace = options.tensor_workspace != nullptr ? *options.tensor_workspace : local_workspace;
 
     ExecutionPlan optimized_plan;
-    const ExecutionPlan* execution_plan = &plan;
+    const ExecutionPlan* executionPlan = &plan;
     if (!options.collect_intermediate_values) {
         PlanOptimizationOptions optimization_options;
-        optimization_options.preserve_intermediate_values = false;
-        optimized_plan = optimize_execution_plan(plan, optimization_options);
-        execution_plan = &optimized_plan;
+        optimization_options.preserveIntermediateValues = false;
+        optimized_plan = optimizeExecutionPlan(plan, optimization_options);
+        executionPlan = &optimized_plan;
     }
 
-    auto state = execute_plan_internal(*execution_plan, options, nullptr, {}, active_calls, workspace);
+    auto state = execute_plan_internal(*executionPlan, options, nullptr, {}, active_calls, workspace);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&state)) {
         return *diagnostic;
     }
@@ -1119,19 +1119,19 @@ GraphExecutionResultVariant execute_plan_module(
 
     PlanModule optimized_module;
     const PlanModule* execution_module = &module;
-    const ExecutionPlan* execution_plan = plan;
+    const ExecutionPlan* executionPlan = plan;
     if (!options.collect_intermediate_values) {
         PlanOptimizationOptions optimization_options;
-        optimization_options.preserve_intermediate_values = false;
-        optimized_module = optimize_plan_module(module, optimization_options);
+        optimization_options.preserveIntermediateValues = false;
+        optimized_module = optimizePlanModule(module, optimization_options);
         execution_module = &optimized_module;
-        execution_plan = find_plan(execution_module, entry);
-        if (execution_plan == nullptr) {
+        executionPlan = find_plan(execution_module, entry);
+        if (executionPlan == nullptr) {
             return runtime_error("Entry function '" + entry + "' not found in optimized execution plan module");
         }
     }
 
-    auto state = execute_plan_internal(*execution_plan, options, execution_module, {}, active_calls, workspace);
+    auto state = execute_plan_internal(*executionPlan, options, execution_module, {}, active_calls, workspace);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&state)) {
         return *diagnostic;
     }

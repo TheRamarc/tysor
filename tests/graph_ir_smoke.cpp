@@ -14,8 +14,8 @@
 
 namespace {
 
-GraphValue value(std::size_t id, bool is_parameter) {
-    return GraphValue{id, "v" + std::to_string(id), FeType::int_type(), is_parameter, false};
+GraphValue value(std::size_t id, bool isParameter) {
+    return GraphValue{id, "v" + std::to_string(id), FeType::intType(), isParameter, false};
 }
 
 GraphNode constant_node(std::size_t output) {
@@ -25,7 +25,7 @@ GraphNode constant_node(std::size_t output) {
         std::string{},
         std::nullopt,
         FeBinaryOp::Add,
-        FeValue::int_value(1),
+        FeValue::intValue(1),
         {},
     };
 }
@@ -42,27 +42,27 @@ GraphNode binary_node(std::size_t output, std::vector<std::size_t> inputs) {
     };
 }
 
-std::variant<Program, Diagnostic> parse_program(const std::string& source) {
-    TokenizeResult tokenized = tokenize_with_diagnostic(source);
+std::variant<Program, Diagnostic> parseProgram(const std::string& source) {
+    TokenizeResult tokenized = tokenizeWithDiagnostic(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&tokenized)) {
         return *diagnostic;
     }
     Parser parser(std::get<std::vector<Token>>(std::move(tokenized)));
-    ParseResult parsed = parser.parse_program();
+    ParseResult parsed = parser.parseProgram();
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
         return *diagnostic;
     }
     return std::get<Program>(std::move(parsed));
 }
 
-std::variant<LoweredModule, Diagnostic> lower_module(const std::string& source) {
-    auto parsed = parse_program(source);
+std::variant<LoweredModule, Diagnostic> lowerModule(const std::string& source) {
+    auto parsed = parseProgram(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
         return *diagnostic;
     }
 
     SemanticAnalyzer analyzer;
-    SemanticResult semantic_result = analyzer.analyze_with_info(std::get<Program>(parsed));
+    SemanticResult semantic_result = analyzer.analyzeWithInfo(std::get<Program>(parsed));
     if (const auto* diagnostic = std::get_if<Diagnostic>(&semantic_result)) {
         return *diagnostic;
     }
@@ -76,51 +76,51 @@ std::variant<LoweredModule, Diagnostic> lower_module(const std::string& source) 
 }
 
 bool graph_ok(const std::string& name, const std::string& source, std::size_t graphs, std::size_t nodes) {
-    auto lowered = lower_module(source);
+    auto lowered = lowerModule(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-        std::cerr << name << ": frontend lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << name << ": frontend lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
-    auto graph_result = build_graph_module(std::get<LoweredModule>(lowered));
+    auto graph_result = buildGraphModule(std::get<LoweredModule>(lowered));
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
-        std::cerr << name << ": graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << name << ": graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const GraphModule& module = std::get<GraphModule>(graph_result);
     std::size_t total_graphs = module.functions.size() + module.layers.size();
     std::size_t actual_nodes = !module.layers.empty() ? module.layers.front().nodes.size() : (!module.functions.empty() ? module.functions.front().nodes.size() : 0);
     if (total_graphs != graphs || actual_nodes != nodes) {
-        std::cerr << name << ": unexpected graph shape: " << graph_module_summary(module) << '\n'
-                  << graph_ir_to_string(module) << '\n';
+        std::cerr << name << ": unexpected graph shape: " << graphModuleSummary(module) << '\n'
+                  << graphIrToString(module) << '\n';
         return false;
     }
     return true;
 }
 
 std::variant<GraphLayer, Diagnostic> graph_from_source(const std::string& source) {
-    auto lowered = lower_module(source);
+    auto lowered = lowerModule(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
         return *diagnostic;
     }
     LoweredModule module = std::get<LoweredModule>(std::move(lowered));
     if (!module.layers.empty()) {
-        return build_graph_layer(module.layers.front());
+        return buildGraphLayer(module.layers.front());
     }
     if (!module.functions.empty()) {
-        auto res = build_graph_function(module.functions.front());
+        auto res = buildGraphFunction(module.functions.front());
         if (const auto* diagnostic = std::get_if<Diagnostic>(&res)) {
             return *diagnostic;
         }
         auto g_fn = std::get<GraphFunction>(res);
         GraphLayer layer;
         layer.name = g_fn.name;
-        layer.return_type = g_fn.return_type;
+        layer.returnType = g_fn.returnType;
         layer.values = g_fn.values;
         layer.nodes = g_fn.nodes;
         layer.inputs = g_fn.inputs;
         layer.outputs = g_fn.outputs;
-        layer.named_values = g_fn.named_values;
+        layer.namedValues = g_fn.namedValues;
         return layer;
     }
     return Diagnostic::error(DiagnosticCode::TestError, "expected lowered layer");
@@ -128,14 +128,14 @@ std::variant<GraphLayer, Diagnostic> graph_from_source(const std::string& source
 
 template <typename GraphT>
 const GraphTensorType* named_tensor_type(const GraphT& graph, const std::string& name) {
-    auto found = graph.named_values.find(name);
-    if (found == graph.named_values.end()) {
+    auto found = graph.namedValues.find(name);
+    if (found == graph.namedValues.end()) {
         return nullptr;
     }
     if (found->second >= graph.values.size()) {
         return nullptr;
     }
-    return graph.values[found->second].tensor_type ? &*graph.values[found->second].tensor_type : nullptr;
+    return graph.values[found->second].tensorType ? &*graph.values[found->second].tensorType : nullptr;
 }
 
 template <typename GraphT>
@@ -150,7 +150,7 @@ bool expect_named_tensor(
         std::cerr << test_name << ": missing tensor metadata for '" << value_name << "'\n";
         return false;
     }
-    const std::string actual = graph_tensor_type_to_string(*tensor);
+    const std::string actual = graphTensorTypeToString(*tensor);
     if (actual != expected) {
         std::cerr << test_name << ": expected '" << value_name << "' tensor " << expected
                   << ", got " << actual << '\n';
@@ -163,11 +163,11 @@ template <typename GraphT>
 const GraphParameter* find_graph_parameter(
     const GraphT& graph,
     const std::string& role,
-    std::size_t owner_value
+    std::size_t ownerValue
 ) {
     if constexpr (std::is_same_v<GraphT, GraphLayer>) {
         auto found = std::find_if(graph.parameters.begin(), graph.parameters.end(), [&](const GraphParameter& parameter) {
-            return parameter.role == role && parameter.owner_value == owner_value;
+            return parameter.role == role && parameter.ownerValue == ownerValue;
         });
         return found == graph.parameters.end() ? nullptr : &*found;
     } else {
@@ -178,10 +178,10 @@ const GraphParameter* find_graph_parameter(
 const PlanParameter* find_plan_parameter(
     const ExecutionPlan& plan,
     const std::string& role,
-    std::size_t owner_value
+    std::size_t ownerValue
 ) {
     auto found = std::find_if(plan.parameters.begin(), plan.parameters.end(), [&](const PlanParameter& parameter) {
-        return parameter.role == role && parameter.owner_value == owner_value;
+        return parameter.role == role && parameter.ownerValue == ownerValue;
     });
     return found == plan.parameters.end() ? nullptr : &*found;
 }
@@ -191,49 +191,49 @@ bool expect_parameter(
     const std::string& test_name,
     const GraphT& graph,
     const std::string& role,
-    std::size_t owner_value,
+    std::size_t ownerValue,
     const std::string& expected_name,
     const std::string& expected_tensor
 ) {
-    const GraphParameter* parameter = find_graph_parameter(graph, role, owner_value);
+    const GraphParameter* parameter = find_graph_parameter(graph, role, ownerValue);
     if (parameter == nullptr) {
         std::cerr << test_name << ": missing graph parameter role=" << role
-                  << " owner=%" << owner_value << '\n';
+                  << " owner=%" << ownerValue << '\n';
         return false;
     }
-    if (parameter->value_id >= graph.values.size() || !graph.values[parameter->value_id].is_model_parameter) {
+    if (parameter->valueId >= graph.values.size() || !graph.values[parameter->valueId].isModelParameter) {
         std::cerr << test_name << ": parameter " << parameter->name
                   << " does not reference a model parameter value\n";
         return false;
     }
     if (parameter->name != expected_name ||
-        graph_tensor_type_to_string(parameter->tensor_type) != expected_tensor ||
+        graphTensorTypeToString(parameter->tensorType) != expected_tensor ||
         !parameter->trainable) {
         std::cerr << test_name << ": unexpected parameter " << parameter->name
-                  << " tensor=" << graph_tensor_type_to_string(parameter->tensor_type) << '\n';
+                  << " tensor=" << graphTensorTypeToString(parameter->tensorType) << '\n';
         return false;
     }
     return true;
 }
 
 bool matmul_relu_graph_ok() {
-    auto lowered = lower_module(
+    auto lowered = lowerModule(
         "layer model(x: tensor[float16], w: tensor[float16]): tensor[float16]:\n"
         "  y = matmul(x, w)\n"
         "  return relu(y)\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-        std::cerr << "matmul-relu-graph: frontend lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "matmul-relu-graph: frontend lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
-    auto graph_result = build_graph_module(std::get<LoweredModule>(lowered));
+    auto graph_result = buildGraphModule(std::get<LoweredModule>(lowered));
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
-        std::cerr << "matmul-relu-graph: graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "matmul-relu-graph: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const GraphModule& module = std::get<GraphModule>(graph_result);
     if (module.layers.size() != 1 || module.layers.front().nodes.size() != 2) {
-        std::cerr << "matmul-relu-graph: unexpected graph shape\n" << graph_ir_to_string(module) << '\n';
+        std::cerr << "matmul-relu-graph: unexpected graph shape\n" << graphIrToString(module) << '\n';
         return false;
     }
     const GraphLayer& graph = module.layers.front();
@@ -260,7 +260,7 @@ bool graph_infers_linear_symbolic_shape() {
         "  return y\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
-        std::cerr << "linear-shape-inference: graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "linear-shape-inference: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const GraphLayer& graph = std::get<GraphLayer>(graph_result);
@@ -272,10 +272,10 @@ bool graph_infers_linear_symbolic_shape() {
     }
     if (graph.parameters.size() != 2) {
         std::cerr << "linear-shape-inference: expected weight and bias parameters\n"
-                  << graph_ir_to_string(make_graph_module(graph)) << '\n';
+                  << graphIrToString(makeGraphModule(graph)) << '\n';
         return false;
     }
-    const std::size_t owner = graph.named_values.at("proj");
+    const std::size_t owner = graph.namedValues.at("proj");
     const std::string expected_weight = "linear_" + std::to_string(owner) + "_weight";
     const std::string expected_bias = "linear_" + std::to_string(owner) + "_bias";
     if (!expect_parameter("linear-shape-inference", graph, "weight", owner, expected_weight, "float32[3, 4]") ||
@@ -289,24 +289,24 @@ bool graph_infers_linear_symbolic_shape() {
         return node.kind == GraphNodeKind::PrimitiveCall && node.op == "matmul";
     });
     const auto has_bias_add = std::any_of(graph.nodes.begin(), graph.nodes.end(), [](const GraphNode& node) {
-        return node.kind == GraphNodeKind::Binary && node.binary_op == FeBinaryOp::Add;
+        return node.kind == GraphNodeKind::Binary && node.binaryOp == FeBinaryOp::Add;
     });
     if (has_apply || !has_matmul || !has_bias_add) {
         std::cerr << "linear-shape-inference: expected linear apply to lower to matmul plus bias add\n"
-                  << graph_ir_to_string(make_graph_module(graph)) << '\n';
+                  << graphIrToString(makeGraphModule(graph)) << '\n';
         return false;
     }
-    ExecutionPlan plan = compile_local_execution_plan(graph);
-    const auto y = graph.named_values.at("y");
-    if (!plan.values[y].tensor_type || graph_tensor_type_to_string(*plan.values[y].tensor_type) != "float32[batch, 4]") {
+    ExecutionPlan plan = compileLocalExecutionPlan(graph);
+    const auto y = graph.namedValues.at("y");
+    if (!plan.values[y].tensorType || graphTensorTypeToString(*plan.values[y].tensorType) != "float32[batch, 4]") {
         std::cerr << "linear-shape-inference: execution plan did not preserve inferred tensor metadata\n";
         return false;
     }
     const PlanParameter* weight = find_plan_parameter(plan, "weight", owner);
     if (weight == nullptr || weight->name != expected_weight ||
-        graph_tensor_type_to_string(weight->tensor_type) != "float32[3, 4]" ||
-        weight->value_id >= plan.values.size() ||
-        !plan.values[weight->value_id].is_model_parameter) {
+        graphTensorTypeToString(weight->tensorType) != "float32[3, 4]" ||
+        weight->valueId >= plan.values.size() ||
+        !plan.values[weight->valueId].isModelParameter) {
         std::cerr << "linear-shape-inference: execution plan did not preserve parameter metadata\n";
         return false;
     }
@@ -321,7 +321,7 @@ bool graph_infers_reshape_and_flatten_shapes() {
         "  return reshaped\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
-        std::cerr << "reshape-flatten-shape-inference: graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "reshape-flatten-shape-inference: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const GraphLayer& graph = std::get<GraphLayer>(graph_result);
@@ -337,14 +337,14 @@ bool graph_records_embedding_parameter() {
         "  return y\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
-        std::cerr << "embedding-parameter: graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "embedding-parameter: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const GraphLayer& graph = std::get<GraphLayer>(graph_result);
     if (!expect_named_tensor("embedding-parameter", graph, "y", "float32[batch, 8]")) {
         return false;
     }
-    const std::size_t owner = graph.named_values.at("tok");
+    const std::size_t owner = graph.namedValues.at("tok");
     return expect_parameter(
         "embedding-parameter",
         graph,
@@ -374,10 +374,10 @@ bool validation_accepts_valid_graph() {
     graph.values = {value(0, true), value(1, false)};
     graph.nodes = {constant_node(1)};
     graph.outputs = {1};
-    graph.named_values["x"] = 0;
+    graph.namedValues["x"] = 0;
 
-    if (auto diagnostic = validate_graph_function(graph)) {
-        std::cerr << "validation-valid: unexpected diagnostic: " << diagnostic->to_string() << '\n';
+    if (auto diagnostic = validateGraphFunction(graph)) {
+        std::cerr << "validation-valid: unexpected diagnostic: " << diagnostic->toString() << '\n';
         return false;
     }
     return true;
@@ -389,7 +389,7 @@ bool validation_rejects_missing_output() {
     graph.values = {value(0, true)};
     graph.outputs = {42};
 
-    auto diagnostic = validate_graph_function(graph);
+    auto diagnostic = validateGraphFunction(graph);
     if (!diagnostic || diagnostic->code != DiagnosticCode::GraphIrError ||
         diagnostic->severity != DiagnosticSeverity::Error || !diagnostic->help ||
         diagnostic->message.find("output 42") == std::string::npos) {
@@ -406,7 +406,7 @@ bool validation_rejects_read_before_production() {
     graph.nodes = {binary_node(1, {0, 1})};
     graph.outputs = {1};
 
-    auto diagnostic = validate_graph_function(graph);
+    auto diagnostic = validateGraphFunction(graph);
     if (!diagnostic || diagnostic->message.find("before it is produced") == std::string::npos) {
         std::cerr << "validation-read-before-production: expected ordering diagnostic\n";
         return false;
@@ -421,7 +421,7 @@ bool validation_rejects_bad_binary_shape() {
     graph.nodes = {binary_node(1, {0})};
     graph.outputs = {1};
 
-    auto diagnostic = validate_graph_function(graph);
+    auto diagnostic = validateGraphFunction(graph);
     if (!diagnostic || diagnostic->message.find("exactly two inputs") == std::string::npos) {
         std::cerr << "validation-bad-binary: expected binary input-count diagnostic\n";
         return false;
@@ -430,50 +430,50 @@ bool validation_rejects_bad_binary_shape() {
 }
 
 bool graph_module_skips_non_straight_line() {
-    auto lowered = lower_module(
+    auto lowered = lowerModule(
         "layer model(x: tensor[float16]): tensor[float16]:\n"
         "  if true:\n"
         "    return x\n"
         "  return x\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-        std::cerr << "skip-if-graph: frontend lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "skip-if-graph: frontend lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
-    auto graph_result = build_graph_module(std::get<LoweredModule>(lowered));
+    auto graph_result = buildGraphModule(std::get<LoweredModule>(lowered));
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
-        std::cerr << "skip-if-graph: graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "skip-if-graph: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const GraphModule& module = std::get<GraphModule>(graph_result);
     if (!module.layers.empty() || module.skipped.size() != 1 ||
         module.skipped.front().reason.find("straight-line") == std::string::npos) {
-        std::cerr << "skip-if-graph: expected one skipped graph\n" << graph_ir_to_string(module) << '\n';
+        std::cerr << "skip-if-graph: expected one skipped graph\n" << graphIrToString(module) << '\n';
         return false;
     }
     return true;
 }
 
 bool frontend_only_list_decl_is_skipped() {
-    auto lowered = lower_module(
+    auto lowered = lowerModule(
         "layer model(x: tensor[float16]): tensor[float16]:\n"
         "  dims = [1, 2]\n"
         "  return x\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-        std::cerr << "list-decl-skip: frontend lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "list-decl-skip: frontend lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
-    auto graph_result = build_graph_module(std::get<LoweredModule>(lowered));
+    auto graph_result = buildGraphModule(std::get<LoweredModule>(lowered));
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
-        std::cerr << "list-decl-skip: graph lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "list-decl-skip: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const GraphModule& module = std::get<GraphModule>(graph_result);
     if (module.layers.size() != 1 || !module.skipped.empty() ||
         module.layers.front().values.size() != 1 || !module.layers.front().nodes.empty()) {
         std::cerr << "list-decl-skip: expected list declaration to stay frontend-only\n"
-                  << graph_ir_to_string(module) << '\n';
+                  << graphIrToString(module) << '\n';
         return false;
     }
     return true;

@@ -14,19 +14,19 @@ const char* plan_backend_name(BackendKind backend);
 
 Diagnostic plan_error(std::string message) {
     return Diagnostic::error(DiagnosticCode::BackendError, std::move(message))
-        .with_help("Execution plan validation failed before runtime/backend execution.");
+        .withHelp("Execution plan validation failed before runtime/backend execution.");
 }
 
-Diagnostic capability_error(BackendKind backend, std::size_t op_index, std::string reason) {
+Diagnostic capability_error(BackendKind backend, std::size_t opIndex, std::string reason) {
     return Diagnostic::error(
                DiagnosticCode::BackendError,
                std::string("Backend capability error in ") + plan_backend_name(backend) +
-                   " op #" + std::to_string(op_index) + ": " + reason
+                   " op #" + std::to_string(opIndex) + ": " + reason
            )
-        .with_help("The frontend accepted this program, but the selected backend cannot execute one of the planned operations yet.");
+        .withHelp("The frontend accepted this program, but the selected backend cannot execute one of the planned operations yet.");
 }
 
-const std::vector<std::string>& primitive_ops() {
+const std::vector<std::string>& primitiveOps() {
     static const std::vector<std::string> names{"matmul", "relu", "scale"};
     return names;
 }
@@ -36,7 +36,7 @@ const std::vector<std::string>& primitive_op_ids() {
     return names;
 }
 
-const std::vector<std::string>& library_ops() {
+const std::vector<std::string>& libraryOps() {
     static const std::vector<std::string> names{
         "rms_norm",
         "cross_entropy",
@@ -119,14 +119,14 @@ CapabilityCheck check_named_op(
     const std::vector<std::string>& supported_names,
     const std::vector<std::string>& supported_ids
 ) {
-    if (op.resolved_op && contains_string(supported_ids, op_id_name(*op.resolved_op))) {
+    if (op.resolvedOp && contains_string(supported_ids, opIdName(*op.resolvedOp))) {
         return supported();
     }
-    if (op.op_id && contains_string(supported_ids, *op.op_id)) {
+    if (op.opId && contains_string(supported_ids, *op.opId)) {
         return supported();
     }
-    auto resolved_id = lookup_op_id(op.op);
-    if (resolved_id && contains_string(supported_ids, op_id_name(*resolved_id))) {
+    auto resolved_id = lookupOpId(op.op);
+    if (resolved_id && contains_string(supported_ids, opIdName(*resolved_id))) {
         return supported();
     }
     if (contains_string(supported_names, op.op)) {
@@ -144,19 +144,19 @@ CapabilityCheck check_plan_op_capability_with_callables(
     const std::vector<std::string>& callable_functions
 ) {
     if (op.kind == PlanOpKind::LibraryCall &&
-        !op.op_id &&
-        !op.resolved_op &&
+        !op.opId &&
+        !op.resolvedOp &&
         contains_string(callable_functions, op.op)) {
         return supported();
     }
-    return check_plan_op_capability(backend, op);
+    return checkPlanOpCapability(backend, op);
 }
 
 std::optional<OpId> resolved_plan_op_id(const PlanOp& op) {
-    if (op.resolved_op) {
-        return op.resolved_op;
+    if (op.resolvedOp) {
+        return op.resolvedOp;
     }
-    return lookup_op_id(op.op);
+    return lookupOpId(op.op);
 }
 
 bool has_resolved_op(const PlanOp& op, OpId id) {
@@ -196,12 +196,12 @@ bool can_fuse_matmul_relu(
     const PlanStep& matmul_step = plan.steps[step_index];
     const PlanStep& relu_step = plan.steps[step_index + 1];
     if (matmul_step.kind != PlanStepKind::ExecuteOp || relu_step.kind != PlanStepKind::ExecuteOp ||
-        !matmul_step.op_index || !relu_step.op_index) {
+        !matmul_step.opIndex || !relu_step.opIndex) {
         return false;
     }
 
-    const PlanOp& matmul_op = plan.ops[*matmul_step.op_index];
-    const PlanOp& relu_op = plan.ops[*relu_step.op_index];
+    const PlanOp& matmul_op = plan.ops[*matmul_step.opIndex];
+    const PlanOp& relu_op = plan.ops[*relu_step.opIndex];
     if (matmul_op.backend != BackendKind::Local || relu_op.backend != BackendKind::Local ||
         matmul_op.kind != PlanOpKind::PrimitiveCall || relu_op.kind != PlanOpKind::PrimitiveCall ||
         !has_resolved_op(matmul_op, OpId::Matmul) || !has_resolved_op(relu_op, OpId::Relu)) {
@@ -253,11 +253,11 @@ PlanValue lower_plan_value(const GraphValue& value, Placement placement) {
         value.id,
         value.name,
         value.type,
-        value.is_parameter,
-        value.requires_grad,
+        value.isParameter,
+        value.requiresGrad,
         placement,
-        value.is_model_parameter,
-        value.tensor_type,
+        value.isModelParameter,
+        value.tensorType,
     };
 }
 
@@ -265,9 +265,9 @@ PlanParameter lower_plan_parameter(const GraphParameter& parameter) {
     return PlanParameter{
         parameter.name,
         parameter.role,
-        parameter.owner_value,
-        parameter.value_id,
-        parameter.tensor_type,
+        parameter.ownerValue,
+        parameter.valueId,
+        parameter.tensorType,
         parameter.trainable,
     };
 }
@@ -277,12 +277,12 @@ PlanOp lower_plan_op(const GraphNode& node, BackendKind backend) {
         lower_plan_kind(node.kind),
         node.output,
         node.op,
-        node.op_id,
-        node.binary_op,
+        node.opId,
+        node.binaryOp,
         node.constant,
         node.inputs,
         backend,
-        lookup_op_id(node.op),
+        lookupOpId(node.op),
     };
 }
 
@@ -291,9 +291,9 @@ ExecutionPlan make_base_plan(const GraphT& graph, BackendKind backend) {
     ExecutionPlan plan;
     plan.backend = backend;
     plan.name = graph.name;
-    plan.return_type = graph.return_type;
+    plan.returnType = graph.returnType;
     plan.outputs = graph.outputs;
-    plan.named_values = graph.named_values;
+    plan.namedValues = graph.namedValues;
     if constexpr (std::is_same_v<GraphT, GraphLayer>) {
         plan.parameters.reserve(graph.parameters.size());
         for (const auto& parameter : graph.parameters) {
@@ -378,22 +378,22 @@ std::string fe_type_to_plan_string(const FeType& type) {
         case FeTypeKind::Unknown:
             return "unknown";
         case FeTypeKind::Int:
-            return type.scalar_dtype.value_or("int");
+            return type.scalarDtype.value_or("int");
         case FeTypeKind::Float:
-            return type.scalar_dtype.value_or("float");
+            return type.scalarDtype.value_or("float");
         case FeTypeKind::Bool:
             return "bool";
         case FeTypeKind::Str:
             return "str";
         case FeTypeKind::Tensor:
-            if (type.tensor_dtype && type.tensor_shape_expr) {
-                return "tensor[" + *type.tensor_dtype + ", " + *type.tensor_shape_expr + "]";
+            if (type.tensorDtype && type.tensorShapeExpr) {
+                return "tensor[" + *type.tensorDtype + ", " + *type.tensorShapeExpr + "]";
             }
-            if (type.tensor_dtype) {
-                return "tensor[" + *type.tensor_dtype + "]";
+            if (type.tensorDtype) {
+                return "tensor[" + *type.tensorDtype + "]";
             }
-            if (type.tensor_shape_expr) {
-                return "tensor[" + *type.tensor_shape_expr + "]";
+            if (type.tensorShapeExpr) {
+                return "tensor[" + *type.tensorShapeExpr + "]";
             }
             return "tensor";
         case FeTypeKind::Tuple: {
@@ -421,7 +421,7 @@ std::string fe_type_to_plan_string(const FeType& type) {
             return out.str();
         }
         case FeTypeKind::Callable:
-            return "callable -> " + (type.callable_return ? fe_type_to_plan_string(*type.callable_return) : "void");
+            return "callable -> " + (type.callableReturn ? fe_type_to_plan_string(*type.callableReturn) : "void");
         // case FeTypeKind::Void:
         //     return "void";
         case FeTypeKind::None:
@@ -521,19 +521,19 @@ void append_value_ids(std::ostringstream& out, const std::vector<std::size_t>& v
 
 std::optional<Diagnostic> validate_step(const ExecutionPlan& plan, const std::set<std::size_t>& value_ids, std::size_t index) {
     const PlanStep& step = plan.steps[index];
-    if (value_ids.find(step.value_id) == value_ids.end()) {
+    if (value_ids.find(step.valueId) == value_ids.end()) {
         return plan_error(
             "Execution plan '" + plan.name + "' step #" + std::to_string(index) +
-            " references missing value " + std::to_string(step.value_id)
+            " references missing value " + std::to_string(step.valueId)
         );
     }
-    if (step.op_index && *step.op_index >= plan.ops.size()) {
+    if (step.opIndex && *step.opIndex >= plan.ops.size()) {
         return plan_error(
             "Execution plan '" + plan.name + "' step #" + std::to_string(index) +
-            " references missing op " + std::to_string(*step.op_index)
+            " references missing op " + std::to_string(*step.opIndex)
         );
     }
-    if ((step.kind == PlanStepKind::ExecuteOp || step.kind == PlanStepKind::DispatchDeviceOp) && !step.op_index) {
+    if ((step.kind == PlanStepKind::ExecuteOp || step.kind == PlanStepKind::DispatchDeviceOp) && !step.opIndex) {
         return plan_error(
             "Execution plan '" + plan.name + "' step #" + std::to_string(index) +
             " must reference an op"
@@ -561,11 +561,11 @@ ExecutionPlan compile_local_execution_plan_impl(const GraphT& graph) {
     return plan;
 }
 
-ExecutionPlan compile_local_execution_plan(const GraphFunction& graph) {
+ExecutionPlan compileLocalExecutionPlan(const GraphFunction& graph) {
     return compile_local_execution_plan_impl(graph);
 }
 
-ExecutionPlan compile_local_execution_plan(const GraphLayer& graph) {
+ExecutionPlan compileLocalExecutionPlan(const GraphLayer& graph) {
     return compile_local_execution_plan_impl(graph);
 }
 
@@ -574,7 +574,7 @@ ExecutionPlan compile_metal_execution_plan_impl(const GraphT& graph) {
     ExecutionPlan plan = make_base_plan(graph, BackendKind::Metal);
     for (const auto& value : graph.values) {
         const Placement placement =
-            value.type.kind == FeTypeKind::Tensor && !value.is_parameter && !value.is_model_parameter
+            value.type.kind == FeTypeKind::Tensor && !value.isParameter && !value.isModelParameter
                 ? Placement::Device
                 : Placement::Host;
         plan.values.push_back(lower_plan_value(value, placement));
@@ -582,7 +582,7 @@ ExecutionPlan compile_metal_execution_plan_impl(const GraphT& graph) {
     for (const auto& value : plan.values) {
         if (value.placement == Placement::Host) {
             plan.steps.push_back(PlanStep{PlanStepKind::AllocateHostValue, value.id, std::nullopt});
-            if (value.is_parameter || value.is_model_parameter) {
+            if (value.isParameter || value.isModelParameter) {
                 plan.steps.push_back(PlanStep{PlanStepKind::UploadToDevice, value.id, std::nullopt});
             }
         } else {
@@ -600,11 +600,11 @@ ExecutionPlan compile_metal_execution_plan_impl(const GraphT& graph) {
     return plan;
 }
 
-ExecutionPlan compile_metal_execution_plan(const GraphFunction& graph) {
+ExecutionPlan compileMetalExecutionPlan(const GraphFunction& graph) {
     return compile_metal_execution_plan_impl(graph);
 }
 
-ExecutionPlan compile_metal_execution_plan(const GraphLayer& graph) {
+ExecutionPlan compileMetalExecutionPlan(const GraphLayer& graph) {
     return compile_metal_execution_plan_impl(graph);
 }
 
@@ -612,12 +612,12 @@ template <typename GraphT>
 ExecutionPlan compile_execution_plan_impl(const GraphT& graph, BackendKind backend) {
     switch (backend) {
         case BackendKind::Metal:
-            return compile_metal_execution_plan(graph);
+            return compileMetalExecutionPlan(graph);
         case BackendKind::Local:
         case BackendKind::PyTorch:
         case BackendKind::Cuda:
         case BackendKind::Rocm: {
-            ExecutionPlan plan = compile_local_execution_plan(graph);
+            ExecutionPlan plan = compileLocalExecutionPlan(graph);
             plan.backend = backend;
             for (auto& op : plan.ops) {
                 op.backend = backend;
@@ -625,23 +625,23 @@ ExecutionPlan compile_execution_plan_impl(const GraphT& graph, BackendKind backe
             return plan;
         }
     }
-    ExecutionPlan plan = compile_local_execution_plan(graph);
+    ExecutionPlan plan = compileLocalExecutionPlan(graph);
     plan.backend = backend;
     return plan;
 }
 
-ExecutionPlan compile_execution_plan(const GraphFunction& graph, BackendKind backend) {
+ExecutionPlan compileExecutionPlan(const GraphFunction& graph, BackendKind backend) {
     return compile_execution_plan_impl(graph, backend);
 }
 
-ExecutionPlan compile_execution_plan(const GraphLayer& graph, BackendKind backend) {
+ExecutionPlan compileExecutionPlan(const GraphLayer& graph, BackendKind backend) {
     return compile_execution_plan_impl(graph, backend);
 }
 
-ExecutionPlan optimize_execution_plan(ExecutionPlan plan, const PlanOptimizationOptions& options) {
+ExecutionPlan optimizeExecutionPlan(ExecutionPlan plan, const PlanOptimizationOptions& options) {
     // Optimizes the compiled execution plan by fusing operations (like matmul + relu)
     // and pruning unnecessary intermediate allocations when safe to do so.
-    if (plan.backend != BackendKind::Local || options.preserve_intermediate_values || !options.enable_operator_fusion) {
+    if (plan.backend != BackendKind::Local || options.preserveIntermediateValues || !options.enableOperatorFusion) {
         return plan;
     }
 
@@ -654,8 +654,8 @@ ExecutionPlan optimize_execution_plan(ExecutionPlan plan, const PlanOptimization
     for (std::size_t step_index = 0; step_index < plan.steps.size(); ++step_index) {
         const PlanStep& step = plan.steps[step_index];
         if (can_fuse_matmul_relu(plan, use_counts, step_index)) {
-            const PlanOp& matmul_op = plan.ops[*step.op_index];
-            const PlanOp& relu_op = plan.ops[*plan.steps[step_index + 1].op_index];
+            const PlanOp& matmul_op = plan.ops[*step.opIndex];
+            const PlanOp& relu_op = plan.ops[*plan.steps[step_index + 1].opIndex];
             optimized_ops.push_back(make_matmul_relu_op(matmul_op, relu_op));
             optimized_steps.push_back(PlanStep{
                 PlanStepKind::ExecuteOp,
@@ -666,9 +666,9 @@ ExecutionPlan optimize_execution_plan(ExecutionPlan plan, const PlanOptimization
             continue;
         }
 
-        if ((step.kind == PlanStepKind::ExecuteOp || step.kind == PlanStepKind::DispatchDeviceOp) && step.op_index) {
-            optimized_ops.push_back(plan.ops[*step.op_index]);
-            optimized_steps.push_back(PlanStep{step.kind, step.value_id, optimized_ops.size() - 1});
+        if ((step.kind == PlanStepKind::ExecuteOp || step.kind == PlanStepKind::DispatchDeviceOp) && step.opIndex) {
+            optimized_ops.push_back(plan.ops[*step.opIndex]);
+            optimized_steps.push_back(PlanStep{step.kind, step.valueId, optimized_ops.size() - 1});
             continue;
         }
 
@@ -680,14 +680,14 @@ ExecutionPlan optimize_execution_plan(ExecutionPlan plan, const PlanOptimization
     return plan;
 }
 
-PlanModule optimize_plan_module(PlanModule module, const PlanOptimizationOptions& options) {
+PlanModule optimizePlanModule(PlanModule module, const PlanOptimizationOptions& options) {
     for (auto& plan : module.plans) {
-        plan = optimize_execution_plan(std::move(plan), options);
+        plan = optimizeExecutionPlan(std::move(plan), options);
     }
     return module;
 }
 
-PlanModuleResult compile_plan_module(const GraphModule& graph_module, BackendKind backend) {
+PlanModuleResult compilePlanModule(const GraphModule& graph_module, BackendKind backend) {
     PlanModule module;
     module.backend = backend;
     std::vector<std::string> callable_functions;
@@ -700,8 +700,8 @@ PlanModuleResult compile_plan_module(const GraphModule& graph_module, BackendKin
     }
 
     auto compile_item = [&](const auto& graph) -> std::optional<Diagnostic> {
-        ExecutionPlan plan = compile_execution_plan(graph, backend);
-        if (auto diagnostic = validate_execution_plan(plan)) {
+        ExecutionPlan plan = compileExecutionPlan(graph, backend);
+        if (auto diagnostic = validateExecutionPlan(plan)) {
             return diagnostic;
         }
         for (std::size_t index = 0; index < plan.ops.size(); ++index) {
@@ -729,18 +729,18 @@ PlanModuleResult compile_plan_module(const GraphModule& graph_module, BackendKin
         }
     }
     for (const auto& skipped : graph_module.skipped) {
-        module.skipped.push_back(PlanBuildSkipped{skipped.function_name, skipped.reason});
+        module.skipped.push_back(PlanBuildSkipped{skipped.functionName, skipped.reason});
     }
     return module;
 }
 
-BackendCapabilitySummary backend_capability_summary(BackendKind backend) {
+BackendCapabilitySummary backendCapabilitySummary(BackendKind backend) {
     BackendCapabilitySummary summary;
     summary.backend = backend;
-    summary.primitive_ops = primitive_ops();
-    summary.library_ops = library_ops();
+    summary.primitiveOps = primitiveOps();
+    summary.libraryOps = libraryOps();
     summary.constructors = constructor_ops();
-    summary.supports_binary_ops = true;
+    summary.supportsBinaryOps = true;
 
     switch (backend) {
         case BackendKind::Local:
@@ -781,24 +781,24 @@ BackendCapabilitySummary backend_capability_summary(BackendKind backend) {
     return summary;
 }
 
-CapabilityCheck check_plan_op_capability(BackendKind backend, const PlanOp& op) {
+CapabilityCheck checkPlanOpCapability(BackendKind backend, const PlanOp& op) {
     switch (op.kind) {
         case PlanOpKind::Constant:
             return supported();
         case PlanOpKind::Binary:
-            if (backend_capability_summary(backend).supports_binary_ops) {
+            if (backendCapabilitySummary(backend).supportsBinaryOps) {
                 return supported();
             }
             return unsupported(std::string(plan_backend_name(backend)) + " backend does not support binary operations");
         case PlanOpKind::PrimitiveCall:
-            if (op.resolved_op && *op.resolved_op == OpId::MatmulRelu) {
+            if (op.resolvedOp && *op.resolvedOp == OpId::MatmulRelu) {
                 return backend == BackendKind::Local
                     ? supported()
                     : unsupported(std::string(plan_backend_name(backend)) + " backend does not support fused matmul_relu");
             }
-            return check_named_op(backend, "primitive", op, primitive_ops(), primitive_op_ids());
+            return check_named_op(backend, "primitive", op, primitiveOps(), primitive_op_ids());
         case PlanOpKind::LibraryCall:
-            return check_named_op(backend, "library", op, library_ops(), library_op_ids());
+            return check_named_op(backend, "library", op, libraryOps(), library_op_ids());
         case PlanOpKind::LibraryCtor:
             return check_named_op(backend, "constructor", op, constructor_ops(), constructor_op_ids());
         case PlanOpKind::Apply:
@@ -807,9 +807,9 @@ CapabilityCheck check_plan_op_capability(BackendKind backend, const PlanOp& op) 
     return unsupported("operation is not supported");
 }
 
-std::optional<Diagnostic> validate_execution_plan_capabilities(const ExecutionPlan& plan) {
+std::optional<Diagnostic> validateExecutionPlanCapabilities(const ExecutionPlan& plan) {
     for (std::size_t index = 0; index < plan.ops.size(); ++index) {
-        CapabilityCheck check = check_plan_op_capability(plan.backend, plan.ops[index]);
+        CapabilityCheck check = checkPlanOpCapability(plan.backend, plan.ops[index]);
         if (check.status == CapabilityStatus::Unsupported) {
             return capability_error(
                 plan.backend,
@@ -821,7 +821,7 @@ std::optional<Diagnostic> validate_execution_plan_capabilities(const ExecutionPl
     return std::nullopt;
 }
 
-std::optional<Diagnostic> validate_execution_plan(const ExecutionPlan& plan) {
+std::optional<Diagnostic> validateExecutionPlan(const ExecutionPlan& plan) {
     std::set<std::size_t> value_ids;
     for (const auto& value : plan.values) {
         value_ids.insert(value.id);
@@ -842,7 +842,7 @@ std::optional<Diagnostic> validate_execution_plan(const ExecutionPlan& plan) {
             return plan_error("Execution plan '" + plan.name + "' output " + std::to_string(output) + " does not reference a value");
         }
     }
-    for (const auto& named : plan.named_values) {
+    for (const auto& named : plan.namedValues) {
         if (named.first.empty()) {
             return plan_error("Execution plan '" + plan.name + "' has an empty named value");
         }
@@ -861,16 +861,16 @@ std::optional<Diagnostic> validate_execution_plan(const ExecutionPlan& plan) {
         if (parameter.role.empty()) {
             return plan_error("Execution plan '" + plan.name + "' parameter '" + parameter.name + "' has an empty role");
         }
-        if (value_ids.find(parameter.owner_value) == value_ids.end()) {
+        if (value_ids.find(parameter.ownerValue) == value_ids.end()) {
             return plan_error(
                 "Execution plan '" + plan.name + "' parameter '" + parameter.name +
-                "' references missing owner value " + std::to_string(parameter.owner_value)
+                "' references missing owner value " + std::to_string(parameter.ownerValue)
             );
         }
-        if (value_ids.find(parameter.value_id) == value_ids.end()) {
+        if (value_ids.find(parameter.valueId) == value_ids.end()) {
             return plan_error(
                 "Execution plan '" + plan.name + "' parameter '" + parameter.name +
-                "' references missing value " + std::to_string(parameter.value_id)
+                "' references missing value " + std::to_string(parameter.valueId)
             );
         }
         if (!parameter_names.insert(parameter.name).second) {
@@ -914,7 +914,7 @@ std::optional<Diagnostic> validate_execution_plan(const ExecutionPlan& plan) {
     return std::nullopt;
 }
 
-std::string execution_plan_summary(const PlanModule& module) {
+std::string executionPlanSummary(const PlanModule& module) {
     std::ostringstream out;
     out << "plan=backend:" << plan_backend_name(module.backend)
         << " functions:" << module.plans.size()
@@ -922,18 +922,18 @@ std::string execution_plan_summary(const PlanModule& module) {
     return out.str();
 }
 
-std::string execution_plan_to_string(const PlanModule& module) {
+std::string executionPlanToString(const PlanModule& module) {
     std::ostringstream out;
-    out << execution_plan_summary(module) << '\n';
+    out << executionPlanSummary(module) << '\n';
     for (const auto& plan : module.plans) {
-        out << "execution_plan " << plan.name
+        out << "executionPlan " << plan.name
             << " backend=" << plan_backend_name(plan.backend)
             << " values=" << plan.values.size()
             << " parameters=" << plan.parameters.size()
             << " ops=" << plan.ops.size()
             << " steps=" << plan.steps.size()
             << " outputs=" << plan.outputs.size()
-            << " -> " << fe_type_to_plan_string(plan.return_type) << '\n';
+            << " -> " << fe_type_to_plan_string(plan.returnType) << '\n';
         for (const auto& value : plan.values) {
             out << "  %" << value.id;
             if (!value.name.empty()) {
@@ -941,16 +941,16 @@ std::string execution_plan_to_string(const PlanModule& module) {
             }
             out << ": " << fe_type_to_plan_string(value.type)
                 << " placement=" << placement_name(value.placement);
-            if (value.tensor_type) {
-                out << " tensor=" << graph_tensor_type_to_string(*value.tensor_type);
+            if (value.tensorType) {
+                out << " tensor=" << graphTensorTypeToString(*value.tensorType);
             }
-            if (value.is_parameter) {
+            if (value.isParameter) {
                 out << " param";
             }
-            if (value.requires_grad) {
-                out << " requires_grad";
+            if (value.requiresGrad) {
+                out << " requiresGrad";
             }
-            if (value.is_model_parameter) {
+            if (value.isModelParameter) {
                 out << " model_param";
             }
             out << '\n';
@@ -958,9 +958,9 @@ std::string execution_plan_to_string(const PlanModule& module) {
         for (const auto& parameter : plan.parameters) {
             out << "  param " << parameter.name
                 << " role=" << parameter.role
-                << " owner=%" << parameter.owner_value
-                << " value=%" << parameter.value_id
-                << " tensor=" << graph_tensor_type_to_string(parameter.tensor_type);
+                << " owner=%" << parameter.ownerValue
+                << " value=%" << parameter.valueId
+                << " tensor=" << graphTensorTypeToString(parameter.tensorType);
             if (parameter.trainable) {
                 out << " trainable";
             }
@@ -973,11 +973,11 @@ std::string execution_plan_to_string(const PlanModule& module) {
             if (!op.op.empty()) {
                 out << " op=" << op.op;
             }
-            if (op.op_id) {
-                out << " op_id=" << *op.op_id;
+            if (op.opId) {
+                out << " opId=" << *op.opId;
             }
             if (op.kind == PlanOpKind::Binary) {
-                out << " op=" << fe_binary_op_to_plan_string(op.binary_op);
+                out << " op=" << fe_binary_op_to_plan_string(op.binaryOp);
             }
             if (op.kind == PlanOpKind::Constant) {
                 out << " value=" << fe_value_to_plan_string(op.constant);
@@ -989,9 +989,9 @@ std::string execution_plan_to_string(const PlanModule& module) {
         for (std::size_t index = 0; index < plan.steps.size(); ++index) {
             const auto& step = plan.steps[index];
             out << "  step #" << index << ' ' << plan_step_kind_name(step.kind)
-                << " value=%" << step.value_id;
-            if (step.op_index) {
-                out << " op=#" << *step.op_index;
+                << " value=%" << step.valueId;
+            if (step.opIndex) {
+                out << " op=#" << *step.opIndex;
             }
             out << '\n';
         }
@@ -1000,7 +1000,7 @@ std::string execution_plan_to_string(const PlanModule& module) {
         out << '\n';
     }
     for (const auto& skipped : module.skipped) {
-        out << "// execution plan: " << skipped.function_name << "\n"
+        out << "// execution plan: " << skipped.functionName << "\n"
             << "// unavailable: " << skipped.reason << '\n';
     }
     return out.str();

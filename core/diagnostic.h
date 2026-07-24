@@ -24,7 +24,7 @@ enum class DiagnosticSeverity {
  * @param severity The severity level to convert.
  * @return A constant character pointer representing the severity name.
  */
-const char* diagnostic_severity_name(DiagnosticSeverity severity);
+const char* diagnosticSeverityName(DiagnosticSeverity severity);
 
 /**
  * @brief Represents all possible diagnostic error codes across the compiler.
@@ -46,8 +46,8 @@ enum class DiagnosticCode : uint16_t {
     TestError             // T0001
 };
 
-const char* get_diagnostic_code_string(DiagnosticCode code);
-const char* get_diagnostic_stage_string(DiagnosticCode code);
+const char* getDiagnosticCodeString(DiagnosticCode code);
+const char* getDiagnosticStageString(DiagnosticCode code);
 
 /**
  * @brief Represents a diagnostic message generated during various compilation stages.
@@ -89,7 +89,7 @@ struct Diagnostic {
      * 
      * Why it exists: Crucial for pointing users to the exact place in their code causing the issue.
      * What it tracks: The line and column spanning the erroneous syntax or semantics.
-     * What mutates/updates it: Initially empty or set at creation; can be updated by `with_span()` or `with_source_span()` to add context as the error bubbles up.
+     * What mutates/updates it: Initially empty or set at creation; can be updated by `withSpan()` or `withSourceSpan()` to add context as the error bubbles up.
      */
     std::optional<SourceSpan> span;
     
@@ -98,7 +98,7 @@ struct Diagnostic {
      * 
      * Why it exists: Improves developer experience by offering actionable solutions.
      * What it tracks: A secondary string giving guidance to resolve the diagnostic.
-     * What mutates/updates it: Initially empty; typically mutated/added via the `with_help()` method.
+     * What mutates/updates it: Initially empty; typically mutated/added via the `withHelp()` method.
      */
     std::optional<std::string> help;
 
@@ -139,37 +139,37 @@ struct Diagnostic {
      * @param column The column number.
      * @return A new Diagnostic instance with the updated span.
      */
-    [[nodiscard]] Diagnostic with_span(std::size_t line, std::size_t column) const;
+    [[nodiscard]] Diagnostic withSpan(std::size_t line, std::size_t column) const;
 
     /**
      * @brief Creates a copy of this diagnostic with a specified SourceSpan.
      * 
-     * @param source_span The SourceSpan to attach.
+     * @param sourceSpan The SourceSpan to attach.
      * @return A new Diagnostic instance with the updated span.
      */
-    [[nodiscard]] Diagnostic with_source_span(SourceSpan source_span) const;
+    [[nodiscard]] Diagnostic withSourceSpan(SourceSpan sourceSpan) const;
 
     /**
      * @brief Creates a copy of this diagnostic with a specified help message.
      * 
-     * @param help_text The help text to attach.
+     * @param helpText The help text to attach.
      * @return A new Diagnostic instance with the updated help text.
      */
-    [[nodiscard]] Diagnostic with_help(std::string help_text) const;
+    [[nodiscard]] Diagnostic withHelp(std::string helpText) const;
 
     /**
      * @brief Retrieves a human-readable label for the compilation stage.
      * 
      * @return A formatted string representing the stage (e.g., "Lexer", "Parser").
      */
-    [[nodiscard]] std::string stage_label() const;
+    [[nodiscard]] std::string stageLabel() const;
 
     /**
      * @brief Converts the entire diagnostic to a formatted string.
      * 
      * @return A string containing the stage, severity, message, location, code, and help text.
      */
-    [[nodiscard]] std::string to_string() const;
+    [[nodiscard]] std::string toString() const;
 };
 
 /**

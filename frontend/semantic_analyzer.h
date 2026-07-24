@@ -57,7 +57,7 @@ struct Symbol {
      * What it tracks: A boolean flag indicating callability.
      * What mutates/updates it: Determined and set during symbol resolution.
      */
-    bool is_callable = false;
+    bool isCallable = false;
 
     /**
      * @brief If callable, the expected return type.
@@ -66,7 +66,7 @@ struct Symbol {
      * What it tracks: An optional return Type.
      * What mutates/updates it: Populated for callables during declaration; empty otherwise.
      */
-    std::optional<Type> callable_return_type;
+    std::optional<Type> callableReturnType;
 
     /**
      * @brief The origin kind of the symbol.
@@ -98,7 +98,7 @@ struct Signature {
      * What it tracks: The Type returned on invocation.
      * What mutates/updates it: Set during definition analysis.
      */
-    Type return_type;
+    Type returnType;
 
     /**
      * @brief Expected types for the arguments.
@@ -107,7 +107,7 @@ struct Signature {
      * What it tracks: A list of parameter Types.
      * What mutates/updates it: Set during definition analysis.
      */
-    std::vector<Type> arg_types;
+    std::vector<Type> argTypes;
 
     /**
      * @brief Minimum number of arguments required.
@@ -116,7 +116,7 @@ struct Signature {
      * What it tracks: The minimum valid argument count.
      * What mutates/updates it: Computed from the argument list during definition analysis.
      */
-    std::size_t min_arity = 0;
+    std::size_t minArity = 0;
 
     /**
      * @brief Maximum number of arguments allowed.
@@ -125,7 +125,7 @@ struct Signature {
      * What it tracks: The total number of parameters.
      * What mutates/updates it: Computed from the argument list during definition analysis.
      */
-    std::size_t max_arity = 0;
+    std::size_t maxArity = 0;
 };
 
 /**
@@ -166,7 +166,7 @@ struct SemanticSymbol {
      * What it tracks: Integer depth (0 = global).
      * What mutates/updates it: Set based on current scope nesting level during analysis.
      */
-    std::size_t scope_depth = 0;
+    std::size_t scopeDepth = 0;
 
     /**
      * @brief Name of the function/layer that owns this symbol (if any).
@@ -289,7 +289,7 @@ struct SemanticAssignmentInfo {
      * What it tracks: The LHS identifier text.
      * What mutates/updates it: Populated from the AST.
      */
-    std::string target_name;
+    std::string targetName;
 
     /**
      * @brief The resolved target kind of the variable.
@@ -298,7 +298,7 @@ struct SemanticAssignmentInfo {
      * What it tracks: The SemanticSymbolKind of the target.
      * What mutates/updates it: Resolved by looking up the target name in the current scope.
      */
-    SemanticSymbolKind target_kind = SemanticSymbolKind::Local;
+    SemanticSymbolKind targetKind = SemanticSymbolKind::Local;
 
     /**
      * @brief The expected type of the target variable.
@@ -307,7 +307,7 @@ struct SemanticAssignmentInfo {
      * What it tracks: The target's registered Type.
      * What mutates/updates it: Found during scope lookup.
      */
-    Type target_type;
+    Type targetType;
 
     /**
      * @brief The inferred type of the assigned value.
@@ -316,7 +316,7 @@ struct SemanticAssignmentInfo {
      * What it tracks: The Type of the expression being assigned.
      * What mutates/updates it: Populated after analyzing the RHS expression.
      */
-    Type value_type;
+    Type valueType;
 
     /**
      * @brief The function/layer owning this assignment.
@@ -329,7 +329,7 @@ struct SemanticAssignmentInfo {
 };
 
 /**
- * @brief Validation info for a config field access (e.g. `cfg.learning_rate`).
+ * @brief Validation info for a config field access (e.g. `cfg.learningRate`).
  */
 struct SemanticConfigFieldAccessInfo {
     /**
@@ -348,7 +348,7 @@ struct SemanticConfigFieldAccessInfo {
      * What it tracks: The text of the base identifier.
      * What mutates/updates it: Extracted from the LHS of the member access.
      */
-    std::string config_name;
+    std::string configName;
 
     /**
      * @brief The name of the specific field within the config.
@@ -357,7 +357,7 @@ struct SemanticConfigFieldAccessInfo {
      * What it tracks: The text of the field identifier.
      * What mutates/updates it: Extracted from the RHS of the member access.
      */
-    std::string field_name;
+    std::string fieldName;
 
     /**
      * @brief The resolved type of the config field.
@@ -366,7 +366,7 @@ struct SemanticConfigFieldAccessInfo {
      * What it tracks: The type registered for this field in the configuration.
      * What mutates/updates it: Looked up from the config definition during analysis.
      */
-    Type field_type;
+    Type fieldType;
 
     /**
      * @brief The function/layer owning this access.
@@ -416,7 +416,7 @@ struct SemanticDeclarationInfo {
      * What it tracks: The final resolved Type.
      * What mutates/updates it: Inferred from the initializer or type annotation.
      */
-    Type final_type;
+    Type finalType;
 
     /**
      * @brief The function/layer owning this declaration.
@@ -466,7 +466,7 @@ struct SemanticCallInfo {
      * What it tracks: The Type returned by the callable.
      * What mutates/updates it: Looked up from the callable's signature.
      */
-    Type result_type;
+    Type resultType;
 
     /**
      * @brief The function/layer owning this call.
@@ -484,7 +484,7 @@ struct SemanticCallInfo {
      * What it tracks: A boolean flag indicating pipeline involvement.
      * What mutates/updates it: Set when traversing ArrowExpr branches.
      */
-    bool arrow_stage = false;
+    bool arrowStage = false;
 };
 
 /**
@@ -537,7 +537,7 @@ struct SemanticInfo {
      * What it tracks: Configuration member access types.
      * What mutates/updates it: Appended during AST traversal.
      */
-    std::vector<SemanticConfigFieldAccessInfo> config_field_accesses;
+    std::vector<SemanticConfigFieldAccessInfo> configFieldAccesses;
 
     /**
      * @brief Type and scope info for variable declarations.
@@ -574,12 +574,12 @@ public:
     /**
      * @brief Analyzes the program and produces SemanticInfo or a Diagnostic error.
      */
-    SemanticResult analyze_with_info(const Program& program);
+    SemanticResult analyzeWithInfo(const Program& program);
     
     /**
      * @brief Consumes and returns the last recorded diagnostic.
      */
-    [[nodiscard]] std::optional<Diagnostic> take_last_diagnostic();
+    [[nodiscard]] std::optional<Diagnostic> takeLastDiagnostic();
 
 private:
     enum class CallableKind {
@@ -593,7 +593,7 @@ private:
      * 
      * Why it exists: Provides an ordered lookup mechanism (from most nested to global) to resolve identifier references (`IdentifierExpr`) to their typed `Symbol` counterparts and handle variable shadowing in nested block scopes (e.g. `IfStmt`, `ForStmt`).
      * What it tracks: A dynamic stack where each element represents a lexical block. The `std::map` maps string identifiers directly to their AST `Symbol` definitions (type, callability, etc.). Index 0 always represents the global module scope.
-     * What mutates/updates it: `push_scope()` appends a new empty map when entering a block. `pop_scope()` destroys the deepest block on exit. `declare_var()` inserts new symbols into `scopes_.back()`.
+     * What mutates/updates it: `pushScope()` appends a new empty map when entering a block. `popScope()` destroys the deepest block on exit. `declareVar()` inserts new symbols into `scopes_.back()`.
      */
     std::vector<std::map<std::string, Symbol>> scopes_;
 
@@ -602,7 +602,7 @@ private:
      * 
      * Why it exists: Enables forward and mutually recursive calls across the module by establishing all callable targets before descending into function bodies.
      * What it tracks: A flat dictionary mapping top-level `Function` AST node names to their parsed `Signature` (return type, argument types, and arity bounds).
-     * What mutates/updates it: Exclusively populated by `collect_functions()` during the initial top-level scan of the `Program` AST prior to statement analysis.
+     * What mutates/updates it: Exclusively populated by `collectFunctions()` during the initial top-level scan of the `Program` AST prior to statement analysis.
      */
     std::map<std::string, Signature> functions_;
 
@@ -611,16 +611,16 @@ private:
      * 
      * Why it exists: Serves as the authoritative source for layer validation, distinguishing neural network modules (which hold state) from pure mathematical functions during instantiation and invocation.
      * What it tracks: Maps `Layer` AST node identifiers to their explicit `Signature`. Unlike functions, layers enforce different runtime constraints (like parameter initialization).
-     * What mutates/updates it: Exclusively populated by `collect_layers()` during the initial top-level scan of the `Program` AST.
+     * What mutates/updates it: Exclusively populated by `collectLayers()` during the initial top-level scan of the `Program` AST.
      */
     std::map<std::string, Signature> layers_;
 
     /**
      * @brief Global registry of configuration blocks.
      * 
-     * Why it exists: Allows strict type-checking of hyperparameter and configuration field accesses (e.g., `train.learning_rate`) without requiring dynamic dictionaries at runtime.
+     * Why it exists: Allows strict type-checking of hyperparameter and configuration field accesses (e.g., `train.learningRate`) without requiring dynamic dictionaries at runtime.
      * What it tracks: A nested map. The outer map keys on the config block name (e.g., "train"). The inner map associates specific field names with their deduced static `Type`.
-     * What mutates/updates it: Exclusively populated by `collect_configs()` during the initial scan of `Config` AST nodes.
+     * What mutates/updates it: Exclusively populated by `collectConfigs()` during the initial scan of `Config` AST nodes.
      */
     std::map<std::string, std::map<std::string, Type>> configs_;
 
@@ -629,54 +629,54 @@ private:
      * 
      * Why it exists: Acts as a side-channel to propagate type information up the AST, especially useful for implicit returns or arrow pipeline (`->`) stage inference where a parent node needs the exact type of its child.
      * What it tracks: The `Type` object computed for the most recently traversed `Expr` node.
-     * What mutates/updates it: Overwritten at the end of every `analyze_expr()` call and `analyze_stmt()` expression evaluation. Reset to `Type::None_type()` when exiting scopes that don't produce values.
+     * What mutates/updates it: Overwritten at the end of every `analyzeExpr()` call and `analyzeStmt()` expression evaluation. Reset to `Type::noneType()` when exiting scopes that don't produce values.
      */
-    Type last_expr_type_ = Type::None_type();
+    Type lastExprType_ = Type::noneType();
 
     /**
      * @brief The expected return type of the active callable.
      * 
      * Why it exists: Provides the reference type to validate all `ReturnStmt` nodes against. Without this, nested `return` statements would not know if they violate the function's strict signature.
-     * What it tracks: An `std::optional<Type>`. When `std::nullopt`, it indicates we are in the global scope (where returns are invalid). Otherwise, it holds the `return_type` of the enclosing function/layer.
-     * What mutates/updates it: Set by `visit_callable()` when descending into a function/layer body, and restored to its previous state (usually `nullopt`) upon returning up the call stack.
+     * What it tracks: An `std::optional<Type>`. When `std::nullopt`, it indicates we are in the global scope (where returns are invalid). Otherwise, it holds the `returnType` of the enclosing function/layer.
+     * What mutates/updates it: Set by `visitCallable()` when descending into a function/layer body, and restored to its previous state (usually `nullopt`) upon returning up the call stack.
      */
-    std::optional<Type> current_return_type_;
+    std::optional<Type> currentReturnType_;
 
     /**
      * @brief Flag indicating if the current callable has returned a value on all paths.
      * 
      * Why it exists: Powers the control-flow validation that ensures functions declaring a non-Void return type don't accidentally fall off the end of the body without returning a value.
      * What it tracks: A strict boolean flag indicating if a valid `ReturnStmt` was unconditionally hit in the current execution block.
-     * What mutates/updates it: Set to `false` at the start of `visit_callable()`. Flipped to `true` inside `analyze_stmt()` when encountering a valid `ReturnStmt`.
+     * What mutates/updates it: Set to `false` at the start of `visitCallable()`. Flipped to `true` inside `analyzeStmt()` when encountering a valid `ReturnStmt`.
      */
-    bool current_callable_has_return_ = false;
+    bool currentCallableHasReturn_ = false;
 
     /**
      * @brief The kind of the callable currently being analyzed.
      * 
      * Why it exists: Enforces contextual rules. For example, layers can instantiate other layers, but pure functions cannot hold state or instantiate layers. This tracks the context for those semantic checks.
      * What it tracks: A `CallableKind` enum (`None` for global scope, `Function` for pure logic, `Layer` for stateful modules).
-     * What mutates/updates it: Overwritten by `visit_callable()` when entering a function/layer, and reverted to `CallableKind::None` upon exit.
+     * What mutates/updates it: Overwritten by `visitCallable()` when entering a function/layer, and reverted to `CallableKind::None` upon exit.
      */
-    CallableKind current_callable_kind_ = CallableKind::None;
+    CallableKind currentCallableKind_ = CallableKind::None;
 
     /**
      * @brief The name of the callable currently being analyzed.
      * 
      * Why it exists: Enables the IR lowerer to disambiguate identically named local variables that exist in different functions by associating an 'owner' namespace to every resolved expression.
      * What it tracks: The raw string name of the enclosing function or layer.
-     * What mutates/updates it: Set by `visit_callable()` and used to stamp the `owner` field in the `record_*` side-table helpers.
+     * What mutates/updates it: Set by `visitCallable()` and used to stamp the `owner` field in the `record_*` side-table helpers.
      */
-    std::optional<std::string> current_callable_name_;
+    std::optional<std::string> currentCallableName_;
 
     /**
      * @brief The accumulated semantic information side-table.
      * 
      * Why it exists: Completely decouples AST validation from IR generation. By building this side-table, the `FrontendLowerer` can perform O(1) lookups for type and target info without needing to understand scope rules or perform type inference.
      * What it tracks: The `SemanticInfo` structure, containing parallel arrays (`exprs`, `identifiers`, `calls`, etc.) mapping `SourceSpan` coordinates to resolved backend facts.
-     * What mutates/updates it: Appended to sequentially by the `record_*` helpers (e.g., `record_expr_type`, `record_call`) throughout the entire AST traversal process.
+     * What mutates/updates it: Appended to sequentially by the `record_*` helpers (e.g., `recordExprType`, `recordCall`) throughout the entire AST traversal process.
      */
-    SemanticInfo semantic_info_;
+    SemanticInfo semanticInfo_;
 
     /**
      * @brief The last encountered error diagnostic.
@@ -685,66 +685,66 @@ private:
      * What it tracks: An `std::optional<Diagnostic>` object holding the error message, severity, and exact `SourceSpan` where the semantic violation occurred.
      * What mutates/updates it: Assigned by the `error()` helper method. Once set, the analyzer immediately aborts further traversal and bubbles the error up.
      */
-    std::optional<Diagnostic> last_diagnostic_;
+    std::optional<Diagnostic> lastDiagnostic_;
 
-    void begin_analysis();
-    void register_builtins();
+    void beginAnalysis();
+    void registerBuiltins();
     std::optional<Diagnostic> analyze(const Program& program);
-    std::optional<Diagnostic> collect_configs(const Program& program);
-    std::optional<Diagnostic> collect_layers(const Program& program);
-    std::optional<Diagnostic> collect_functions(const Program& program);
-    std::optional<Diagnostic> analyze_stmt(const Stmt& stmt, const Program& program);
-    std::variant<Type, Diagnostic> analyze_expr(const Expr& expr, const Program& program);
-    std::variant<Type, Diagnostic> visit_identifier(const std::string& name, const SourceSpan& span);
-    std::variant<Type, Diagnostic> visit_call(
+    std::optional<Diagnostic> collectConfigs(const Program& program);
+    std::optional<Diagnostic> collectLayers(const Program& program);
+    std::optional<Diagnostic> collectFunctions(const Program& program);
+    std::optional<Diagnostic> analyzeStmt(const Stmt& stmt, const Program& program);
+    std::variant<Type, Diagnostic> analyzeExpr(const Expr& expr, const Program& program);
+    std::variant<Type, Diagnostic> visitIdentifier(const std::string& name, const SourceSpan& span);
+    std::variant<Type, Diagnostic> visitCall(
         const std::string& callee,
         const std::vector<CallArgument>& args,
         const SourceSpan& span,
         const Program& program
     );
-    std::variant<Type, Diagnostic> visit_unary(
+    std::variant<Type, Diagnostic> visitUnary(
         const Expr& operand,
         TokenType op,
         const SourceSpan& span,
         const Program& program
     );
-    std::variant<Type, Diagnostic> visit_binary(
+    std::variant<Type, Diagnostic> visitBinary(
         const Expr& lhs,
         const Expr& rhs,
         TokenType op,
         const SourceSpan& span,
         const Program& program
     );
-    std::variant<Type, Diagnostic> visit_ternary(
-        const Expr& then_expr,
+    std::variant<Type, Diagnostic> visitTernary(
+        const Expr& thenExpr,
         const Expr& condition,
-        const Expr& else_expr,
+        const Expr& elseExpr,
         const SourceSpan& span,
         const Program& program
     );
-    std::variant<Type, Diagnostic> visit_arrow(
+    std::variant<Type, Diagnostic> visitArrow(
         const Expr& source,
         const std::vector<ExprPtr>& stages,
         const Program& program
     );
-    std::variant<Type, Diagnostic> analyze_stage(
+    std::variant<Type, Diagnostic> analyzeStage(
         const Expr& expr,
         const Type& input_type,
         const Program& program
     );
-    std::variant<Type, Diagnostic> analyze_arrow_call(
+    std::variant<Type, Diagnostic> analyzeArrowCall(
         const std::string& callee,
         const std::vector<CallArgument>& args,
         const SourceSpan& span,
         const Type& input_type,
         const Program& program
     );
-    std::variant<Type, Diagnostic> unwrap_callable_stage(const Type& stage_type, const Type& input_type);
-    std::optional<Diagnostic> validate_train_config(const Config& config, const Program& program);
-    std::vector<std::string> collect_model_symbols(const Program& program) const;
-    std::optional<Diagnostic> visit_callable(
+    std::variant<Type, Diagnostic> unwrapCallableStage(const Type& stage_type, const Type& input_type);
+    std::optional<Diagnostic> validateTrainConfig(const Config& config, const Program& program);
+    std::vector<std::string> collectModelSymbols(const Program& program) const;
+    std::optional<Diagnostic> visitCallable(
         const std::vector<Arg>& args,
-        const Type& return_type,
+        const Type& returnType,
         const Stmt& body,
         const SourceSpan& span,
         const std::string& name,
@@ -752,70 +752,70 @@ private:
         const char* label,
         const Program& program
     );
-    std::optional<Diagnostic> declare_var(
+    std::optional<Diagnostic> declareVar(
         const std::string& name,
         Type type,
         SemanticSymbolKind kind,
         const SourceSpan& span
     );
-    const Symbol* find_var(const std::string& name) const;
-    bool is_compatible(const Type& target, const Type& source) const;
-    Type merge_tensor_types(const Type& lhs, const Type& rhs) const;
-    std::optional<Diagnostic> validate_declared_type(const Type& type, const SourceSpan& span);
-    std::optional<Diagnostic> validate_signature_arity(
+    const Symbol* findVar(const std::string& name) const;
+    bool isCompatible(const Type& target, const Type& source) const;
+    Type mergeTensorTypes(const Type& lhs, const Type& rhs) const;
+    std::optional<Diagnostic> validateDeclaredType(const Type& type, const SourceSpan& span);
+    std::optional<Diagnostic> validateSignatureArity(
         const Signature& signature,
         std::size_t actual_arity,
         const SourceSpan& span
     );
-    std::optional<Diagnostic> ensure_condition_type(
+    std::optional<Diagnostic> ensureConditionType(
         const Type& type,
         const SourceSpan& span,
         const std::string& context
     );
-    std::optional<Diagnostic> ensure_call_allowed(
+    std::optional<Diagnostic> ensureCallAllowed(
         const std::string& callee,
         bool is_layer,
         const SourceSpan& span
     );
     Diagnostic error(const SourceSpan& span, const std::string& message);
-    void push_scope();
-    void pop_scope();
-    void record_symbol(SemanticSymbol symbol);
-    void record_expr_type(const Expr& expr, Type type);
-    void record_identifier(
+    void pushScope();
+    void popScope();
+    void recordSymbol(SemanticSymbol symbol);
+    void recordExprType(const Expr& expr, Type type);
+    void recordIdentifier(
         const SourceSpan& span,
         const std::string& name,
         SemanticSymbolKind target,
         Type type
     );
-    void record_assignment(
+    void recordAssignment(
         const SourceSpan& span,
         const std::string& name,
         SemanticSymbolKind target,
-        Type target_type,
-        Type value_type
+        Type targetType,
+        Type valueType
     );
-    void record_config_field_access(
+    void recordConfigFieldAccess(
         const SourceSpan& span,
-        const std::string& config_name,
-        const std::string& field_name,
-        Type field_type
+        const std::string& configName,
+        const std::string& fieldName,
+        Type fieldType
     );
-    void record_declaration(
+    void recordDeclaration(
         const SourceSpan& span,
         const std::string& name,
         SemanticSymbolKind kind,
-        Type final_type
+        Type finalType
     );
-    void record_call(
+    void recordCall(
         const SourceSpan& span,
         const std::string& callee,
         SemanticCallTargetKind target,
-        Type result_type,
-        bool arrow_stage
+        Type resultType,
+        bool arrowStage
     );
 };
 
-const char* semantic_symbol_kind_name(SemanticSymbolKind kind);
-const char* semantic_call_target_kind_name(SemanticCallTargetKind kind);
-std::string semantic_info_summary(const SemanticInfo& info, const Program& program);
+const char* semanticSymbolKindName(SemanticSymbolKind kind);
+const char* semanticCallTargetKindName(SemanticCallTargetKind kind);
+std::string semanticInfoSummary(const SemanticInfo& info, const Program& program);

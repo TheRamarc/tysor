@@ -65,7 +65,7 @@ void release_execution(GraphExecutionResult&& execution, RuntimeTensorWorkspace&
 
 SimpleTensor require_tensor_result(std::variant<SimpleTensor, Diagnostic> result, const std::string& name) {
     if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) {
-        throw std::runtime_error(name + ": " + diagnostic->to_string());
+        throw std::runtime_error(name + ": " + diagnostic->toString());
     }
     return std::get<SimpleTensor>(std::move(result));
 }
@@ -93,7 +93,7 @@ PlanModule compile_graph_benchmark_plan() {
 
     auto compiled_result = compile_source(source, options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&compiled_result)) {
-        throw std::runtime_error(diagnostic->to_string());
+        throw std::runtime_error(diagnostic->toString());
     }
     CompiledProgram compiled = std::get<CompiledProgram>(std::move(compiled_result));
     if (!compiled.plan) {
@@ -104,7 +104,7 @@ PlanModule compile_graph_benchmark_plan() {
 
 GraphExecutionResult require_graph_result(GraphExecutionResultVariant result) {
     if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) {
-        throw std::runtime_error(diagnostic->to_string());
+        throw std::runtime_error(diagnostic->toString());
     }
     return std::get<GraphExecutionResult>(std::move(result));
 }

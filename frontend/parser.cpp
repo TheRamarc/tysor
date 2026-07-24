@@ -125,8 +125,8 @@ int count_stage_sites(const Expr& expr) {
             } else if constexpr (std::is_same_v<T, BinaryExpr>) {
                 return count_stage_sites(*value.lhs) + count_stage_sites(*value.rhs);
             } else if constexpr (std::is_same_v<T, TernaryExpr>) {
-                return count_stage_sites(*value.then_expr) + count_stage_sites(*value.condition) +
-                       count_stage_sites(*value.else_expr);
+                return count_stage_sites(*value.thenExpr) + count_stage_sites(*value.condition) +
+                       count_stage_sites(*value.elseExpr);
             } else if constexpr (std::is_same_v<T, TupleExpr>) {
                 return count_expr_list(value.elements);
             } else if constexpr (std::is_same_v<T, ListExpr>) {
@@ -181,7 +181,7 @@ const char* operator_text(TokenType kind) {
         case TokenType::Dot:
             return ".";
         default:
-            return token_type_name(kind);
+            return tokenTypeName(kind);
     }
 }
 
@@ -205,11 +205,11 @@ void append_args(std::ostringstream& out, const std::vector<Arg>& args) {
         // }
         out << arg.name;
         if (arg.type.base != TypeBase::Unknown) {
-            out << ": " << type_to_string(arg.type);
+            out << ": " << typeToString(arg.type);
         }
-        if (arg.default_value) {
+        if (arg.defaultValue) {
             out << " = ";
-            append_expr_summary(out, *arg.default_value);
+            append_expr_summary(out, *arg.defaultValue);
         }
     }
 }
@@ -257,11 +257,11 @@ void append_expr_summary(std::ostringstream& out, const Expr& expr) {
                 out << ')';
             } else if constexpr (std::is_same_v<T, TernaryExpr>) {
                 out << '(';
-                append_expr_summary(out, *value.then_expr);
+                append_expr_summary(out, *value.thenExpr);
                 out << " if ";
                 append_expr_summary(out, *value.condition);
                 out << " else ";
-                append_expr_summary(out, *value.else_expr);
+                append_expr_summary(out, *value.elseExpr);
                 out << ')';
             } else if constexpr (std::is_same_v<T, TupleExpr>) {
                 out << '(';
@@ -298,7 +298,7 @@ void append_stmt_summary(std::ostringstream& out, const Stmt& stmt, std::size_t 
                 out << '\n';
             } else if constexpr (std::is_same_v<T, VarDecl>) {
                 out  << value.name << ": "
-                    << type_to_string(value.type);
+                    << typeToString(value.type);
                 if (value.init) {
                     out << " = ";
                     append_expr_summary(out, *value.init);
@@ -317,16 +317,16 @@ void append_stmt_summary(std::ostringstream& out, const Stmt& stmt, std::size_t 
                 out << "if ";
                 append_expr_summary(out, *value.condition);
                 out << '\n';
-                append_stmt_summary(out, *value.then_stmt, level + 2);
+                append_stmt_summary(out, *value.thenStmt, level + 2);
                 for (const auto& branch : value.elifs) {
                     out << indent(level) << "elif ";
                     append_expr_summary(out, *branch.condition);
                     out << '\n';
                     append_stmt_summary(out, *branch.body, level + 2);
                 }
-                if (value.else_stmt) {
+                if (value.elseStmt) {
                     out << indent(level) << "else\n";
-                    append_stmt_summary(out, *value.else_stmt, level + 2);
+                    append_stmt_summary(out, *value.elseStmt, level + 2);
                 }
             }
         },
@@ -339,12 +339,12 @@ void append_stmt_summary(std::ostringstream& out, const Stmt& stmt, std::size_t 
 Type::Type(const Type& other)
     : base(other.base),
       elements(other.elements),
-      scalar_dtype(other.scalar_dtype),
-      tensor_dtype(other.tensor_dtype),
-      tensor_shape_expr(other.tensor_shape_expr),
-      tensor_rank(other.tensor_rank) {
-    if (other.callable_return) {
-        callable_return = std::make_unique<Type>(*other.callable_return);
+      scalarDtype(other.scalarDtype),
+      tensorDtype(other.tensorDtype),
+      tensorShapeExpr(other.tensorShapeExpr),
+      tensorRank(other.tensorRank) {
+    if (other.callableReturn) {
+        callableReturn = std::make_unique<Type>(*other.callableReturn);
     }
 }
 
@@ -354,11 +354,11 @@ Type& Type::operator=(const Type& other) {
     }
     base = other.base;
     elements = other.elements;
-    scalar_dtype = other.scalar_dtype;
-    tensor_dtype = other.tensor_dtype;
-    tensor_shape_expr = other.tensor_shape_expr;
-    tensor_rank = other.tensor_rank;
-    callable_return = other.callable_return ? std::make_unique<Type>(*other.callable_return) : nullptr;
+    scalarDtype = other.scalarDtype;
+    tensorDtype = other.tensorDtype;
+    tensorShapeExpr = other.tensorShapeExpr;
+    tensorRank = other.tensorRank;
+    callableReturn = other.callableReturn ? std::make_unique<Type>(*other.callableReturn) : nullptr;
     return *this;
 }
 
@@ -368,67 +368,67 @@ Type Type::unknown() {
     return type;
 }
 
-Type Type::int_type() {
+Type Type::intType() {
     Type type;
     type.base = TypeBase::Int;
     return type;
 }
 
 Type Type::int16() {
-    Type type = int_type();
-    type.scalar_dtype = "int16";
+    Type type = intType();
+    type.scalarDtype = "int16";
     return type;
 }
 
 Type Type::int32() {
-    Type type = int_type();
-    type.scalar_dtype = "int32";
+    Type type = intType();
+    type.scalarDtype = "int32";
     return type;
 }
 
 Type Type::int64() {
-    Type type = int_type();
-    type.scalar_dtype = "int64";
+    Type type = intType();
+    type.scalarDtype = "int64";
     return type;
 }
 
-Type Type::float_type() {
+Type Type::floatType() {
     Type type;
     type.base = TypeBase::Float;
     return type;
 }
 
 Type Type::float16() {
-    Type type = float_type();
-    type.scalar_dtype = "float16";
+    Type type = floatType();
+    type.scalarDtype = "float16";
     return type;
 }
 
 Type Type::float32() {
-    Type type = float_type();
-    type.scalar_dtype = "float32";
+    Type type = floatType();
+    type.scalarDtype = "float32";
     return type;
 }
 
 Type Type::float64() {
-    Type type = float_type();
-    type.scalar_dtype = "float64";
+    Type type = floatType();
+    type.scalarDtype = "float64";
     return type;
 }
 
-Type Type::bool_type() {
+Type Type::boolType() {
     Type type;
     type.base = TypeBase::Bool;
     return type;
 }
 
-Type Type::str_type() {
+Type Type::strType() {
     Type type;
     type.base = TypeBase::Str;
     return type;
 }
 
-Type Type::None_type() {
+Type Type::noneType() {
     return Type{};
 }
 
@@ -439,9 +439,9 @@ Type Type::tensor(
 ) {
     Type type;
     type.base = TypeBase::Tensor;
-    type.tensor_dtype = std::move(dtype);
-    type.tensor_shape_expr = std::move(shape_expr);
-    type.tensor_rank = rank;
+    type.tensorDtype = std::move(dtype);
+    type.tensorShapeExpr = std::move(shape_expr);
+    type.tensorRank = rank;
     return type;
 }
 
@@ -459,10 +459,10 @@ Type Type::list(std::vector<Type> elements) {
     return type;
 }
 // needed attention here.
-Type Type::callable(std::optional<Type> return_type) {
+Type Type::callable(std::optional<Type> returnType) {
     Type type;
-    if (return_type.has_value()){
-        type.callable_return = std::make_unique<Type>(std::move(return_type.value()));
+    if (returnType.has_value()){
+        type.callableReturn = std::make_unique<Type>(std::move(returnType.value()));
     }
     type.base = TypeBase::Callable;
     return type;
@@ -471,13 +471,13 @@ Type Type::callable(std::optional<Type> return_type) {
 Parser::Parser(std::vector<Token> tokens)
     : tokens_(std::move(tokens)), arena_(std::make_unique<Arena>()) {}
 
-ExprPtr Parser::make_expr(SourceSpan span, ExprKind kind) {
+ExprPtr Parser::makeExpr(SourceSpan span, ExprKind kind) {
     return arena_->allocate<Expr>(Expr{span, std::move(kind)});
 }
 
-std::optional<Diagnostic> Parser::take_last_diagnostic() {
-    auto diagnostic = last_diagnostic_;
-    last_diagnostic_.reset();
+std::optional<Diagnostic> Parser::takeLastDiagnostic() {
+    auto diagnostic = lastDiagnostic_;
+    lastDiagnostic_.reset();
     return diagnostic;
 }
 
@@ -487,7 +487,7 @@ std::optional<Diagnostic> Parser::take_last_diagnostic() {
  * Top-level definitions can be layers, functions, configs, or statements.
  * @return A ParseResult containing the Program or a Diagnostic on failure.
  */
-ParseResult Parser::parse_program() {
+ParseResult Parser::parseProgram() {
     try {
         Program program;
         while (const Token* token = peek(0)) {
@@ -500,209 +500,209 @@ ParseResult Parser::parse_program() {
                     program.arena = std::move(arena_);
                     return program;
                 case TokenType::Layer:
-                    program.layers.push_back(parse_layer());
+                    program.layers.push_back(parseLayer());
                     break;
                 case TokenType::Fn:
-                    program.functions.push_back(parse_function());
+                    program.functions.push_back(parseFunction());
                     break;
                 case TokenType::Config:
-                    program.configs.push_back(parse_config());
+                    program.configs.push_back(parseConfig());
                     break;
                 case TokenType::Ident:
-                    if (peek_kind(1) == TokenType::Eq || peek_kind(1) == TokenType::Colon) {
-                        program.globals.push_back(parse_stmt());
+                    if (peekKind(1) == TokenType::Eq || peekKind(1) == TokenType::Colon) {
+                        program.globals.push_back(parseStmt());
                     } else {
-                        fail_here("Unexpected token at top level");
+                        failHere("Unexpected token at top level");
                     }
                     break;
                 default:
-                    fail_here("Unexpected token at top level");
+                    failHere("Unexpected token at top level");
             }
         }
         program.arena = std::move(arena_);
         return program;
     } catch (const ParseFailure&) {
-        return last_diagnostic_.value_or(Diagnostic::error(DiagnosticCode::ParserError, "Parser error"));
+        return lastDiagnostic_.value_or(Diagnostic::error(DiagnosticCode::ParserError, "Parser error"));
     }
 }
 
 /**
  * @brief Parses an expression, which handles comma-separated tuple expressions at the top level.
  */
-ExprPtr Parser::parse_expression() {
-    return parse_tuple_expression();
+ExprPtr Parser::parseExpression() {
+    return parseTupleExpression();
 }
 
 /**
  * @brief Parses a tuple expression if a comma is present.
  */
-ExprPtr Parser::parse_tuple_expression() {
-    auto first = parse_conditional_expression();
-    if (peek_kind(0) != TokenType::Comma) {
+ExprPtr Parser::parseTupleExpression() {
+    auto first = parseConditionalExpression();
+    if (peekKind(0) != TokenType::Comma) {
         return first;
     }
     const SourceSpan span = first->span;
     std::vector<ExprPtr> elements;
     elements.push_back(std::move(first));
-    while (peek_kind(0) == TokenType::Comma) {
+    while (peekKind(0) == TokenType::Comma) {
         consume();
-        elements.push_back(parse_conditional_expression());
+        elements.push_back(parseConditionalExpression());
     }
-    return make_expr(span, TupleExpr{std::move(elements)});
+    return makeExpr(span, TupleExpr{std::move(elements)});
 }
 
 /**
  * @brief Parses ternary conditional expressions (`A if B else C`).
  */
-ExprPtr Parser::parse_conditional_expression() {
-    auto expr = parse_pipeline_expression();
-    if (peek_kind(0) != TokenType::If) {
+ExprPtr Parser::parseConditionalExpression() {
+    auto expr = parsePipelineExpression();
+    if (peekKind(0) != TokenType::If) {
         return expr;
     }
     Token if_token = consume();
-    auto condition = parse_pipeline_expression();
+    auto condition = parsePipelineExpression();
     expect(TokenType::Else, "Expected 'else' in ternary expression");
-    auto else_expr = parse_conditional_expression();
-    return make_expr(
+    auto elseExpr = parseConditionalExpression();
+    return makeExpr(
         span_of(if_token),
-        TernaryExpr{std::move(expr), std::move(condition), std::move(else_expr)}
+        TernaryExpr{std::move(expr), std::move(condition), std::move(elseExpr)}
     );
 }
 
 /**
  * @brief Parses pipeline expressions (`A -> B -> C`).
  */
-ExprPtr Parser::parse_pipeline_expression() {
-    auto lhs = parse_logical_or_expression();
-    if (peek_kind(0) != TokenType::Arrow) {
+ExprPtr Parser::parsePipelineExpression() {
+    auto lhs = parseLogicalOrExpression();
+    if (peekKind(0) != TokenType::Arrow) {
         return lhs;
     }
     const SourceSpan span = peek(0) ? span_of(*peek(0)) : SourceSpan{};
     std::vector<ExprPtr> stages;
-    while (peek_kind(0) == TokenType::Arrow) {
+    while (peekKind(0) == TokenType::Arrow) {
         Token arrow = consume();
-        auto rhs = parse_logical_or_expression();
+        auto rhs = parseLogicalOrExpression();
         if (count_stage_sites(*rhs) != 1) {
-            fail_token(
+            failToken(
                 "RHS of '->' must contain exactly one callable stage site. Use 'stage()[n]' for repetition.",
                 arrow
             );
         }
         stages.push_back(std::move(rhs));
     }
-    return make_expr(span, ArrowExpr{std::move(lhs), std::move(stages)});
+    return makeExpr(span, ArrowExpr{std::move(lhs), std::move(stages)});
 }
 
-ExprPtr Parser::parse_logical_or_expression() {
-    auto lhs = parse_logical_and_expression();
-    while (peek_kind(0) == TokenType::PipePipe) {
+ExprPtr Parser::parseLogicalOrExpression() {
+    auto lhs = parseLogicalAndExpression();
+    while (peekKind(0) == TokenType::PipePipe) {
         Token op = consume();
-        auto rhs = parse_logical_and_expression();
-        lhs = make_expr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
+        auto rhs = parseLogicalAndExpression();
+        lhs = makeExpr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
     }
     return lhs;
 }
 
-ExprPtr Parser::parse_logical_and_expression() {
-    auto lhs = parse_comparison_expression();
-    while (peek_kind(0) == TokenType::AmpAmp) {
+ExprPtr Parser::parseLogicalAndExpression() {
+    auto lhs = parseComparisonExpression();
+    while (peekKind(0) == TokenType::AmpAmp) {
         Token op = consume();
-        auto rhs = parse_comparison_expression();
-        lhs = make_expr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
+        auto rhs = parseComparisonExpression();
+        lhs = makeExpr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
     }
     return lhs;
 }
 
-ExprPtr Parser::parse_comparison_expression() {
-    auto lhs = parse_additive_expression();
+ExprPtr Parser::parseComparisonExpression() {
+    auto lhs = parseAdditiveExpression();
     while (true) {
-        auto kind = peek_kind(0);
+        auto kind = peekKind(0);
         if (!(kind == TokenType::EqEq || kind == TokenType::Neq || kind == TokenType::Lt ||
               kind == TokenType::Gt || kind == TokenType::LtEq || kind == TokenType::GtEq)) {
             return lhs;
         }
         Token op = consume();
-        auto rhs = parse_additive_expression();
-        lhs = make_expr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
+        auto rhs = parseAdditiveExpression();
+        lhs = makeExpr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
     }
 }
 
-ExprPtr Parser::parse_additive_expression() {
-    auto lhs = parse_multiplicative_expression();
-    while (peek_kind(0) == TokenType::Plus || peek_kind(0) == TokenType::Minus) {
+ExprPtr Parser::parseAdditiveExpression() {
+    auto lhs = parseMultiplicativeExpression();
+    while (peekKind(0) == TokenType::Plus || peekKind(0) == TokenType::Minus) {
         Token op = consume();
-        auto rhs = parse_multiplicative_expression();
-        lhs = make_expr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
+        auto rhs = parseMultiplicativeExpression();
+        lhs = makeExpr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
     }
     return lhs;
 }
 
-ExprPtr Parser::parse_multiplicative_expression() {
-    auto lhs = parse_unary_expression();
-    while (peek_kind(0) == TokenType::Star || peek_kind(0) == TokenType::Slash ||
-           peek_kind(0) == TokenType::DoubleSlash) {
+ExprPtr Parser::parseMultiplicativeExpression() {
+    auto lhs = parseUnaryExpression();
+    while (peekKind(0) == TokenType::Star || peekKind(0) == TokenType::Slash ||
+           peekKind(0) == TokenType::DoubleSlash) {
         Token op = consume();
-        auto rhs = parse_unary_expression();
-        lhs = make_expr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
+        auto rhs = parseUnaryExpression();
+        lhs = makeExpr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
     }
     return lhs;
 }
 
-ExprPtr Parser::parse_unary_expression() {
-    if (peek_kind(0) == TokenType::Bang || peek_kind(0) == TokenType::Minus) {
+ExprPtr Parser::parseUnaryExpression() {
+    if (peekKind(0) == TokenType::Bang || peekKind(0) == TokenType::Minus) {
         Token op = consume();
-        auto operand = parse_unary_expression();
-        return make_expr(span_of(op), UnaryExpr{std::move(operand), op.kind});
+        auto operand = parseUnaryExpression();
+        return makeExpr(span_of(op), UnaryExpr{std::move(operand), op.kind});
     }
-    return parse_member_access_expression();
+    return parseMemberAccessExpression();
 }
 
-ExprPtr Parser::parse_member_access_expression() {
-    auto lhs = parse_primary_expression();
-    while (peek_kind(0) == TokenType::Dot) {
+ExprPtr Parser::parseMemberAccessExpression() {
+    auto lhs = parsePrimaryExpression();
+    while (peekKind(0) == TokenType::Dot) {
         Token op = consume();
         const Token* ident = peek(0);
         if (ident == nullptr) {
-            fail_here("Expected identifier after '.'");
+            failHere("Expected identifier after '.'");
         }
-        std::string name = consume_ident("Expected identifier after '.'");
-        auto rhs = make_expr(span_of(*ident), IdentifierExpr{std::move(name)});
-        lhs = make_expr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
+        std::string name = consumeIdent("Expected identifier after '.'");
+        auto rhs = makeExpr(span_of(*ident), IdentifierExpr{std::move(name)});
+        lhs = makeExpr(span_of(op), BinaryExpr{std::move(lhs), std::move(rhs), op.kind});
     }
     return lhs;
 }
 
-ExprPtr Parser::parse_primary_expression() {
-    auto kind = peek_kind(0);
+ExprPtr Parser::parsePrimaryExpression() {
+    auto kind = peekKind(0);
     if (!kind.has_value()) {
-        fail_here("Expected expression");
+        failHere("Expected expression");
     }
 
     ExprPtr result;
     switch (*kind) {
         case TokenType::IntLit: {
             Token token = consume();
-            result = make_expr(span_of(token), IntLiteral{expect_int(token)});
+            result = makeExpr(span_of(token), IntLiteral{expect_int(token)});
             break;
         }
         case TokenType::FloatLit: {
             Token token = consume();
-            result = make_expr(span_of(token), FloatLiteral{expect_float(token)});
+            result = makeExpr(span_of(token), FloatLiteral{expect_float(token)});
             break;
         }
         case TokenType::True: {
             Token token = consume();
-            result = make_expr(span_of(token), BoolLiteral{true});
+            result = makeExpr(span_of(token), BoolLiteral{true});
             break;
         }
         case TokenType::False: {
             Token token = consume();
-            result = make_expr(span_of(token), BoolLiteral{false});
+            result = makeExpr(span_of(token), BoolLiteral{false});
             break;
         }
         case TokenType::StringLit: {
             Token token = consume();
-            result = make_expr(span_of(token), StringLiteral{expect_string(token)});
+            result = makeExpr(span_of(token), StringLiteral{expect_string(token)});
             break;
         }
         case TokenType::Ident:
@@ -714,20 +714,20 @@ ExprPtr Parser::parse_primary_expression() {
         case TokenType::Tensor:
         case TokenType::Fn: {
             const Token token = *peek(0);
-            if (peek_kind(1) == TokenType::OpenParen) {
-                std::string name = consume_ident("Expected callee");
+            if (peekKind(1) == TokenType::OpenParen) {
+                std::string name = consumeIdent("Expected callee");
                 expect(TokenType::OpenParen, "Expected '('");
                 std::vector<CallArgument> args;
-                if (peek_kind(0) != TokenType::CloseParen) {
+                if (peekKind(0) != TokenType::CloseParen) {
                     while (true) {
                         std::optional<std::string> arg_name;
-                        if (peek_kind(1) == TokenType::Colon && peek_kind(0).has_value() &&
-                            is_ident_like(*peek_kind(0))) {
-                            arg_name = consume_ident("Expected named argument");
+                        if (peekKind(1) == TokenType::Colon && peekKind(0).has_value() &&
+                            is_ident_like(*peekKind(0))) {
+                            arg_name = consumeIdent("Expected named argument");
                             expect(TokenType::Colon, "Expected ':' after named argument");
                         }
-                        args.push_back(CallArgument{std::move(arg_name), parse_conditional_expression()});
-                        if (peek_kind(0) == TokenType::Comma) {
+                        args.push_back(CallArgument{std::move(arg_name), parseConditionalExpression()});
+                        if (peekKind(0) == TokenType::Comma) {
                             consume();
                         } else {
                             break;
@@ -735,35 +735,35 @@ ExprPtr Parser::parse_primary_expression() {
                     }
                 }
                 expect(TokenType::CloseParen, "Expected ')' after function call arguments");
-                result = make_expr(span_of(token), CallExpr{std::move(name), std::move(args)});
+                result = makeExpr(span_of(token), CallExpr{std::move(name), std::move(args)});
             } else {
                 // here is we are parse the variable assignment
-                std::string name = consume_ident("Expected identifier");
-                result = make_expr(span_of(token), IdentifierExpr{std::move(name)});
+                std::string name = consumeIdent("Expected identifier");
+                result = makeExpr(span_of(token), IdentifierExpr{std::move(name)});
             }
             break;
         }
         case TokenType::OpenParen: {
             consume();
-            result = parse_expression();
+            result = parseExpression();
             expect(TokenType::CloseParen, "Expected ')'");
             break;
         }
         case TokenType::OpenBracket:
-            result = parse_list_expression();
+            result = parseListExpression();
             break;
         default:
-            fail_here("Expected expression");
+            failHere("Expected expression");
     }
 
-    while (peek_kind(0) == TokenType::OpenBracket) {
+    while (peekKind(0) == TokenType::OpenBracket) {
         if (!std::holds_alternative<CallExpr>(result->kind)) {
-            fail_token("Repeat suffix '[n]' must follow a call expression", *peek(0));
+            failToken("Repeat suffix '[n]' must follow a call expression", *peek(0));
         }
         Token bracket = consume();
-        auto repeat_count = parse_conditional_expression();
+        auto repeat_count = parseConditionalExpression();
         expect(TokenType::CloseBracket, "Expected ']' after repetition count");
-        result = make_expr(
+        result = makeExpr(
             span_of(bracket),
             RepeatExpr{std::move(result), std::move(repeat_count)}
         );
@@ -772,15 +772,15 @@ ExprPtr Parser::parse_primary_expression() {
     return result;
 }
 
-ExprPtr Parser::parse_list_expression() {
+ExprPtr Parser::parseListExpression() {
     Token start = expect(TokenType::OpenBracket, "Expected '['");
     std::vector<ExprPtr> elements;
-    if (peek_kind(0) != TokenType::CloseBracket) {
+    if (peekKind(0) != TokenType::CloseBracket) {
         while (true) {
-            elements.push_back(parse_conditional_expression());
-            if (peek_kind(0) == TokenType::Comma) {
+            elements.push_back(parseConditionalExpression());
+            if (peekKind(0) == TokenType::Comma) {
                 consume();
-                if (peek_kind(0) == TokenType::CloseBracket) {
+                if (peekKind(0) == TokenType::CloseBracket) {
                     break;
                 }
             } else {
@@ -789,46 +789,46 @@ ExprPtr Parser::parse_list_expression() {
         }
     }
     expect(TokenType::CloseBracket, "Expected ']' after list literal");
-    return make_expr(span_of(start), ListExpr{std::move(elements)});
+    return makeExpr(span_of(start), ListExpr{std::move(elements)});
 }
 
-Stmt Parser::parse_scope() {
-    while (peek_kind(0) == TokenType::Newline) {
+Stmt Parser::parseScope() {
+    while (peekKind(0) == TokenType::Newline) {
         consume();
     }
     Token indent_token = expect(TokenType::Indent, "Expected indentation for block");
     std::vector<Stmt> statements;
-    while (peek_kind(0) != TokenType::Dedent) {
-        if (peek_kind(0) == TokenType::Newline) {
+    while (peekKind(0) != TokenType::Dedent) {
+        if (peekKind(0) == TokenType::Newline) {
             consume();
             continue;
         }
-        if (peek_kind(0) == TokenType::Eof) {
-            fail_here("Expected DEDENT");
+        if (peekKind(0) == TokenType::Eof) {
+            failHere("Expected DEDENT");
         }
-        statements.push_back(parse_stmt());
+        statements.push_back(parseStmt());
     }
     expect(TokenType::Dedent, "Expected DEDENT");
     return make_stmt(span_of(indent_token), ScopeStmt{std::move(statements)});
 }
 
-Type Parser::parse_type() {
+Type Parser::parseType() {
     const Token* token = peek(0);
     if (token == nullptr) {
-        fail_here("Expected type");
+        failHere("Expected type");
     }
 
     switch (token->kind) {
         case TokenType::Int:
-            fail_token("Use an explicit integer width such as int16, int32, or int64", *token);
+            failToken("Use an explicit integer width such as int16, int32, or int64", *token);
         case TokenType::Bool:
             consume();
-            return Type::bool_type();
+            return Type::boolType();
         case TokenType::Float:
-            fail_token("Use an explicit float width such as float16, float32, or float64", *token);
+            failToken("Use an explicit float width such as float16, float32, or float64", *token);
         case TokenType::Str:
             consume();
-            return Type::str_type();
+            return Type::strType();
         case TokenType::Callable:
             consume();
             return Type::callable(std::nullopt);
@@ -853,24 +853,24 @@ Type Parser::parse_type() {
             if (name == "float64") {
                 return Type::float64();
             }
-            fail_token("Expected type", *token);
+            failToken("Expected type", *token);
         }
         case TokenType::Tensor: {
             consume();
-            if (peek_kind(0) != TokenType::OpenBracket) {
+            if (peekKind(0) != TokenType::OpenBracket) {
                 return Type::tensor(std::nullopt, std::nullopt, std::nullopt);
             }
             consume();
             std::string first =
-                parse_type_token_sequence({TokenType::Comma, TokenType::CloseBracket});
+                parseTypeTokenSequence({TokenType::Comma, TokenType::CloseBracket});
             std::optional<std::string> dtype;
             std::optional<std::string> shape_expr;
-            if (peek_kind(0) == TokenType::Comma) {
+            if (peekKind(0) == TokenType::Comma) {
                 if (!first.empty()) {
                     dtype = first;
                 }
                 consume();
-                shape_expr = parse_type_token_sequence({TokenType::CloseBracket});
+                shape_expr = parseTypeTokenSequence({TokenType::CloseBracket});
             } else if (!first.empty()) {
                 dtype = first;
             }
@@ -879,34 +879,34 @@ Type Parser::parse_type() {
         }
         case TokenType::List:
             consume();
-            return parse_list_type_after_open("Expected '[' after list type");
+            return parseListTypeAfterOpen("Expected '[' after list type");
         case TokenType::Tuple:
             consume();
-            return parse_tuple_type_after_open(
+            return parseTupleTypeAfterOpen(
                 TokenType::OpenBracket,
                 TokenType::CloseBracket,
                 "Expected '[' after tuple type",
                 "Expected ']' after tuple type"
             );
         case TokenType::OpenParen:
-            return parse_tuple_type_after_open(
+            return parseTupleTypeAfterOpen(
                 TokenType::OpenParen,
                 TokenType::CloseParen,
                 "Expected '(' before tuple type",
                 "Expected ')' after tuple type"
             );
         case TokenType::OpenBracket:
-            return parse_list_type_after_open("Expected '[' before list type");
+            return parseListTypeAfterOpen("Expected '[' before list type");
         default:
-            fail_token("Expected type", *token);
+            failToken("Expected type", *token);
     }
 }
 
-Type Parser::parse_list_type_after_open(const std::string& open_error) {
+Type Parser::parseListTypeAfterOpen(const std::string& open_error) {
     expect(TokenType::OpenBracket, open_error);
-    Type element_type = parse_type();
-    if (peek_kind(0) == TokenType::Comma) {
-        fail_here("List types take exactly one element type");
+    Type element_type = parseType();
+    if (peekKind(0) == TokenType::Comma) {
+        failHere("List types take exactly one element type");
     }
     expect(TokenType::CloseBracket, "Expected ']' after list element type");
     std::vector<Type> elements;
@@ -914,35 +914,35 @@ Type Parser::parse_list_type_after_open(const std::string& open_error) {
     return Type::list(std::move(elements));
 }
 
-Type Parser::parse_tuple_type_after_open(
+Type Parser::parseTupleTypeAfterOpen(
     TokenType open,
     TokenType close,
     const std::string& open_error,
     const std::string& close_error
 ) {
     expect(open, open_error);
-    std::vector<Type> elements = parse_type_list(close);
+    std::vector<Type> elements = parseTypeList(close);
     expect(close, close_error);
     return Type::tuple(std::move(elements));
 }
 
-std::vector<Type> Parser::parse_type_list(TokenType terminator) {
-    if (peek_kind(0) == terminator) {
-        fail_here("Expected at least one type");
+std::vector<Type> Parser::parseTypeList(TokenType terminator) {
+    if (peekKind(0) == terminator) {
+        failHere("Expected at least one type");
     }
     std::vector<Type> elements;
-    elements.push_back(parse_type());
-    while (peek_kind(0) == TokenType::Comma) {
+    elements.push_back(parseType());
+    while (peekKind(0) == TokenType::Comma) {
         consume();
-        if (peek_kind(0) == terminator) {
+        if (peekKind(0) == terminator) {
             break;
         }
-        elements.push_back(parse_type());
+        elements.push_back(parseType());
     }
     return elements;
 }
 
-std::string Parser::parse_type_token_sequence(const std::vector<TokenType>& terminators) {
+std::string Parser::parseTypeTokenSequence(const std::vector<TokenType>& terminators) {
     std::string result;
     int bracket_depth = 0;
     while (const Token* token = peek(0)) {
@@ -1009,199 +1009,199 @@ std::string Parser::parse_type_token_sequence(const std::vector<TokenType>& term
                 bracket_depth -= 1;
                 break;
             default:
-                fail_token("Unsupported token in tensor type annotation", consumed);
+                failToken("Unsupported token in tensor type annotation", consumed);
         }
     }
     return result;
 }
 
-Stmt Parser::parse_stmt() {
+Stmt Parser::parseStmt() {
     const Token* token = peek(0);
     if (token == nullptr) {
-        fail_here("Expected statement");
+        failHere("Expected statement");
     }
 
     switch (token->kind) {
         case TokenType::Return: {
             Token start = consume();
-            auto expr = parse_expression();
-            consume_terminator();
+            auto expr = parseExpression();
+            consumeTerminator();
             return make_stmt(span_of(start), ReturnStmt{std::move(expr)});
         }
         // case TokenType::Let:
-        //     return parse_let_var_decl();
+        //     return parseLetVarDecl();
         case TokenType::Ident:
-            if (peek_kind(1) == TokenType::Colon || peek_kind(1) == TokenType::Eq) {
+            if (peekKind(1) == TokenType::Colon || peekKind(1) == TokenType::Eq) {
                 Token start = *token;
-                std::string name = consume_ident("Expected assignment target");
+                std::string name = consumeIdent("Expected assignment target");
                 
                 Type type = Type::unknown();
-                if (peek_kind(0) == TokenType::Colon) {
+                if (peekKind(0) == TokenType::Colon) {
                     consume();
-                    type = parse_type();
+                    type = parseType();
                 }
                 
                 ExprPtr init;
-                if (peek_kind(0) == TokenType::Eq) {
+                if (peekKind(0) == TokenType::Eq) {
                     consume();
-                    init = parse_expression();
+                    init = parseExpression();
                 } else if (type.base == TypeBase::Unknown) {
-                    fail_token("Variable declaration needs a type annotation or initializer", start);
+                    failToken("Variable declaration needs a type annotation or initializer", start);
                 }
                 
-                consume_terminator();
+                consumeTerminator();
                 
                 if (type.base != TypeBase::Unknown) {
                     return make_stmt(span_of(start), VarDecl{std::move(name), std::move(type), std::move(init), std::nullopt});
                 } else {
                     return make_stmt(span_of(start), AssignStmt{std::move(name), std::move(init)});
                 }
-            } else if (peek_kind(1) == TokenType::OpenParen) {
+            } else if (peekKind(1) == TokenType::OpenParen) {
                 Token start = *token;
-                auto expr = parse_expression();
-                consume_terminator();
+                auto expr = parseExpression();
+                consumeTerminator();
                 return make_stmt(span_of(start), ExprStmt{std::move(expr)});
             }
-            fail_token("Unexpected identifier or missing assignment.", *token);
+            failToken("Unexpected identifier or missing assignment.", *token);
         // case TokenType::Mut:
-        //     fail_token("Mutable declarations must start with 'let mut'", *token);
+        //     failToken("Mutable declarations must start with 'let mut'", *token);
         case TokenType::Indent:
-            return parse_scope();
+            return parseScope();
         case TokenType::If: {
             Token start = consume();
-            auto condition = parse_expression();
+            auto condition = parseExpression();
             expect(TokenType::Colon, "Expected ':' after if condition");
-            auto then_stmt = std::make_unique<Stmt>(parse_scope());
+            auto thenStmt = std::make_unique<Stmt>(parseScope());
             std::vector<IfBranch> elifs;
-            while (peek_kind(0) == TokenType::Elif) {
+            while (peekKind(0) == TokenType::Elif) {
                 consume();
-                auto elif_condition = parse_expression();
+                auto elif_condition = parseExpression();
                 expect(TokenType::Colon, "Expected ':' after elif condition");
-                auto elif_body = std::make_unique<Stmt>(parse_scope());
+                auto elif_body = std::make_unique<Stmt>(parseScope());
                 elifs.push_back(IfBranch{std::move(elif_condition), std::move(elif_body)});
             }
-            StmtPtr else_stmt;
-            if (peek_kind(0) == TokenType::Else) {
+            StmtPtr elseStmt;
+            if (peekKind(0) == TokenType::Else) {
                 consume();
-                if (peek_kind(0) == TokenType::Colon) {
+                if (peekKind(0) == TokenType::Colon) {
                     consume();
                 }
-                else_stmt = std::make_unique<Stmt>(parse_scope());
+                elseStmt = std::make_unique<Stmt>(parseScope());
             }
             return make_stmt(
                 span_of(start),
                 IfStmt{
                     std::move(condition),
-                    std::move(then_stmt),
+                    std::move(thenStmt),
                     std::move(elifs),
-                    std::move(else_stmt),
+                    std::move(elseStmt),
                 }
             );
         }
         default:
-            fail_token("Unexpected token in statement", *token);
+            failToken("Unexpected token in statement", *token);
     }
 }
 // this fn parseing the let keyword and assign wheather it mutable or not.
-// Stmt Parser::parse_let_var_decl() {
+// Stmt Parser::parseLetVarDecl() {
 //     Token start = expect(TokenType::Let, "Expected 'let'");
 //     bool is_mutable = false;
-//     if (peek_kind(0) == TokenType::Mut) {
+//     if (peekKind(0) == TokenType::Mut) {
 //         consume();
 //         is_mutable = true;
 //     }
-//     std::string name = consume_ident("Expected variable name");
+//     std::string name = consumeIdent("Expected variable name");
 //     Type type = Type::unknown();
-//     if (peek_kind(0) == TokenType::Colon) {
+//     if (peekKind(0) == TokenType::Colon) {
 //         consume();
-//         type = parse_type();
+//         type = parseType();
 //     }
 //     ExprPtr init;
-//     if (peek_kind(0) == TokenType::Eq) {
+//     if (peekKind(0) == TokenType::Eq) {
 //         consume();
-//         init = parse_expression();
+//         init = parseExpression();
 //     }
 //     if (type.base == TypeBase::Unknown && !init) {
-//         fail_token("Variable declaration needs a type annotation or initializer", start);
+//         failToken("Variable declaration needs a type annotation or initializer", start);
 //     }
-//     consume_terminator();
+//     consumeTerminator();
 //     return make_stmt(
 //         span_of(start),
 //         VarDecl{std::move(name), std::move(type), std::move(init), std::nullopt, is_mutable}
 //     );
 // }
 
-Layer Parser::parse_layer() {
+Layer Parser::parseLayer() {
     Token start = expect(TokenType::Layer, "Expected 'layer' keyword");
-    std::string name = consume_ident("Expected layer name");
-    auto args = parse_callable_args();
-    Type return_type = parse_callable_return_type("Expected ':' after layer signature");
-    Stmt body = parse_scope();
-    return Layer{span_of(start), std::move(name), std::move(args), std::move(return_type), std::move(body)};
+    std::string name = consumeIdent("Expected layer name");
+    auto args = parseCallableArgs();
+    Type returnType = parseCallableReturnType("Expected ':' after layer signature");
+    Stmt body = parseScope();
+    return Layer{span_of(start), std::move(name), std::move(args), std::move(returnType), std::move(body)};
 }
 
-Function Parser::parse_function() {
+Function Parser::parseFunction() {
     Token start = expect(TokenType::Fn, "Expected 'fn' keyword");
-    std::string name = consume_ident("Expected function name");
-    auto args = parse_callable_args();
-    Type return_type = parse_callable_return_type("Expected ':' after function signature");
-    Stmt body = parse_scope();
-    return Function{span_of(start), std::move(name), std::move(args), std::move(return_type), std::move(body)};
+    std::string name = consumeIdent("Expected function name");
+    auto args = parseCallableArgs();
+    Type returnType = parseCallableReturnType("Expected ':' after function signature");
+    Stmt body = parseScope();
+    return Function{span_of(start), std::move(name), std::move(args), std::move(returnType), std::move(body)};
 }
 
-Config Parser::parse_config() {
+Config Parser::parseConfig() {
     Token start = expect(TokenType::Config, "Expected 'config' keyword");
-    std::string name = consume_ident("Expected config name");
+    std::string name = consumeIdent("Expected config name");
     expect(TokenType::Colon, "Expected ':' after config name");
-    while (peek_kind(0) == TokenType::Newline) {
+    while (peekKind(0) == TokenType::Newline) {
         consume();
     }
 
     std::vector<Field> fields;
-    if (peek_kind(0) == TokenType::Indent) {
+    if (peekKind(0) == TokenType::Indent) {
         consume();
-        while (peek_kind(0) != TokenType::Dedent) {
-            if (peek_kind(0) == TokenType::Newline) {
+        while (peekKind(0) != TokenType::Dedent) {
+            if (peekKind(0) == TokenType::Newline) {
                 consume();
                 continue;
             }
-            std::string field_name = consume_ident("Expected field name");
+            std::string field_name = consumeIdent("Expected field name");
             Type type = Type::unknown();
-            if (peek_kind(0) == TokenType::Colon) {
+            if (peekKind(0) == TokenType::Colon) {
                 consume();
-                type = parse_type();
+                type = parseType();
             }
             ExprPtr init = nullptr;
-            if (peek_kind(0) == TokenType::Eq) {
+            if (peekKind(0) == TokenType::Eq) {
                 consume();
-                init = parse_expression();
+                init = parseExpression();
             }
             fields.push_back(Field{std::move(field_name), std::move(type), std::move(init)});
-            consume_terminator();
+            consumeTerminator();
         }
         expect(TokenType::Dedent, "Expected DEDENT");
     }
     return Config{span_of(start), std::move(name), std::move(fields)};
 }
 
-std::vector<Arg> Parser::parse_callable_args() {
+std::vector<Arg> Parser::parseCallableArgs() {
     expect(TokenType::OpenParen, "Expected '('");
     std::vector<Arg> args;
-    if (peek_kind(0) != TokenType::CloseParen) {
+    if (peekKind(0) != TokenType::CloseParen) {
         while (true) {
-            std::string arg_name = consume_ident("Expected argument name");
+            std::string arg_name = consumeIdent("Expected argument name");
             Type type = Type::unknown();
-            if (peek_kind(0) == TokenType::Colon) {
+            if (peekKind(0) == TokenType::Colon) {
                 consume();
-                type = parse_type();
+                type = parseType();
             }
-            ExprPtr default_value = nullptr;
-            if (peek_kind(0) == TokenType::Eq) {
+            ExprPtr defaultValue = nullptr;
+            if (peekKind(0) == TokenType::Eq) {
                 consume();
-                default_value = parse_expression();
+                defaultValue = parseExpression();
             }
-            args.push_back(Arg{std::move(arg_name), std::move(type), std::move(default_value)});
-            if (peek_kind(0) == TokenType::Comma) {
+            args.push_back(Arg{std::move(arg_name), std::move(type), std::move(defaultValue)});
+            if (peekKind(0) == TokenType::Comma) {
                 consume();
             } else {
                 break;
@@ -1212,14 +1212,14 @@ std::vector<Arg> Parser::parse_callable_args() {
     return args;
 }
 
-Type Parser::parse_callable_return_type(const std::string& colon_error) {
+Type Parser::parseCallableReturnType(const std::string& colon_error) {
     expect(TokenType::Colon, colon_error);
-    if (peek_kind(0) == TokenType::Newline || peek_kind(0) == TokenType::Indent) {
+    if (peekKind(0) == TokenType::Newline || peekKind(0) == TokenType::Indent) {
         return Type::unknown();
     }
-    Type return_type = parse_type();
+    Type returnType = parseType();
     expect(TokenType::Colon, "Expected ':' after return type");
-    return return_type;
+    return returnType;
 }
 
 const Token* Parser::peek(std::size_t offset) const {
@@ -1230,7 +1230,7 @@ const Token* Parser::peek(std::size_t offset) const {
     return &tokens_[position];
 }
 
-std::optional<TokenType> Parser::peek_kind(std::size_t offset) const {
+std::optional<TokenType> Parser::peekKind(std::size_t offset) const {
     const Token* token = peek(offset);
     if (token == nullptr) {
         return std::nullopt;
@@ -1240,7 +1240,7 @@ std::optional<TokenType> Parser::peek_kind(std::size_t offset) const {
 
 Token Parser::consume() {
     if (index_ >= tokens_.size()) {
-        fail_here("Unexpected end of tokens");
+        failHere("Unexpected end of tokens");
     }
     return tokens_[index_++];
 }
@@ -1248,15 +1248,15 @@ Token Parser::consume() {
 Token Parser::expect(TokenType kind, const std::string& message) {
     const Token* token = peek(0);
     if (token == nullptr) {
-        fail_here(message);
+        failHere(message);
     }
     if (token->kind != kind) {
-        fail_token(message, *token);
+        failToken(message, *token);
     }
     return consume();
 }
 
-std::string Parser::consume_ident(const std::string& message) {
+std::string Parser::consumeIdent(const std::string& message) {
     Token token = consume();
     switch (token.kind) {
         case TokenType::Ident:
@@ -1288,31 +1288,31 @@ std::string Parser::consume_ident(const std::string& message) {
         case TokenType::Tensor:
             return "tensor";
         default:
-            fail_token(message, token);
+            failToken(message, token);
     }
 }
 
-void Parser::consume_terminator() {
+void Parser::consumeTerminator() {
     bool found = false;
-    while (peek_kind(0) == TokenType::Semi || peek_kind(0) == TokenType::Newline) {
+    while (peekKind(0) == TokenType::Semi || peekKind(0) == TokenType::Newline) {
         consume();
         found = true;
     }
-    if (!found && !(peek_kind(0) == TokenType::Dedent || peek_kind(0) == TokenType::Eof)) {
-        fail_here("Expected ';' or newline at end of statement");
+    if (!found && !(peekKind(0) == TokenType::Dedent || peekKind(0) == TokenType::Eof)) {
+        failHere("Expected ';' or newline at end of statement");
     }
 }
 
-void Parser::fail_here(const std::string& message) {
+void Parser::failHere(const std::string& message) {
     if (const Token* token = peek(0)) {
-        fail_token(message, *token);
+        failToken(message, *token);
     }
     if (!tokens_.empty()) {
         const Token& last = tokens_.back();
         record(
             Diagnostic::error(DiagnosticCode::ParserError, message)
-                .with_span(last.line, last.column)
-                .with_help(
+                .withSpan(last.line, last.column)
+                .withHelp(
                     "Reached end of file after " + std::to_string(last.line) + ":" +
                     std::to_string(last.column)
                 )
@@ -1320,41 +1320,41 @@ void Parser::fail_here(const std::string& message) {
     } else {
         record(
             Diagnostic::error(DiagnosticCode::ParserError, message)
-                .with_help("The parser did not receive any tokens")
+                .withHelp("The parser did not receive any tokens")
         );
     }
     throw ParseFailure(message);
 }
 
-void Parser::fail_token(const std::string& message, const Token& token) {
-    record(Diagnostic::error(DiagnosticCode::ParserError, message).with_span(token.line, token.column));
+void Parser::failToken(const std::string& message, const Token& token) {
+    record(Diagnostic::error(DiagnosticCode::ParserError, message).withSpan(token.line, token.column));
     throw ParseFailure(message);
 }
 
 void Parser::record(Diagnostic diagnostic) {
-    last_diagnostic_ = std::move(diagnostic);
+    lastDiagnostic_ = std::move(diagnostic);
 }
 
-std::string type_to_string(const Type& type) {
+std::string typeToString(const Type& type) {
     switch (type.base) {
         case TypeBase::Unknown:
             return "unknown";
         case TypeBase::Bool:
             return "bool";
         case TypeBase::Int:
-            return type.scalar_dtype.value_or("int");
+            return type.scalarDtype.value_or("int");
         case TypeBase::Str:
             return "str";
         case TypeBase::Float:
-            return type.scalar_dtype.value_or("float");
+            return type.scalarDtype.value_or("float");
         case TypeBase::Tensor:
-            if (type.tensor_dtype || type.tensor_shape_expr) {
+            if (type.tensorDtype || type.tensorShapeExpr) {
                 std::string result = "tensor[";
-                if (type.tensor_dtype) {
-                    result += *type.tensor_dtype;
+                if (type.tensorDtype) {
+                    result += *type.tensorDtype;
                 }
-                if (type.tensor_shape_expr) {
-                    result += ", " + *type.tensor_shape_expr;
+                if (type.tensorShapeExpr) {
+                    result += ", " + *type.tensorShapeExpr;
                 }
                 result += ']';
                 return result;
@@ -1366,15 +1366,15 @@ std::string type_to_string(const Type& type) {
                 if (index != 0) {
                     result += ", ";
                 }
-                result += type_to_string(type.elements[index]);
+                result += typeToString(type.elements[index]);
             }
             result += ']';
             return result;
         }
         case TypeBase::List:
-            return type.elements.empty() ? "list[unknown]" : "list[" + type_to_string(type.elements[0]) + "]";
+            return type.elements.empty() ? "list[unknown]" : "list[" + typeToString(type.elements[0]) + "]";
         case TypeBase::Callable:
-            return type.callable_return ? "callable -> " + type_to_string(*type.callable_return)
+            return type.callableReturn ? "callable -> " + typeToString(*type.callableReturn)
                                         : "callable";
         case TypeBase::None: // need attention
             return "None";
@@ -1382,7 +1382,7 @@ std::string type_to_string(const Type& type) {
     return "unknown";
 }
 
-std::string program_summary(const Program& program) {
+std::string programSummary(const Program& program) {
     std::ostringstream out;
     out << "configs=" << program.configs.size() << '\n';
     out << "layers=" << program.layers.size() << '\n';
@@ -1391,13 +1391,13 @@ std::string program_summary(const Program& program) {
     return out.str();
 }
 
-std::string ast_to_string(const Program& program) {
+std::string astToString(const Program& program) {
     std::ostringstream out;
-    out << program_summary(program) << '\n';
+    out << programSummary(program) << '\n';
     for (const auto& config : program.configs) {
         out << "config " << config.name << " fields=" << config.fields.size() << '\n';
         for (const auto& field : config.fields) {
-            out << "  field " << field.name << ": " << type_to_string(field.type);
+            out << "  field " << field.name << ": " << typeToString(field.type);
             if (field.init) {
                 out << " = ";
                 append_expr_summary(out, *field.init);
@@ -1408,13 +1408,13 @@ std::string ast_to_string(const Program& program) {
     for (const auto& layer : program.layers) {
         out << "layer " << layer.name << '(';
         append_args(out, layer.args);
-        out << ") -> " << type_to_string(layer.return_type) << '\n';
+        out << ") -> " << typeToString(layer.returnType) << '\n';
         append_stmt_summary(out, layer.body, 2);
     }
     for (const auto& function : program.functions) {
         out << "fn " << function.name << '(';
         append_args(out, function.args);
-        out << ") -> " << type_to_string(function.return_type) << '\n';
+        out << ") -> " << typeToString(function.returnType) << '\n';
         append_stmt_summary(out, function.body, 2);
     }
     for (const auto& global : program.globals) {

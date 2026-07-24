@@ -23,10 +23,10 @@ const ExecutionPlan* find_plan(const PlanModule& module, const std::string& entr
 
 std::variant<const SimpleTensor*, Diagnostic> require_tensor(
     const GraphExecutionResult& execution,
-    std::size_t value_id,
+    std::size_t valueId,
     const std::string& label
 ) {
-    auto found = execution.values.find(value_id);
+    auto found = execution.values.find(valueId);
     if (found == execution.values.end()) {
         return backward_error("Missing " + label);
     }
@@ -39,10 +39,10 @@ std::variant<const SimpleTensor*, Diagnostic> require_tensor(
 
 std::variant<double, Diagnostic> require_scalar(
     const GraphExecutionResult& execution,
-    std::size_t value_id,
+    std::size_t valueId,
     const std::string& label
 ) {
-    auto found = execution.values.find(value_id);
+    auto found = execution.values.find(valueId);
     if (found == execution.values.end()) {
         return backward_error("Missing " + label);
     }
@@ -60,10 +60,10 @@ std::variant<double, Diagnostic> require_scalar(
 
 std::variant<std::int64_t, Diagnostic> require_int(
     const GraphExecutionResult& execution,
-    std::size_t value_id,
+    std::size_t valueId,
     const std::string& label
 ) {
-    auto found = execution.values.find(value_id);
+    auto found = execution.values.find(valueId);
     if (found == execution.values.end()) {
         return backward_error("Missing " + label);
     }
@@ -75,10 +75,10 @@ std::variant<std::int64_t, Diagnostic> require_int(
 
 std::variant<bool, Diagnostic> require_bool(
     const GraphExecutionResult& execution,
-    std::size_t value_id,
+    std::size_t valueId,
     const std::string& label
 ) {
-    auto found = execution.values.find(value_id);
+    auto found = execution.values.find(valueId);
     if (found == execution.values.end()) {
         return backward_error("Missing " + label);
     }
@@ -147,12 +147,12 @@ std::optional<Diagnostic> add_in_place(SimpleTensor& dst, const SimpleTensor& sr
 
 std::optional<Diagnostic> accumulate(
     std::map<std::size_t, SimpleTensor>& gradients,
-    std::size_t value_id,
+    std::size_t valueId,
     const SimpleTensor& gradient
 ) {
-    auto found = gradients.find(value_id);
+    auto found = gradients.find(valueId);
     if (found == gradients.end()) {
-        gradients.emplace(value_id, gradient);
+        gradients.emplace(valueId, gradient);
         return std::nullopt;
     }
     return add_in_place(found->second, gradient);
@@ -188,8 +188,8 @@ std::variant<LinearClosure, Diagnostic> build_linear_closure(
     const GraphExecutionResult& execution
 ) {
     LinearClosure closure;
-    if (output.type.callable_return && output.type.callable_return->tensor_dtype) {
-        closure.dtype = *output.type.callable_return->tensor_dtype;
+    if (output.type.callableReturn && output.type.callableReturn->tensorDtype) {
+        closure.dtype = *output.type.callableReturn->tensorDtype;
     }
     if (op.inputs.size() == 1) {
         auto out_features = require_int(execution, op.inputs[0], "linear out_features");
@@ -243,14 +243,14 @@ std::variant<std::size_t, Diagnostic> resolve_objective_id(
     const ExecutionPlan& plan,
     const std::string& entry
 ) {
-    if (lowered.execution_plan) {
-        auto run = std::find_if(lowered.execution_plan->runs.begin(), lowered.execution_plan->runs.end(), [&](const FeExecutionRun& item) {
-            return item.model_name == entry;
+    if (lowered.executionPlan) {
+        auto run = std::find_if(lowered.executionPlan->runs.begin(), lowered.executionPlan->runs.end(), [&](const FeExecutionRun& item) {
+            return item.modelName == entry;
         });
-        if (run != lowered.execution_plan->runs.end() && run->objective_symbol) {
-            auto named = plan.named_values.find(*run->objective_symbol);
-            if (named == plan.named_values.end()) {
-                return backward_error("Could not resolve objective '" + *run->objective_symbol + "' in execution plan");
+        if (run != lowered.executionPlan->runs.end() && run->objectiveSymbol) {
+            auto named = plan.namedValues.find(*run->objectiveSymbol);
+            if (named == plan.namedValues.end()) {
+                return backward_error("Could not resolve objective '" + *run->objectiveSymbol + "' in execution plan");
             }
             return named->second;
         }
@@ -421,7 +421,7 @@ std::variant<SimpleTensor, Diagnostic> backward_binary(
     const auto* rhs_tensor = std::get_if<SimpleTensor>(&rhs_found->second);
     if (lhs_tensor != nullptr && rhs_tensor != nullptr) {
         const bool rhs_broadcast = is_trailing_vector_broadcast(*lhs_tensor, *rhs_tensor);
-        if (op.binary_op == FeBinaryOp::Add) {
+        if (op.binaryOp == FeBinaryOp::Add) {
             if (auto diagnostic = accumulate(gradients, op.inputs[0], grad)) return *diagnostic;
             SimpleTensor rhs_grad = grad;
             if (rhs_broadcast) {
@@ -432,7 +432,7 @@ std::variant<SimpleTensor, Diagnostic> backward_binary(
             if (auto diagnostic = accumulate(gradients, op.inputs[1], rhs_grad)) return *diagnostic;
             return grad;
         }
-        if (op.binary_op == FeBinaryOp::Sub) {
+        if (op.binaryOp == FeBinaryOp::Sub) {
             if (auto diagnostic = accumulate(gradients, op.inputs[0], grad)) return *diagnostic;
             SimpleTensor rhs_grad = negate(grad);
             if (rhs_broadcast) {
@@ -443,7 +443,7 @@ std::variant<SimpleTensor, Diagnostic> backward_binary(
             if (auto diagnostic = accumulate(gradients, op.inputs[1], rhs_grad)) return *diagnostic;
             return grad;
         }
-        if (op.binary_op == FeBinaryOp::Mul) {
+        if (op.binaryOp == FeBinaryOp::Mul) {
             auto lhs_grad = multiply(grad, *rhs_tensor);
             auto rhs_grad = multiply(grad, *lhs_tensor);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs_grad)) return *diagnostic;
@@ -458,7 +458,7 @@ std::variant<SimpleTensor, Diagnostic> backward_binary(
             if (auto diagnostic = accumulate(gradients, op.inputs[1], rhs_value_grad)) return *diagnostic;
             return grad;
         }
-        if (op.binary_op == FeBinaryOp::Div) {
+        if (op.binaryOp == FeBinaryOp::Div) {
             auto lhs_grad = divide(grad, *rhs_tensor);
             auto rhs_sq = multiply(*rhs_tensor, *rhs_tensor);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs_grad)) return *diagnostic;
@@ -476,12 +476,12 @@ std::variant<SimpleTensor, Diagnostic> backward_binary(
     if (lhs_tensor != nullptr) {
         auto scalar = require_scalar(execution, op.inputs[1], "binary rhs");
         if (const auto* diagnostic = std::get_if<Diagnostic>(&scalar)) return *diagnostic;
-        if (op.binary_op == FeBinaryOp::Add || op.binary_op == FeBinaryOp::Sub) {
+        if (op.binaryOp == FeBinaryOp::Add || op.binaryOp == FeBinaryOp::Sub) {
             if (auto diagnostic = accumulate(gradients, op.inputs[0], grad)) return *diagnostic;
             return grad;
         }
-        if (op.binary_op == FeBinaryOp::Mul || op.binary_op == FeBinaryOp::Div) {
-            auto lhs_grad = tensor_scalar_binary(op.binary_op, grad, std::get<double>(scalar));
+        if (op.binaryOp == FeBinaryOp::Mul || op.binaryOp == FeBinaryOp::Div) {
+            auto lhs_grad = tensor_scalar_binary(op.binaryOp, grad, std::get<double>(scalar));
             if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs_grad)) return *diagnostic;
             if (auto diagnostic = accumulate(gradients, op.inputs[0], std::get<SimpleTensor>(lhs_grad))) return *diagnostic;
             return grad;
@@ -491,15 +491,15 @@ std::variant<SimpleTensor, Diagnostic> backward_binary(
     if (rhs_tensor != nullptr) {
         auto scalar = require_scalar(execution, op.inputs[0], "binary lhs");
         if (const auto* diagnostic = std::get_if<Diagnostic>(&scalar)) return *diagnostic;
-        if (op.binary_op == FeBinaryOp::Add) {
+        if (op.binaryOp == FeBinaryOp::Add) {
             if (auto diagnostic = accumulate(gradients, op.inputs[1], grad)) return *diagnostic;
             return grad;
         }
-        if (op.binary_op == FeBinaryOp::Sub) {
+        if (op.binaryOp == FeBinaryOp::Sub) {
             if (auto diagnostic = accumulate(gradients, op.inputs[1], negate(grad))) return *diagnostic;
             return grad;
         }
-        if (op.binary_op == FeBinaryOp::Mul) {
+        if (op.binaryOp == FeBinaryOp::Mul) {
             auto rhs_grad = tensor_scalar_binary(FeBinaryOp::Mul, grad, std::get<double>(scalar));
             if (const auto* diagnostic = std::get_if<Diagnostic>(&rhs_grad)) return *diagnostic;
             if (auto diagnostic = accumulate(gradients, op.inputs[1], std::get<SimpleTensor>(rhs_grad))) return *diagnostic;
@@ -510,7 +510,7 @@ std::variant<SimpleTensor, Diagnostic> backward_binary(
     return grad;
 }
 
-std::optional<Diagnostic> compute_gradients(
+std::optional<Diagnostic> computeGradients(
     const LoweredModule& lowered,
     const ExecutionPlan& plan,
     const GraphExecutionResult& execution,
@@ -695,13 +695,13 @@ std::optional<Diagnostic> run_backward_plan_module(
     }
     const GraphExecutionResult& result = std::get<GraphExecutionResult>(execution);
     std::map<std::size_t, SimpleTensor> gradients;
-    if (auto diagnostic = compute_gradients(lowered, *plan, result, gradients)) {
+    if (auto diagnostic = computeGradients(lowered, *plan, result, gradients)) {
         return *diagnostic;
     }
 
     std::cout << "\n--- Gradient Output ---\n";
     for (const auto& value : plan->values) {
-        if ((!value.is_parameter && !value.is_model_parameter) || value.type.kind != FeTypeKind::Tensor) {
+        if ((!value.isParameter && !value.isModelParameter) || value.type.kind != FeTypeKind::Tensor) {
             continue;
         }
         auto gradient = gradients.find(value.id);

@@ -12,27 +12,27 @@
 
 namespace {
 
-std::variant<Program, Diagnostic> parse_program(const std::string& source) {
-    TokenizeResult tokenized = tokenize_with_diagnostic(source);
+std::variant<Program, Diagnostic> parseProgram(const std::string& source) {
+    TokenizeResult tokenized = tokenizeWithDiagnostic(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&tokenized)) {
         return *diagnostic;
     }
     Parser parser(std::get<std::vector<Token>>(std::move(tokenized)));
-    ParseResult parsed = parser.parse_program();
+    ParseResult parsed = parser.parseProgram();
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
         return *diagnostic;
     }
     return std::get<Program>(std::move(parsed));
 }
 
-std::variant<LoweredModule, Diagnostic> lower_module(const std::string& source) {
-    auto parsed = parse_program(source);
+std::variant<LoweredModule, Diagnostic> lowerModule(const std::string& source) {
+    auto parsed = parseProgram(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
         return *diagnostic;
     }
 
     SemanticAnalyzer analyzer;
-    SemanticResult semantic_result = analyzer.analyze_with_info(std::get<Program>(parsed));
+    SemanticResult semantic_result = analyzer.analyzeWithInfo(std::get<Program>(parsed));
     if (const auto* diagnostic = std::get_if<Diagnostic>(&semantic_result)) {
         return *diagnostic;
     }
@@ -46,28 +46,28 @@ std::variant<LoweredModule, Diagnostic> lower_module(const std::string& source) 
 }
 
 bool lower_ok(const std::string& name, const std::string& source, std::size_t functions, std::size_t trains) {
-    auto frontend_result = lower_module(source);
+    auto frontend_result = lowerModule(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&frontend_result)) {
-        std::cerr << name << ": frontend lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << name << ": frontend lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
     const LoweredModule& module = std::get<LoweredModule>(frontend_result);
     if ((module.functions.size() + module.layers.size()) != functions || module.trains.size() != trains) {
         std::cerr << name << ": unexpected lowered shape: "
-                  << lowered_module_summary(module) << '\n';
+                  << loweredModuleSummary(module) << '\n';
         return false;
     }
     return true;
 }
 
 bool contains_ir(const std::string& name, const std::string& source, const std::string& expected) {
-    auto frontend_result = lower_module(source);
+    auto frontend_result = lowerModule(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&frontend_result)) {
-        std::cerr << name << ": frontend lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << name << ": frontend lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
-    std::string ir = frontend_ir_to_string(std::get<LoweredModule>(frontend_result));
+    std::string ir = frontendIrToString(std::get<LoweredModule>(frontend_result));
     if (ir.find(expected) == std::string::npos) {
         std::cerr << name << ": expected IR fragment not found: " << expected << "\n" << ir << '\n';
         return false;
@@ -76,7 +76,7 @@ bool contains_ir(const std::string& name, const std::string& source, const std::
 }
 
 bool local_objective_ok() {
-    auto frontend_result = lower_module(
+    auto frontend_result = lowerModule(
         "layer model(x: tensor[float16]): tensor[float16]:\n"
         "  loss = relu(x)\n"
         "  return x\n"
@@ -86,15 +86,15 @@ bool local_objective_ok() {
         "  objective = loss\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&frontend_result)) {
-        std::cerr << "local-objective: frontend lowering failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "local-objective: frontend lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const auto& module = std::get<LoweredModule>(frontend_result);
-    if (!module.execution_plan || module.execution_plan->runs.empty()) {
+    if (!module.executionPlan || module.executionPlan->runs.empty()) {
         std::cerr << "local-objective: missing execution plan\n";
         return false;
     }
-    if (module.execution_plan->runs.front().objective_source != ObjectiveSource::Local) {
+    if (module.executionPlan->runs.front().objectiveSource != ObjectiveSource::Local) {
         std::cerr << "local-objective: expected Local objective source\n";
         return false;
     }

@@ -10,20 +10,20 @@
 namespace {
 
 bool parse_ok(const std::string& name, const std::string& source, const std::string& expected) {
-    TokenizeResult tokenized = tokenize_with_diagnostic(source);
+    TokenizeResult tokenized = tokenizeWithDiagnostic(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&tokenized)) {
-        std::cerr << name << ": tokenization failed: " << diagnostic->to_string() << '\n';
+        std::cerr << name << ": tokenization failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
     Parser parser(std::get<std::vector<Token>>(std::move(tokenized)));
-    ParseResult parsed = parser.parse_program();
+    ParseResult parsed = parser.parseProgram();
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
-        std::cerr << name << ": parse failed: " << diagnostic->to_string() << '\n';
+        std::cerr << name << ": parse failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
-    const std::string ast = ast_to_string(std::get<Program>(parsed));
+    const std::string ast = astToString(std::get<Program>(parsed));
     if (!expected.empty() && ast.find(expected) == std::string::npos) {
         std::cerr << name << ": AST did not contain expected text\n";
         std::cerr << "expected: " << expected << '\n';
@@ -34,15 +34,15 @@ bool parse_ok(const std::string& name, const std::string& source, const std::str
 }
 
 bool parse_fails(const std::string& name, const std::string& source, const std::string& expected) {
-    TokenizeResult tokenized = tokenize_with_diagnostic(source);
+    TokenizeResult tokenized = tokenizeWithDiagnostic(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&tokenized)) {
-        std::cerr << name << ": tokenization failed before parser: " << diagnostic->to_string()
+        std::cerr << name << ": tokenization failed before parser: " << diagnostic->toString()
                   << '\n';
         return false;
     }
 
     Parser parser(std::get<std::vector<Token>>(std::move(tokenized)));
-    ParseResult parsed = parser.parse_program();
+    ParseResult parsed = parser.parseProgram();
     const auto* diagnostic = std::get_if<Diagnostic>(&parsed);
     if (diagnostic == nullptr) {
         std::cerr << name << ": parse unexpectedly succeeded\n";
@@ -51,7 +51,7 @@ bool parse_fails(const std::string& name, const std::string& source, const std::
     if (diagnostic->message.find(expected) == std::string::npos) {
         std::cerr << name << ": wrong parser error\n";
         std::cerr << "expected: " << expected << '\n';
-        std::cerr << diagnostic->to_string() << '\n';
+        std::cerr << diagnostic->toString() << '\n';
         return false;
     }
     return true;

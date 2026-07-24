@@ -13,7 +13,7 @@
 
 namespace {
 
-bool is_callable(const Type& type) {
+bool isCallable(const Type& type) {
     return type.base == TypeBase::Callable;
 }
 
@@ -29,55 +29,55 @@ Type tensor_any() {
  * 
  * @param callee The name of the function or layer being called.
  * @param declared_type The statically declared return type.
- * @param arg_types The inferred types of the arguments passed to the call.
+ * @param argTypes The inferred types of the arguments passed to the call.
  * @return The inferred return type of the call.
  */
-Type infer_call_result_type(const std::string& callee, const Type& declared_type, const std::vector<Type>& arg_types) {
-    if (declared_type.base == TypeBase::Callable && !arg_types.empty()) {
-        if (declared_type.callable_return && declared_type.callable_return->base == TypeBase::Tensor &&
-            arg_types[0].base == TypeBase::Tensor) {
+Type infer_call_result_type(const std::string& callee, const Type& declared_type, const std::vector<Type>& argTypes) {
+    if (declared_type.base == TypeBase::Callable && !argTypes.empty()) {
+        if (declared_type.callableReturn && declared_type.callableReturn->base == TypeBase::Tensor &&
+            argTypes[0].base == TypeBase::Tensor) {
             return Type::callable(Type::tensor(
-                arg_types[0].tensor_dtype,
-                declared_type.callable_return->tensor_shape_expr,
-                arg_types[0].tensor_rank
+                argTypes[0].tensorDtype,
+                declared_type.callableReturn->tensorShapeExpr,
+                argTypes[0].tensorRank
             ));
         }
         return declared_type;
     }
 
-    if (declared_type.base != TypeBase::Tensor || arg_types.empty() ||
-        arg_types[0].base != TypeBase::Tensor) {
+    if (declared_type.base != TypeBase::Tensor || argTypes.empty() ||
+        argTypes[0].base != TypeBase::Tensor) {
         return declared_type;
     }
 
-    const Type& first = arg_types[0];
+    const Type& first = argTypes[0];
     if (callee == "reshape") {
-        return Type::tensor(first.tensor_dtype, std::nullopt, std::nullopt);
+        return Type::tensor(first.tensorDtype, std::nullopt, std::nullopt);
     }
     if (callee == "sum" || callee == "mean") {
-        return Type::tensor(first.tensor_dtype, std::nullopt, 1);
+        return Type::tensor(first.tensorDtype, std::nullopt, 1);
     }
     if (callee == "matmul") {
         return Type::tensor(
-            first.tensor_dtype,
-            declared_type.tensor_shape_expr,
-            first.tensor_rank ? first.tensor_rank : declared_type.tensor_rank
+            first.tensorDtype,
+            declared_type.tensorShapeExpr,
+            first.tensorRank ? first.tensorRank : declared_type.tensorRank
         );
     }
     if (callee == "cross_entropy") {
-        return Type::tensor(first.tensor_dtype, declared_type.tensor_shape_expr, declared_type.tensor_rank);
+        return Type::tensor(first.tensorDtype, declared_type.tensorShapeExpr, declared_type.tensorRank);
     }
-    if (preserves_first_tensor_arg(callee)) {
+    if (preservesFirstTensorArg(callee)) {
         return first;
     }
-    return Type::tensor(first.tensor_dtype, declared_type.tensor_shape_expr, first.tensor_rank);
+    return Type::tensor(first.tensorDtype, declared_type.tensorShapeExpr, first.tensorRank);
 }
 
 Type default_unconstrained_numeric_type(Type type) {
-    if (type.base == TypeBase::Int && !type.scalar_dtype) {
+    if (type.base == TypeBase::Int && !type.scalarDtype) {
         return Type::int32();
     }
-    if (type.base == TypeBase::Float && !type.scalar_dtype) {
+    if (type.base == TypeBase::Float && !type.scalarDtype) {
         return Type::float64();
     }
     if (type.base == TypeBase::List || type.base == TypeBase::Tuple) {
@@ -95,10 +95,10 @@ Type default_unconstrained_numeric_type(Type type) {
  */
 Type merge_scalar_float_types(const Type& lhs, const Type& rhs) {
     auto rank = [](const Type& type) {
-        if (type.scalar_dtype == "float64") {
+        if (type.scalarDtype == "float64") {
             return 3;
         }
-        if (type.scalar_dtype == "float16") {
+        if (type.scalarDtype == "float16") {
             return 1;
         }
         return 2;
@@ -110,18 +110,18 @@ Type merge_scalar_float_types(const Type& lhs, const Type& rhs) {
     if (merged == 1) {
         return Type::float16();
     }
-    if (!lhs.scalar_dtype && !rhs.scalar_dtype) {
-        return Type::float_type();
+    if (!lhs.scalarDtype && !rhs.scalarDtype) {
+        return Type::floatType();
     }
     return Type::float32();
 }
 
 Type merge_scalar_int_types(const Type& lhs, const Type& rhs) {
     auto rank = [](const Type& type) {
-        if (type.scalar_dtype == "int64") {
+        if (type.scalarDtype == "int64") {
             return 3;
         }
-        if (type.scalar_dtype == "int16") {
+        if (type.scalarDtype == "int16") {
             return 1;
         }
         return 2;
@@ -133,8 +133,8 @@ Type merge_scalar_int_types(const Type& lhs, const Type& rhs) {
     if (merged == 1) {
         return Type::int16();
     }
-    if (!lhs.scalar_dtype && !rhs.scalar_dtype) {
-        return Type::int_type();
+    if (!lhs.scalarDtype && !rhs.scalarDtype) {
+        return Type::intType();
     }
     return Type::int32();
 }
@@ -162,8 +162,8 @@ int count_stage_sites(const Expr& expr) {
             } else if constexpr (std::is_same_v<T, BinaryExpr>) {
                 return count_stage_sites(*value.lhs) + count_stage_sites(*value.rhs);
             } else if constexpr (std::is_same_v<T, TernaryExpr>) {
-                return count_stage_sites(*value.then_expr) + count_stage_sites(*value.condition) +
-                       count_stage_sites(*value.else_expr);
+                return count_stage_sites(*value.thenExpr) + count_stage_sites(*value.condition) +
+                       count_stage_sites(*value.elseExpr);
             } else if constexpr (std::is_same_v<T, TupleExpr>) {
                 return count_expr_list(value.elements);
             } else if constexpr (std::is_same_v<T, ListExpr>) {
@@ -212,9 +212,9 @@ void collect_expr_identifiers(const Expr& expr, std::set<std::string>& symbols) 
                 collect_expr_identifiers(*value.lhs, symbols);
                 collect_expr_identifiers(*value.rhs, symbols);
             } else if constexpr (std::is_same_v<T, TernaryExpr>) {
-                collect_expr_identifiers(*value.then_expr, symbols);
+                collect_expr_identifiers(*value.thenExpr, symbols);
                 collect_expr_identifiers(*value.condition, symbols);
-                collect_expr_identifiers(*value.else_expr, symbols);
+                collect_expr_identifiers(*value.elseExpr, symbols);
             } else if constexpr (std::is_same_v<T, TupleExpr>) {
                 collect_expr_list_identifiers(value.elements, symbols);
             } else if constexpr (std::is_same_v<T, ListExpr>) {
@@ -250,13 +250,13 @@ void collect_stmt_symbols(const Stmt& stmt, std::set<std::string>& symbols) {
                 }
             } else if constexpr (std::is_same_v<T, IfStmt>) {
                 collect_expr_identifiers(*value.condition, symbols);
-                collect_stmt_symbols(*value.then_stmt, symbols);
+                collect_stmt_symbols(*value.thenStmt, symbols);
                 for (const auto& branch : value.elifs) {
                     collect_expr_identifiers(*branch.condition, symbols);
                     collect_stmt_symbols(*branch.body, symbols);
                 }
-                if (value.else_stmt) {
-                    collect_stmt_symbols(*value.else_stmt, symbols);
+                if (value.elseStmt) {
+                    collect_stmt_symbols(*value.elseStmt, symbols);
                 }
             }
         },
@@ -267,7 +267,7 @@ void collect_stmt_symbols(const Stmt& stmt, std::set<std::string>& symbols) {
 // Reviewed
 bool is_train_config_field(const std::string& name) {
     return name == "backend" || name == "target" || name == "device" || name == "optimizer" ||
-           name == "lr" || name == "learning_rate" || name == "objective" || name == "iteration";
+           name == "lr" || name == "learningRate" || name == "objective" || name == "iteration";
 }
 
 // Reviewed
@@ -281,42 +281,42 @@ bool is_train_config(const Config& config) {
 } // namespace
 
 SemanticAnalyzer::SemanticAnalyzer() {
-    register_builtins();
+    registerBuiltins();
 }
 
-std::optional<Diagnostic> SemanticAnalyzer::take_last_diagnostic() {
-    auto diagnostic = last_diagnostic_;
-    last_diagnostic_.reset();
+std::optional<Diagnostic> SemanticAnalyzer::takeLastDiagnostic() {
+    auto diagnostic = lastDiagnostic_;
+    lastDiagnostic_.reset();
     return diagnostic;
 }
 
-SemanticResult SemanticAnalyzer::analyze_with_info(const Program& program) {
-    begin_analysis();
+SemanticResult SemanticAnalyzer::analyzeWithInfo(const Program& program) {
+    beginAnalysis();
     if (auto diagnostic = analyze(program)) {
         return *diagnostic;
     }
-    return semantic_info_;
+    return semanticInfo_;
 }
 
-void SemanticAnalyzer::begin_analysis() {
+void SemanticAnalyzer::beginAnalysis() {
     scopes_.clear();
     functions_.clear();
     layers_.clear();
     configs_.clear();
-    register_builtins();
-    last_expr_type_ = Type::None_type();
-    current_return_type_.reset();
-    current_callable_has_return_ = false;
-    current_callable_kind_ = CallableKind::None;
-    current_callable_name_.reset();
-    semantic_info_ = SemanticInfo{};
-    last_diagnostic_.reset();
+    registerBuiltins();
+    lastExprType_ = Type::noneType();
+    currentReturnType_.reset();
+    currentCallableHasReturn_ = false;
+    currentCallableKind_ = CallableKind::None;
+    currentCallableName_.reset();
+    semanticInfo_ = SemanticInfo{};
+    lastDiagnostic_.reset();
 
-    for (const auto& spec : all_builtin_signatures()) {
-        record_symbol(SemanticSymbol{
+    for (const auto& spec : allBuiltinSignatures()) {
+        recordSymbol(SemanticSymbol{
             spec.name,
             SemanticSymbolKind::BuiltinFunction,
-            spec.return_type,
+            spec.returnType,
             0,
             std::nullopt,
             std::nullopt,
@@ -324,34 +324,34 @@ void SemanticAnalyzer::begin_analysis() {
     }
 }
 
-void SemanticAnalyzer::register_builtins() {
-    for (const auto& spec : all_builtin_signatures()) {
+void SemanticAnalyzer::registerBuiltins() {
+    for (const auto& spec : allBuiltinSignatures()) {
         functions_[spec.name] =
-            Signature{spec.name, spec.return_type, spec.arg_types, spec.min_arity, spec.max_arity};
+            Signature{spec.name, spec.returnType, spec.argTypes, spec.minArity, spec.maxArity};
     }
 }
 // U-Review
 std::optional<Diagnostic> SemanticAnalyzer::analyze(const Program& program) {
-    if (auto diagnostic = collect_configs(program)) {
+    if (auto diagnostic = collectConfigs(program)) {
         return diagnostic;
     }
-    if (auto diagnostic = collect_layers(program)) {
+    if (auto diagnostic = collectLayers(program)) {
         return diagnostic;
     }
-    if (auto diagnostic = collect_functions(program)) {
+    if (auto diagnostic = collectFunctions(program)) {
         return diagnostic;
     }
 
-    push_scope();
+    pushScope();
     for (const auto& stmt : program.globals) {
-        if (auto diagnostic = analyze_stmt(stmt, program)) {
+        if (auto diagnostic = analyzeStmt(stmt, program)) {
             return diagnostic;
         }
     }
     for (const auto& layer : program.layers) {
-        if (auto diagnostic = visit_callable(
+        if (auto diagnostic = visitCallable(
                 layer.args,
-                layer.return_type,
+                layer.returnType,
                 layer.body,
                 layer.span,
                 layer.name,
@@ -363,9 +363,9 @@ std::optional<Diagnostic> SemanticAnalyzer::analyze(const Program& program) {
         }
     }
     for (const auto& function : program.functions) {
-        if (auto diagnostic = visit_callable(
+        if (auto diagnostic = visitCallable(
                 function.args,
-                function.return_type,
+                function.returnType,
                 function.body,
                 function.span,
                 function.name,
@@ -376,19 +376,19 @@ std::optional<Diagnostic> SemanticAnalyzer::analyze(const Program& program) {
             return diagnostic;
         }
     }
-    pop_scope();
+    popScope();
     return std::nullopt;
 }
 
 // Reviewed
-std::optional<Diagnostic> SemanticAnalyzer::collect_configs(const Program& program) {
+std::optional<Diagnostic> SemanticAnalyzer::collectConfigs(const Program& program) {
     for (const auto& config : program.configs) {
         if (configs_.count(config.name) != 0) {
             return error(config.span, "Duplicate config '" + config.name + "'");
         }
         std::map<std::string, Type> fields;
         for (const auto& field : config.fields) {
-            if (auto diagnostic = validate_declared_type(field.type, config.span)) {
+            if (auto diagnostic = validateDeclaredType(field.type, config.span)) {
                 return diagnostic;
             }
             if (fields.count(field.name) != 0) {
@@ -397,12 +397,12 @@ std::optional<Diagnostic> SemanticAnalyzer::collect_configs(const Program& progr
             fields[field.name] = field.type;
         }
         configs_[config.name] = fields;
-        record_symbol(SemanticSymbol{config.name, SemanticSymbolKind::Config, Type::None_type(), 0, std::nullopt, config.span});
+        recordSymbol(SemanticSymbol{config.name, SemanticSymbolKind::Config, Type::noneType(), 0, std::nullopt, config.span});
         for (const auto& field : config.fields) {
-            record_symbol(SemanticSymbol{field.name, SemanticSymbolKind::ConfigField, field.type, 0, config.name, config.span});
+            recordSymbol(SemanticSymbol{field.name, SemanticSymbolKind::ConfigField, field.type, 0, config.name, config.span});
         }
         if (is_train_config(config)) {
-            if (auto diagnostic = validate_train_config(config, program)) {
+            if (auto diagnostic = validateTrainConfig(config, program)) {
                 return diagnostic;
             }
         }
@@ -410,13 +410,13 @@ std::optional<Diagnostic> SemanticAnalyzer::collect_configs(const Program& progr
     return std::nullopt;
 }
 // Reviewed
-std::optional<Diagnostic> SemanticAnalyzer::collect_layers(const Program& program) {
+std::optional<Diagnostic> SemanticAnalyzer::collectLayers(const Program& program) {
     for (const auto& layer : program.layers) {
-        if (auto diagnostic = validate_declared_type(layer.return_type, layer.span)) {
+        if (auto diagnostic = validateDeclaredType(layer.returnType, layer.span)) {
             return diagnostic;
         }
         for (const auto& arg : layer.args) {
-            if (auto diagnostic = validate_declared_type(arg.type, layer.span)) {
+            if (auto diagnostic = validateDeclaredType(arg.type, layer.span)) {
                 return diagnostic;
             }
         }
@@ -427,155 +427,155 @@ std::optional<Diagnostic> SemanticAnalyzer::collect_layers(const Program& progra
         if (functions_.count(layer.name) != 0) {
             return error(layer.span, "Layer '" + layer.name + "' conflicts with an existing function or builtin");
         }
-        const auto min_arity = static_cast<std::size_t>(std::count_if(
+        const auto minArity = static_cast<std::size_t>(std::count_if(
             layer.args.begin(),
             layer.args.end(),
-            [](const Arg& arg) { return !arg.default_value; }
+            [](const Arg& arg) { return !arg.defaultValue; }
         ));
-        std::vector<Type> arg_types;
+        std::vector<Type> argTypes;
         for (const auto& arg : layer.args) {
-            arg_types.push_back(arg.type);
+            argTypes.push_back(arg.type);
         }
-        layers_[layer.name] = Signature{layer.name, layer.return_type, arg_types, min_arity, layer.args.size()};
-        record_symbol(SemanticSymbol{layer.name, SemanticSymbolKind::Layer, layer.return_type, 0, std::nullopt, layer.span});
+        layers_[layer.name] = Signature{layer.name, layer.returnType, argTypes, minArity, layer.args.size()};
+        recordSymbol(SemanticSymbol{layer.name, SemanticSymbolKind::Layer, layer.returnType, 0, std::nullopt, layer.span});
     }
     return std::nullopt;
 }
 // Reviewed
-std::optional<Diagnostic> SemanticAnalyzer::collect_functions(const Program& program) {
+std::optional<Diagnostic> SemanticAnalyzer::collectFunctions(const Program& program) {
     for (const auto& function : program.functions) {
-        if (auto diagnostic = validate_declared_type(function.return_type, function.span)) {
+        if (auto diagnostic = validateDeclaredType(function.returnType, function.span)) {
             return diagnostic;
         }
         for (const auto& arg : function.args) {
-            if (auto diagnostic = validate_declared_type(arg.type, function.span)) {
+            if (auto diagnostic = validateDeclaredType(arg.type, function.span)) {
                 return diagnostic;
             }
         }
         if (functions_.count(function.name) != 0 || layers_.count(function.name) != 0) {
             return error(function.span, "Function '" + function.name + "' conflicts with an existing declaration");
         }
-        const auto min_arity = static_cast<std::size_t>(std::count_if(
+        const auto minArity = static_cast<std::size_t>(std::count_if(
             function.args.begin(),
             function.args.end(),
-            [](const Arg& arg) { return !arg.default_value; }
+            [](const Arg& arg) { return !arg.defaultValue; }
         ));
-        std::vector<Type> arg_types;
+        std::vector<Type> argTypes;
         for (const auto& arg : function.args) {
-            arg_types.push_back(arg.type);
+            argTypes.push_back(arg.type);
         }
         functions_[function.name] =
-            Signature{function.name, function.return_type, arg_types, min_arity, function.args.size()};
-        record_symbol(SemanticSymbol{function.name, SemanticSymbolKind::Function, function.return_type,  0, std::nullopt, function.span});
+            Signature{function.name, function.returnType, argTypes, minArity, function.args.size()};
+        recordSymbol(SemanticSymbol{function.name, SemanticSymbolKind::Function, function.returnType,  0, std::nullopt, function.span});
     }
     return std::nullopt;
 }
-std::optional<Diagnostic> SemanticAnalyzer::analyze_stmt(const Stmt& stmt, const Program& program) {
+std::optional<Diagnostic> SemanticAnalyzer::analyzeStmt(const Stmt& stmt, const Program& program) {
     return std::visit(
         [&](const auto& value) -> std::optional<Diagnostic> {
             using T = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<T, ReturnStmt>) {
-                auto analyzed = analyze_expr(*value.value, program);
+                auto analyzed = analyzeExpr(*value.value, program);
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                     return *diagnostic;
                 }
-                Type value_type = std::get<Type>(std::move(analyzed));
-                current_callable_has_return_ = true;
-                if (current_return_type_ && !is_compatible(*current_return_type_, value_type)) {
+                Type valueType = std::get<Type>(std::move(analyzed));
+                currentCallableHasReturn_ = true;
+                if (currentReturnType_ && !isCompatible(*currentReturnType_, valueType)) {
                     return error(
                         stmt.span,
-                        "Return type mismatch. Expected " + type_to_string(*current_return_type_) +
-                            ", got " + type_to_string(value_type)
+                        "Return type mismatch. Expected " + typeToString(*currentReturnType_) +
+                            ", got " + typeToString(valueType)
                     );
                 }
             } else if constexpr (std::is_same_v<T, ExprStmt>) {
-                auto analyzed = analyze_expr(*value.value, program);
+                auto analyzed = analyzeExpr(*value.value, program);
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                     return *diagnostic;
                 }
             } else if constexpr (std::is_same_v<T, VarDecl>) {
-                Type final_type = value.type;
+                Type finalType = value.type;
                 if (value.init) {
-                    auto analyzed = analyze_expr(*value.init, program);
+                    auto analyzed = analyzeExpr(*value.init, program);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                         return *diagnostic;
                     }
                     Type init_type = std::get<Type>(std::move(analyzed));
                     if (value.type.base == TypeBase::Unknown) {
-                        final_type = default_unconstrained_numeric_type(std::move(init_type));
+                        finalType = default_unconstrained_numeric_type(std::move(init_type));
                     } else {
-                        if (auto diagnostic = validate_declared_type(value.type, stmt.span)) {
+                        if (auto diagnostic = validateDeclaredType(value.type, stmt.span)) {
                             return diagnostic;
                         }
-                        if (!is_compatible(value.type, init_type)) {
-                            // std::cout <<"this is value_type = " << type_to_string(value.type) << '\n';
-                            // std::cout <<"this is init_type = " << type_to_string(init_type) << '\n';
+                        if (!isCompatible(value.type, init_type)) {
+                            // std::cout <<"this is valueType = " << typeToString(value.type) << '\n';
+                            // std::cout <<"this is init_type = " << typeToString(init_type) << '\n';
                             // if (value.type.base == init_type.base) {
                             //     std::cout << "both are same" << '\n';
                             // }
                             return error(stmt.span, "Initialization type mismatch for '" + value.name + "'");
                         }
                     }
-                } else if (auto diagnostic = validate_declared_type(value.type, stmt.span)) {
+                } else if (auto diagnostic = validateDeclaredType(value.type, stmt.span)) {
                     return diagnostic;
                 }
-                const auto kind = current_callable_name_ ? SemanticSymbolKind::Local : SemanticSymbolKind::Global;
-                record_declaration(stmt.span, value.name, kind, final_type);
-                return declare_var(value.name, std::move(final_type), kind, stmt.span);
+                const auto kind = currentCallableName_ ? SemanticSymbolKind::Local : SemanticSymbolKind::Global;
+                recordDeclaration(stmt.span, value.name, kind, finalType);
+                return declareVar(value.name, std::move(finalType), kind, stmt.span);
             } else if constexpr (std::is_same_v<T, AssignStmt>) {
-                auto analyzed = analyze_expr(*value.value, program);
+                auto analyzed = analyzeExpr(*value.value, program);
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                     return *diagnostic;
                 }
-                Type value_type = std::get<Type>(std::move(analyzed));
-                const Symbol* symbol = find_var(value.name);
+                Type valueType = std::get<Type>(std::move(analyzed));
+                const Symbol* symbol = findVar(value.name);
                 if (symbol == nullptr) {
                     // Variable not found, implicitly declare it in the current scope
-                    const auto kind = current_callable_name_ ? SemanticSymbolKind::Local : SemanticSymbolKind::Global;
-                    record_declaration(stmt.span, value.name, kind, value_type);
-                    if (auto diagnostic = declare_var(value.name, value_type, kind, stmt.span)) {
+                    const auto kind = currentCallableName_ ? SemanticSymbolKind::Local : SemanticSymbolKind::Global;
+                    recordDeclaration(stmt.span, value.name, kind, valueType);
+                    if (auto diagnostic = declareVar(value.name, valueType, kind, stmt.span)) {
                         return diagnostic;
                     }
-                    record_assignment(stmt.span, value.name, kind, value_type, value_type);
+                    recordAssignment(stmt.span, value.name, kind, valueType, valueType);
                 } else {
-                    if (!is_compatible(symbol->type, value_type)) {
+                    if (!isCompatible(symbol->type, valueType)) {
                         return error(stmt.span, "Assignment type mismatch for '" + value.name + "'");
                     }
-                    record_assignment(stmt.span, value.name, symbol->kind, symbol->type, value_type);
+                    recordAssignment(stmt.span, value.name, symbol->kind, symbol->type, valueType);
                 }
             } else if constexpr (std::is_same_v<T, ScopeStmt>) {
-                push_scope();
+                pushScope();
                 for (const auto& inner : value.statements) {
-                    if (auto diagnostic = analyze_stmt(inner, program)) {
+                    if (auto diagnostic = analyzeStmt(inner, program)) {
                         return diagnostic;
                     }
                 }
-                pop_scope();
+                popScope();
             } else if constexpr (std::is_same_v<T, IfStmt>) {
-                auto condition = analyze_expr(*value.condition, program);
+                auto condition = analyzeExpr(*value.condition, program);
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&condition)) {
                     return *diagnostic;
                 }
-                if (auto diagnostic = ensure_condition_type(std::get<Type>(condition), value.condition->span, "If condition")) {
+                if (auto diagnostic = ensureConditionType(std::get<Type>(condition), value.condition->span, "If condition")) {
                     return diagnostic;
                 }
-                if (auto diagnostic = analyze_stmt(*value.then_stmt, program)) {
+                if (auto diagnostic = analyzeStmt(*value.thenStmt, program)) {
                     return diagnostic;
                 }
                 for (const auto& branch : value.elifs) {
-                    auto branch_condition = analyze_expr(*branch.condition, program);
+                    auto branch_condition = analyzeExpr(*branch.condition, program);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&branch_condition)) {
                         return *diagnostic;
                     }
-                    if (auto diagnostic = ensure_condition_type(std::get<Type>(branch_condition), branch.condition->span, "Elif condition")) {
+                    if (auto diagnostic = ensureConditionType(std::get<Type>(branch_condition), branch.condition->span, "Elif condition")) {
                         return diagnostic;
                     }
-                    if (auto diagnostic = analyze_stmt(*branch.body, program)) {
+                    if (auto diagnostic = analyzeStmt(*branch.body, program)) {
                         return diagnostic;
                     }
                 }
-                if (value.else_stmt) {
-                    return analyze_stmt(*value.else_stmt, program);
+                if (value.elseStmt) {
+                    return analyzeStmt(*value.elseStmt, program);
                 }
             }
             return std::nullopt;
@@ -584,34 +584,34 @@ std::optional<Diagnostic> SemanticAnalyzer::analyze_stmt(const Stmt& stmt, const
     );
 }
 
-std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_expr(const Expr& expr, const Program& program) {
+std::variant<Type, Diagnostic> SemanticAnalyzer::analyzeExpr(const Expr& expr, const Program& program) {
     auto result = std::visit(
         [&](const auto& value) -> std::variant<Type, Diagnostic> {
             using T = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<T, IntLiteral>) { // the compiler keeps only the IntLiteral branch. why we are using the constexpr
-                return Type::int_type();
+                return Type::intType();
             } else if constexpr (std::is_same_v<T, FloatLiteral>) {
-                return Type::float_type();
+                return Type::floatType();
             } else if constexpr (std::is_same_v<T, BoolLiteral>) {
-                return Type::bool_type();
+                return Type::boolType();
             } else if constexpr (std::is_same_v<T, StringLiteral>) {
-                return Type::str_type();
+                return Type::strType();
             } else if constexpr (std::is_same_v<T, IdentifierExpr>) {
-                return visit_identifier(value.name, expr.span);
+                return visitIdentifier(value.name, expr.span);
             } else if constexpr (std::is_same_v<T, CallExpr>) {
-                return visit_call(value.callee, value.args, expr.span, program);
+                return visitCall(value.callee, value.args, expr.span, program);
             } else if constexpr (std::is_same_v<T, RepeatExpr>) {
                 return error(expr.span, "Repeat suffix '[n]' is only valid inside arrow pipeline stages");
             } else if constexpr (std::is_same_v<T, UnaryExpr>) {
-                return visit_unary(*value.operand, value.op, expr.span, program);
+                return visitUnary(*value.operand, value.op, expr.span, program);
             } else if constexpr (std::is_same_v<T, BinaryExpr>) {
-                return visit_binary(*value.lhs, *value.rhs, value.op, expr.span, program);
+                return visitBinary(*value.lhs, *value.rhs, value.op, expr.span, program);
             } else if constexpr (std::is_same_v<T, TernaryExpr>) {
-                return visit_ternary(*value.then_expr, *value.condition, *value.else_expr, expr.span, program);
+                return visitTernary(*value.thenExpr, *value.condition, *value.elseExpr, expr.span, program);
             } else if constexpr (std::is_same_v<T, TupleExpr>) {
                 std::vector<Type> types;
                 for (const auto& element : value.elements) {
-                    auto analyzed = analyze_expr(*element, program);
+                    auto analyzed = analyzeExpr(*element, program);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                         return *diagnostic;
                     }
@@ -621,13 +621,13 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_expr(const Expr& expr, 
             } else if constexpr (std::is_same_v<T, ListExpr>) {
                 std::vector<Type> types;
                 for (const auto& element : value.elements) {
-                    auto analyzed = analyze_expr(*element, program);
+                    auto analyzed = analyzeExpr(*element, program);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                         return *diagnostic;
                     }
                     Type element_type = std::get<Type>(std::move(analyzed));
                     const bool known = std::any_of(types.begin(), types.end(), [&](const Type& known_type) {
-                        return is_compatible(known_type, element_type);
+                        return isCompatible(known_type, element_type);
                     });
                     if (!known) {
                         types.push_back(std::move(element_type));
@@ -635,34 +635,34 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_expr(const Expr& expr, 
                 }
                 return Type::list(std::move(types));
             } else if constexpr (std::is_same_v<T, ArrowExpr>) {
-                return visit_arrow(*value.source, value.stages, program);
+                return visitArrow(*value.source, value.stages, program);
             }
         },
         expr.kind
     );
     if (const auto* type = std::get_if<Type>(&result)) {
-        last_expr_type_ = *type;
-        record_expr_type(expr, *type);
+        lastExprType_ = *type;
+        recordExprType(expr, *type);
     }
     return result;
 }
 
-std::variant<Type, Diagnostic> SemanticAnalyzer::visit_identifier(const std::string& name, const SourceSpan& span) {
+std::variant<Type, Diagnostic> SemanticAnalyzer::visitIdentifier(const std::string& name, const SourceSpan& span) {
     if (name == "None") {
-        return Type::None_type();
+        return Type::noneType();
     }
-    if (const Symbol* symbol = find_var(name)) {
-        record_identifier(span, name, symbol->kind, symbol->type);
+    if (const Symbol* symbol = findVar(name)) {
+        recordIdentifier(span, name, symbol->kind, symbol->type);
         return symbol->type;
     }
     if (configs_.count(name) != 0) {
-        record_identifier(span, name, SemanticSymbolKind::Config, Type::None_type());
-        return Type::None_type();
+        recordIdentifier(span, name, SemanticSymbolKind::Config, Type::noneType());
+        return Type::noneType();
     }
     return error(span, "Undefined variable '" + name + "'");
 }
 
-std::variant<Type, Diagnostic> SemanticAnalyzer::visit_call(
+std::variant<Type, Diagnostic> SemanticAnalyzer::visitCall(
     const std::string& callee,
     const std::vector<CallArgument>& args,
     const SourceSpan& span,
@@ -670,30 +670,30 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::visit_call(
 ) {
     auto function = functions_.find(callee);
     if (function != functions_.end()) {
-        if (auto diagnostic = ensure_call_allowed(callee, false, span)) {
+        if (auto diagnostic = ensureCallAllowed(callee, false, span)) {
             return *diagnostic;
         }
-        if (auto diagnostic = validate_signature_arity(function->second, args.size(), span)) {
+        if (auto diagnostic = validateSignatureArity(function->second, args.size(), span)) {
             return *diagnostic;
         }
-        std::vector<Type> arg_types;
+        std::vector<Type> argTypes;
         for (std::size_t index = 0; index < args.size(); ++index) {
-            auto analyzed = analyze_expr(*args[index].value, program);
+            auto analyzed = analyzeExpr(*args[index].value, program);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                 return *diagnostic;
             }
             Type actual = std::get<Type>(std::move(analyzed));
-            arg_types.push_back(actual);
-            if (index < function->second.arg_types.size() &&
-                !is_compatible(function->second.arg_types[index], actual)) {
+            argTypes.push_back(actual);
+            if (index < function->second.argTypes.size() &&
+                !isCompatible(function->second.argTypes[index], actual)) {
                 return error(span, "Argument " + std::to_string(index + 1) + " to '" + callee +
                                        "' has incompatible type. Expected " +
-                                       type_to_string(function->second.arg_types[index]) + ", got " +
-                                       type_to_string(actual));
+                                       typeToString(function->second.argTypes[index]) + ", got " +
+                                       typeToString(actual));
             }
         }
-        Type result = infer_call_result_type(callee, function->second.return_type, arg_types);
-        record_call(span, callee, is_builtin_op(callee) ? SemanticCallTargetKind::BuiltinFunction
+        Type result = infer_call_result_type(callee, function->second.returnType, argTypes);
+        recordCall(span, callee, isBuiltinOp(callee) ? SemanticCallTargetKind::BuiltinFunction
                                                         : SemanticCallTargetKind::Function,
                     result, false);
         return result;
@@ -701,72 +701,72 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::visit_call(
 
     auto layer = layers_.find(callee);
     if (layer != layers_.end()) {
-        if (auto diagnostic = ensure_call_allowed(callee, true, span)) {
+        if (auto diagnostic = ensureCallAllowed(callee, true, span)) {
             return *diagnostic;
         }
-        if (auto diagnostic = validate_signature_arity(layer->second, args.size(), span)) {
+        if (auto diagnostic = validateSignatureArity(layer->second, args.size(), span)) {
             return *diagnostic;
         }
-        std::vector<Type> arg_types;
+        std::vector<Type> argTypes;
         for (std::size_t index = 0; index < args.size(); ++index) {
-            auto analyzed = analyze_expr(*args[index].value, program);
+            auto analyzed = analyzeExpr(*args[index].value, program);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                 return *diagnostic;
             }
             Type actual = std::get<Type>(std::move(analyzed));
-            arg_types.push_back(actual);
-            if (index < layer->second.arg_types.size() && !is_compatible(layer->second.arg_types[index], actual)) {
+            argTypes.push_back(actual);
+            if (index < layer->second.argTypes.size() && !isCompatible(layer->second.argTypes[index], actual)) {
                 return error(span, "Argument " + std::to_string(index + 1) + " to '" + callee + "' has incompatible type");
             }
         }
-        Type result = infer_call_result_type(callee, layer->second.return_type, arg_types);
-        record_call(span, callee, SemanticCallTargetKind::Layer, result, false);
+        Type result = infer_call_result_type(callee, layer->second.returnType, argTypes);
+        recordCall(span, callee, SemanticCallTargetKind::Layer, result, false);
         return result;
     }
 
-    if (const Symbol* symbol = find_var(callee)) {
-        if (!is_callable(symbol->type)) {
+    if (const Symbol* symbol = findVar(callee)) {
+        if (!isCallable(symbol->type)) {
             return error(span, "Variable '" + callee + "' is not callable");
         }
         if (args.size() != 1) {
             return error(span, "Callable value '" + callee + "' must be invoked with exactly one pipeline/input argument");
         }
-        auto input = analyze_expr(*args[0].value, program);
+        auto input = analyzeExpr(*args[0].value, program);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&input)) {
             return *diagnostic;
         }
         Type input_type = std::get<Type>(std::move(input));
         Type result = tensor_any();
-        if (symbol->type.callable_return) {
-            if (symbol->type.callable_return->base == TypeBase::Tensor && input_type.base == TypeBase::Tensor) {
-                result = Type::tensor(input_type.tensor_dtype, symbol->type.callable_return->tensor_shape_expr, input_type.tensor_rank);
+        if (symbol->type.callableReturn) {
+            if (symbol->type.callableReturn->base == TypeBase::Tensor && input_type.base == TypeBase::Tensor) {
+                result = Type::tensor(input_type.tensorDtype, symbol->type.callableReturn->tensorShapeExpr, input_type.tensorRank);
             } else {
-                result = *symbol->type.callable_return;
+                result = *symbol->type.callableReturn;
             }
         }
-        record_call(span, callee, SemanticCallTargetKind::CallableLocal, result, false);
+        recordCall(span, callee, SemanticCallTargetKind::CallableLocal, result, false);
         return result;
     }
 
     return error(span, "Undefined function or layer '" + callee + "'");
 }
 
-std::variant<Type, Diagnostic> SemanticAnalyzer::visit_unary(
+std::variant<Type, Diagnostic> SemanticAnalyzer::visitUnary(
     const Expr& operand,
     TokenType op,
     const SourceSpan& span,
     const Program& program
 ) {
-    auto analyzed = analyze_expr(operand, program);
+    auto analyzed = analyzeExpr(operand, program);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
         return *diagnostic;
     }
     Type operand_type = std::get<Type>(std::move(analyzed));
     if (op == TokenType::Bang) {
-        if (auto diagnostic = ensure_condition_type(operand_type, span, "Unary '!'")) {
+        if (auto diagnostic = ensureConditionType(operand_type, span, "Unary '!'")) {
             return *diagnostic;
         }
-        return Type::bool_type();
+        return Type::boolType();
     }
     if (op == TokenType::Minus &&
         !(operand_type.base == TypeBase::Int || operand_type.base == TypeBase::Float ||
@@ -776,7 +776,7 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::visit_unary(
     return operand_type;
 }
 
-std::variant<Type, Diagnostic> SemanticAnalyzer::visit_binary(
+std::variant<Type, Diagnostic> SemanticAnalyzer::visitBinary(
     const Expr& lhs,
     const Expr& rhs,
     TokenType op,
@@ -791,20 +791,20 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::visit_binary(
             if (config != configs_.end()) {
                 auto field = config->second.find(rhs_id->name);
                 if (field != config->second.end()) {
-                    record_config_field_access(span, lhs_id->name, rhs_id->name, field->second);
+                    recordConfigFieldAccess(span, lhs_id->name, rhs_id->name, field->second);
                     return field->second;
                 }
                 return error(span, "Unknown field '" + rhs_id->name + "' on config '" + lhs_id->name + "'");
             }
         }
-        return error(span, "Only config field access of the form config_name.field is supported");
+        return error(span, "Only config field access of the form configName.field is supported");
     }
 
-    auto left = analyze_expr(lhs, program);
+    auto left = analyzeExpr(lhs, program);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&left)) {
         return *diagnostic;
     }
-    auto right = analyze_expr(rhs, program);
+    auto right = analyzeExpr(rhs, program);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&right)) {
         return *diagnostic;
     }
@@ -814,7 +814,7 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::visit_binary(
     if (op == TokenType::Plus || op == TokenType::Minus || op == TokenType::Star ||
         op == TokenType::Slash || op == TokenType::DoubleSlash) {
         if (lhs_type.base == TypeBase::Tensor || rhs_type.base == TypeBase::Tensor) {
-            return merge_tensor_types(lhs_type, rhs_type);
+            return mergeTensorTypes(lhs_type, rhs_type);
         }
         if (lhs_type.base == TypeBase::Unknown || rhs_type.base == TypeBase::Unknown) {
             return Type::unknown();
@@ -828,94 +828,94 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::visit_binary(
         return error(span, "Arithmetic operation has incompatible operand types");
     }
     if (op == TokenType::EqEq || op == TokenType::Neq) {
-        if (!is_compatible(lhs_type, rhs_type)) {
+        if (!isCompatible(lhs_type, rhs_type)) {
             return error(span, "Comparison expects compatible operand types");
         }
-        return Type::bool_type();
+        return Type::boolType();
     }
     if (op == TokenType::Lt || op == TokenType::Gt || op == TokenType::LtEq || op == TokenType::GtEq) {
         if (!((lhs_type.base == TypeBase::Int || lhs_type.base == TypeBase::Float || lhs_type.base == TypeBase::Unknown) &&
               (rhs_type.base == TypeBase::Int || rhs_type.base == TypeBase::Float || rhs_type.base == TypeBase::Unknown))) {
             return error(span, "Ordered comparisons require int or float operands");
         }
-        return Type::bool_type();
+        return Type::boolType();
     }
     if (op == TokenType::AmpAmp || op == TokenType::PipePipe) {
-        if (auto diagnostic = ensure_condition_type(lhs_type, lhs.span, "Logical operand")) {
+        if (auto diagnostic = ensureConditionType(lhs_type, lhs.span, "Logical operand")) {
             return *diagnostic;
         }
-        if (auto diagnostic = ensure_condition_type(rhs_type, rhs.span, "Logical operand")) {
+        if (auto diagnostic = ensureConditionType(rhs_type, rhs.span, "Logical operand")) {
             return *diagnostic;
         }
-        return Type::bool_type();
+        return Type::boolType();
     }
     return error(span, "Unsupported binary operator in semantic analysis");
 }
 
-std::variant<Type, Diagnostic> SemanticAnalyzer::visit_ternary(
-    const Expr& then_expr,
+std::variant<Type, Diagnostic> SemanticAnalyzer::visitTernary(
+    const Expr& thenExpr,
     const Expr& condition,
-    const Expr& else_expr,
+    const Expr& elseExpr,
     const SourceSpan& span,
     const Program& program
 ) {
-    auto condition_type = analyze_expr(condition, program);
+    auto condition_type = analyzeExpr(condition, program);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&condition_type)) {
         return *diagnostic;
     }
-    if (auto diagnostic = ensure_condition_type(std::get<Type>(condition_type), condition.span, "Ternary condition")) {
+    if (auto diagnostic = ensureConditionType(std::get<Type>(condition_type), condition.span, "Ternary condition")) {
         return *diagnostic;
     }
-    auto left = analyze_expr(then_expr, program);
+    auto left = analyzeExpr(thenExpr, program);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&left)) {
         return *diagnostic;
     }
-    auto right = analyze_expr(else_expr, program);
+    auto right = analyzeExpr(elseExpr, program);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&right)) {
         return *diagnostic;
     }
     Type then_type = std::get<Type>(std::move(left));
     Type else_type = std::get<Type>(std::move(right));
-    if (!is_compatible(then_type, else_type) && !is_compatible(else_type, then_type)) {
+    if (!isCompatible(then_type, else_type) && !isCompatible(else_type, then_type)) {
         return error(span, "Ternary branches must have compatible types");
     }
     return then_type.base == TypeBase::None ? else_type : then_type;
 }
 
-std::variant<Type, Diagnostic> SemanticAnalyzer::visit_arrow(
+std::variant<Type, Diagnostic> SemanticAnalyzer::visitArrow(
     const Expr& source,
     const std::vector<ExprPtr>& stages,
     const Program& program
 ) {
-    auto current = analyze_expr(source, program);
+    auto current = analyzeExpr(source, program);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&current)) {
         return *diagnostic;
     }
     Type current_type = std::get<Type>(std::move(current));
     for (const auto& stage : stages) {
-        auto next = analyze_stage(*stage, current_type, program);
+        auto next = analyzeStage(*stage, current_type, program);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&next)) {
             return *diagnostic;
         }
         current_type = std::get<Type>(std::move(next));
-        record_expr_type(*stage, current_type);
+        recordExprType(*stage, current_type);
     }
     return current_type;
 }
 
-std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_stage(
+std::variant<Type, Diagnostic> SemanticAnalyzer::analyzeStage(
     const Expr& expr,
     const Type& input_type,
     const Program& program
 ) {
     if (const auto* call = std::get_if<CallExpr>(&expr.kind)) {
-        return analyze_arrow_call(call->callee, call->args, expr.span, input_type, program);
+        return analyzeArrowCall(call->callee, call->args, expr.span, input_type, program);
     }
     if (const auto* repeat = std::get_if<RepeatExpr>(&expr.kind)) {
         if (!std::holds_alternative<CallExpr>(repeat->stage->kind)) {
             return error(expr.span, "Repeated arrow stage must begin with a call");
         }
-        auto count = analyze_expr(*repeat->count, program);
+        auto count = analyzeExpr(*repeat->count, program);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&count)) {
             return *diagnostic;
         }
@@ -923,28 +923,28 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_stage(
             return error(repeat->count->span, "Repeated arrow stage count must have type int");
         }
         const auto& call = std::get<CallExpr>(repeat->stage->kind);
-        return analyze_arrow_call(call.callee, call.args, repeat->stage->span, input_type, program);
+        return analyzeArrowCall(call.callee, call.args, repeat->stage->span, input_type, program);
     }
     if (const auto* unary = std::get_if<UnaryExpr>(&expr.kind)) {
         Type operand_type;
         if (count_stage_sites(*unary->operand) > 0) {
-            auto analyzed = analyze_stage(*unary->operand, input_type, program);
+            auto analyzed = analyzeStage(*unary->operand, input_type, program);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                 return *diagnostic;
             }
             operand_type = std::get<Type>(std::move(analyzed));
         } else {
-            auto analyzed = analyze_expr(*unary->operand, program);
+            auto analyzed = analyzeExpr(*unary->operand, program);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                 return *diagnostic;
             }
             operand_type = std::get<Type>(std::move(analyzed));
         }
         if (unary->op == TokenType::Bang) {
-            if (auto diagnostic = ensure_condition_type(operand_type, expr.span, "Unary '!'")) {
+            if (auto diagnostic = ensureConditionType(operand_type, expr.span, "Unary '!'")) {
                 return *diagnostic;
             }
-            return Type::bool_type();
+            return Type::boolType();
         }
         if (unary->op == TokenType::Minus &&
             !(operand_type.base == TypeBase::Int || operand_type.base == TypeBase::Float ||
@@ -956,13 +956,13 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_stage(
     if (const auto* binary = std::get_if<BinaryExpr>(&expr.kind)) {
         Type lhs_type;
         if (count_stage_sites(*binary->lhs) > 0) {
-            auto analyzed = analyze_stage(*binary->lhs, input_type, program);
+            auto analyzed = analyzeStage(*binary->lhs, input_type, program);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                 return *diagnostic;
             }
             lhs_type = std::get<Type>(std::move(analyzed));
         } else {
-            auto analyzed = analyze_expr(*binary->lhs, program);
+            auto analyzed = analyzeExpr(*binary->lhs, program);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                 return *diagnostic;
             }
@@ -971,13 +971,13 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_stage(
 
         Type rhs_type;
         if (count_stage_sites(*binary->rhs) > 0) {
-            auto analyzed = analyze_stage(*binary->rhs, input_type, program);
+            auto analyzed = analyzeStage(*binary->rhs, input_type, program);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                 return *diagnostic;
             }
             rhs_type = std::get<Type>(std::move(analyzed));
         } else {
-            auto analyzed = analyze_expr(*binary->rhs, program);
+            auto analyzed = analyzeExpr(*binary->rhs, program);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                 return *diagnostic;
             }
@@ -988,7 +988,7 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_stage(
             binary->op == TokenType::Star || binary->op == TokenType::Slash ||
             binary->op == TokenType::DoubleSlash) {
             if (lhs_type.base == TypeBase::Tensor || rhs_type.base == TypeBase::Tensor) {
-                return merge_tensor_types(lhs_type, rhs_type);
+                return mergeTensorTypes(lhs_type, rhs_type);
             }
             if (lhs_type.base == TypeBase::Unknown || rhs_type.base == TypeBase::Unknown) {
                 return Type::unknown();
@@ -1002,10 +1002,10 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_stage(
             return error(expr.span, "Arithmetic operation has incompatible operand types");
         }
         if (binary->op == TokenType::EqEq || binary->op == TokenType::Neq) {
-            if (!is_compatible(lhs_type, rhs_type)) {
+            if (!isCompatible(lhs_type, rhs_type)) {
                 return error(expr.span, "Comparison expects compatible operand types");
             }
-            return Type::bool_type();
+            return Type::boolType();
         }
         if (binary->op == TokenType::Lt || binary->op == TokenType::Gt ||
             binary->op == TokenType::LtEq || binary->op == TokenType::GtEq) {
@@ -1015,45 +1015,45 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_stage(
                    rhs_type.base == TypeBase::Unknown))) {
                 return error(expr.span, "Ordered comparisons require int or float operands");
             }
-            return Type::bool_type();
+            return Type::boolType();
         }
         if (binary->op == TokenType::AmpAmp || binary->op == TokenType::PipePipe) {
-            if (auto diagnostic = ensure_condition_type(lhs_type, binary->lhs->span, "Logical operand")) {
+            if (auto diagnostic = ensureConditionType(lhs_type, binary->lhs->span, "Logical operand")) {
                 return *diagnostic;
             }
-            if (auto diagnostic = ensure_condition_type(rhs_type, binary->rhs->span, "Logical operand")) {
+            if (auto diagnostic = ensureConditionType(rhs_type, binary->rhs->span, "Logical operand")) {
                 return *diagnostic;
             }
-            return Type::bool_type();
+            return Type::boolType();
         }
-        return analyze_expr(expr, program);
+        return analyzeExpr(expr, program);
     }
     if (const auto* ternary = std::get_if<TernaryExpr>(&expr.kind)) {
         auto condition = count_stage_sites(*ternary->condition) > 0
-            ? analyze_stage(*ternary->condition, input_type, program)
-            : analyze_expr(*ternary->condition, program);
+            ? analyzeStage(*ternary->condition, input_type, program)
+            : analyzeExpr(*ternary->condition, program);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&condition)) {
             return *diagnostic;
         }
-        if (auto diagnostic = ensure_condition_type(std::get<Type>(condition), ternary->condition->span, "Ternary condition")) {
+        if (auto diagnostic = ensureConditionType(std::get<Type>(condition), ternary->condition->span, "Ternary condition")) {
             return *diagnostic;
         }
 
-        auto then_type = count_stage_sites(*ternary->then_expr) > 0
-            ? analyze_stage(*ternary->then_expr, input_type, program)
-            : analyze_expr(*ternary->then_expr, program);
+        auto then_type = count_stage_sites(*ternary->thenExpr) > 0
+            ? analyzeStage(*ternary->thenExpr, input_type, program)
+            : analyzeExpr(*ternary->thenExpr, program);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&then_type)) {
             return *diagnostic;
         }
-        auto else_type = count_stage_sites(*ternary->else_expr) > 0
-            ? analyze_stage(*ternary->else_expr, input_type, program)
-            : analyze_expr(*ternary->else_expr, program);
+        auto else_type = count_stage_sites(*ternary->elseExpr) > 0
+            ? analyzeStage(*ternary->elseExpr, input_type, program)
+            : analyzeExpr(*ternary->elseExpr, program);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&else_type)) {
             return *diagnostic;
         }
         Type lhs = std::get<Type>(std::move(then_type));
         Type rhs = std::get<Type>(std::move(else_type));
-        if (!is_compatible(lhs, rhs) && !is_compatible(rhs, lhs)) {
+        if (!isCompatible(lhs, rhs) && !isCompatible(rhs, lhs)) {
             return error(expr.span, "Ternary branches must have compatible types");
         }
         return lhs.base == TypeBase::None ? rhs : lhs;
@@ -1062,8 +1062,8 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_stage(
         std::vector<Type> types;
         for (const auto& element : tuple->elements) {
             auto analyzed = count_stage_sites(*element) > 0
-                ? analyze_stage(*element, input_type, program)
-                : analyze_expr(*element, program);
+                ? analyzeStage(*element, input_type, program)
+                : analyzeExpr(*element, program);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                 return *diagnostic;
             }
@@ -1075,14 +1075,14 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_stage(
         std::vector<Type> types;
         for (const auto& element : list->elements) {
             auto analyzed = count_stage_sites(*element) > 0
-                ? analyze_stage(*element, input_type, program)
-                : analyze_expr(*element, program);
+                ? analyzeStage(*element, input_type, program)
+                : analyzeExpr(*element, program);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
                 return *diagnostic;
             }
             Type element_type = std::get<Type>(std::move(analyzed));
             const bool known = std::any_of(types.begin(), types.end(), [&](const Type& known_type) {
-                return is_compatible(known_type, element_type);
+                return isCompatible(known_type, element_type);
             });
             if (!known) {
                 types.push_back(std::move(element_type));
@@ -1091,51 +1091,51 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_stage(
         return Type::list(std::move(types));
     }
     if (count_stage_sites(expr) == 0) {
-        return analyze_expr(expr, program);
+        return analyzeExpr(expr, program);
     }
     return error(expr.span, "Unsupported compound arrow stage in semantic analysis");
 }
 
-std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_arrow_call(
+std::variant<Type, Diagnostic> SemanticAnalyzer::analyzeArrowCall(
     const std::string& callee,
     const std::vector<CallArgument>& args,
     const SourceSpan& span,
     const Type& input_type,
     const Program& program
 ) {
-    std::vector<Type> arg_types{input_type};
+    std::vector<Type> argTypes{input_type};
     for (const auto& arg : args) {
-        auto analyzed = analyze_expr(*arg.value, program);
+        auto analyzed = analyzeExpr(*arg.value, program);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&analyzed)) {
             return *diagnostic;
         }
-        arg_types.push_back(std::get<Type>(std::move(analyzed)));
+        argTypes.push_back(std::get<Type>(std::move(analyzed)));
     }
 
     auto function = functions_.find(callee);
     if (function != functions_.end()) {
         Type stage_type;
-        if (function->second.return_type.base == TypeBase::Callable) {
-            if (current_callable_kind_ == CallableKind::Function) {
+        if (function->second.returnType.base == TypeBase::Callable) {
+            if (currentCallableKind_ == CallableKind::Function) {
                 return error(span, "Arrow stage '" + callee + "' resolves to a callable/layer-like stage and cannot be used inside fn");
             }
-            std::vector<Type> ctor_arg_types(arg_types.begin() + 1, arg_types.end());
-            if (auto diagnostic = validate_signature_arity(function->second, ctor_arg_types.size(), span)) {
+            std::vector<Type> ctor_arg_types(argTypes.begin() + 1, argTypes.end());
+            if (auto diagnostic = validateSignatureArity(function->second, ctor_arg_types.size(), span)) {
                 return *diagnostic;
             }
-            stage_type = infer_call_result_type(callee, function->second.return_type, ctor_arg_types);
+            stage_type = infer_call_result_type(callee, function->second.returnType, ctor_arg_types);
         } else {
-            if (auto diagnostic = validate_signature_arity(function->second, arg_types.size(), span)) {
+            if (auto diagnostic = validateSignatureArity(function->second, argTypes.size(), span)) {
                 return *diagnostic;
             }
-            stage_type = infer_call_result_type(callee, function->second.return_type, arg_types);
+            stage_type = infer_call_result_type(callee, function->second.returnType, argTypes);
         }
-        auto unwrapped = unwrap_callable_stage(stage_type, input_type);
+        auto unwrapped = unwrapCallableStage(stage_type, input_type);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&unwrapped)) {
             return *diagnostic;
         }
         Type result = std::get<Type>(std::move(unwrapped));
-        record_call(span, callee, is_builtin_op(callee) ? SemanticCallTargetKind::BuiltinFunction
+        recordCall(span, callee, isBuiltinOp(callee) ? SemanticCallTargetKind::BuiltinFunction
                                                         : SemanticCallTargetKind::Function,
                     result, true);
         return result;
@@ -1143,51 +1143,51 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyze_arrow_call(
 
     auto layer = layers_.find(callee);
     if (layer != layers_.end()) {
-        if (auto diagnostic = ensure_call_allowed(callee, true, span)) {
+        if (auto diagnostic = ensureCallAllowed(callee, true, span)) {
             return *diagnostic;
         }
-        Type result = layer->second.return_type;
-        record_call(span, callee, SemanticCallTargetKind::Layer, result, true);
+        Type result = layer->second.returnType;
+        recordCall(span, callee, SemanticCallTargetKind::Layer, result, true);
         return result;
     }
 
-    if (const Symbol* symbol = find_var(callee)) {
-        if (!is_callable(symbol->type)) {
+    if (const Symbol* symbol = findVar(callee)) {
+        if (!isCallable(symbol->type)) {
             return error(span, "Arrow stage '" + callee + "' is not callable");
         }
-        if (current_callable_kind_ == CallableKind::Function) {
+        if (currentCallableKind_ == CallableKind::Function) {
             return error(
                 span,
                 "Arrow stage '" + callee +
                     "' is a callable/layer value and cannot be used inside fn; fn arrow stages must stay function-only"
             );
         }
-        auto unwrapped = unwrap_callable_stage(symbol->type, input_type);
+        auto unwrapped = unwrapCallableStage(symbol->type, input_type);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&unwrapped)) {
             return *diagnostic;
         }
         Type result = std::get<Type>(std::move(unwrapped));
-        record_call(span, callee, SemanticCallTargetKind::CallableLocal, result, true);
+        recordCall(span, callee, SemanticCallTargetKind::CallableLocal, result, true);
         return result;
     }
     return error(span, "Arrow stage '" + callee + "' is not callable");
 }
 
-std::variant<Type, Diagnostic> SemanticAnalyzer::unwrap_callable_stage(const Type& stage_type, const Type& input_type) {
+std::variant<Type, Diagnostic> SemanticAnalyzer::unwrapCallableStage(const Type& stage_type, const Type& input_type) {
     if (stage_type.base != TypeBase::Callable) {
         return stage_type;
     }
-    if (!stage_type.callable_return) {
+    if (!stage_type.callableReturn) {
         return tensor_any();
     }
-    if (stage_type.callable_return->base == TypeBase::Tensor && input_type.base == TypeBase::Tensor) {
-        return Type::tensor(input_type.tensor_dtype, stage_type.callable_return->tensor_shape_expr, input_type.tensor_rank);
+    if (stage_type.callableReturn->base == TypeBase::Tensor && input_type.base == TypeBase::Tensor) {
+        return Type::tensor(input_type.tensorDtype, stage_type.callableReturn->tensorShapeExpr, input_type.tensorRank);
     }
-    return *stage_type.callable_return;
+    return *stage_type.callableReturn;
 }
 
-std::optional<Diagnostic> SemanticAnalyzer::validate_train_config(const Config& config, const Program& program) {
-    std::optional<std::size_t> variant_count;
+std::optional<Diagnostic> SemanticAnalyzer::validateTrainConfig(const Config& config, const Program& program) {
+    std::optional<std::size_t> variantCount;
     for (const auto& field : config.fields) {
         if (field.name == "subtrain") {
             const SourceSpan span = field.init ? field.init->span : config.span;
@@ -1209,18 +1209,18 @@ std::optional<Diagnostic> SemanticAnalyzer::validate_train_config(const Config& 
                 "Training config field '" + field.name + "' cannot use an empty tuple"
             );
         }
-        if (variant_count && *variant_count != *arity) {
+        if (variantCount && *variantCount != *arity) {
             return error(
                 field.init->span,
                 "Tuple-valued training config fields must have the same length; use scalar values to broadcast"
             );
         }
-        if (!variant_count) {
-            variant_count = *arity;
+        if (!variantCount) {
+            variantCount = *arity;
         }
     }
 
-    std::vector<std::string> model_symbols = collect_model_symbols(program);
+    std::vector<std::string> model_symbols = collectModelSymbols(program);
     for (const auto& field : config.fields) {
         if (field.name != "objective" || !field.init) {
             continue;
@@ -1257,7 +1257,7 @@ std::optional<Diagnostic> SemanticAnalyzer::validate_train_config(const Config& 
     return std::nullopt;
 }
 
-std::vector<std::string> SemanticAnalyzer::collect_model_symbols(const Program& program) const {
+std::vector<std::string> SemanticAnalyzer::collectModelSymbols(const Program& program) const {
     const Layer* model = nullptr;
     for (const auto& layer : program.layers) {
         if (layer.name == "model") {
@@ -1277,9 +1277,9 @@ std::vector<std::string> SemanticAnalyzer::collect_model_symbols(const Program& 
     return {symbols.begin(), symbols.end()};
 }
 
-std::optional<Diagnostic> SemanticAnalyzer::visit_callable(
+std::optional<Diagnostic> SemanticAnalyzer::visitCallable(
     const std::vector<Arg>& args,
-    const Type& return_type,
+    const Type& returnType,
     const Stmt& body,
     const SourceSpan& span,
     const std::string& name,
@@ -1287,54 +1287,54 @@ std::optional<Diagnostic> SemanticAnalyzer::visit_callable(
     const char* label,
     const Program& program
 ) {
-    const auto previous_return = current_return_type_;
-    const auto previous_has_return = current_callable_has_return_;
-    const auto previous_kind = current_callable_kind_;
-    const auto previous_name = current_callable_name_;
-    current_return_type_ = return_type;
-    current_callable_has_return_ = false;
-    current_callable_kind_ = kind;
-    current_callable_name_ = name;
+    const auto previous_return = currentReturnType_;
+    const auto previous_has_return = currentCallableHasReturn_;
+    const auto previous_kind = currentCallableKind_;
+    const auto previous_name = currentCallableName_;
+    currentReturnType_ = returnType;
+    currentCallableHasReturn_ = false;
+    currentCallableKind_ = kind;
+    currentCallableName_ = name;
 
-    push_scope();
+    pushScope();
     for (const auto& arg : args) {
-        if (arg.default_value) {
-            auto default_type = analyze_expr(*arg.default_value, program);
+        if (arg.defaultValue) {
+            auto default_type = analyzeExpr(*arg.defaultValue, program);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&default_type)) {
                 return *diagnostic;
             }
-            if (!is_compatible(arg.type, std::get<Type>(default_type))) {
+            if (!isCompatible(arg.type, std::get<Type>(default_type))) {
                 return error(span, "Default value for argument '" + arg.name + "' has incompatible type");
             }
         }
-        if (auto diagnostic = declare_var(arg.name, arg.type,  SemanticSymbolKind::Parameter, span)) {
+        if (auto diagnostic = declareVar(arg.name, arg.type,  SemanticSymbolKind::Parameter, span)) {
             return diagnostic;
         }
     }
-    if (auto diagnostic = analyze_stmt(body, program)) {
+    if (auto diagnostic = analyzeStmt(body, program)) {
         return diagnostic;
     }
-    pop_scope();
+    popScope();
 
-    if (return_type.base != TypeBase::None && !current_callable_has_return_) {
+    if (returnType.base != TypeBase::None && !currentCallableHasReturn_) {
         return error(span, std::string(label) + " '" + name + "' is missing a return statement");
     }
 
-    current_return_type_ = previous_return;
-    current_callable_has_return_ = previous_has_return;
-    current_callable_kind_ = previous_kind;
-    current_callable_name_ = previous_name;
+    currentReturnType_ = previous_return;
+    currentCallableHasReturn_ = previous_has_return;
+    currentCallableKind_ = previous_kind;
+    currentCallableName_ = previous_name;
     return std::nullopt;
 }
 
-std::optional<Diagnostic> SemanticAnalyzer::declare_var(
+std::optional<Diagnostic> SemanticAnalyzer::declareVar(
     const std::string& name,
     Type type,
     SemanticSymbolKind kind,
     const SourceSpan& span
 ) {
     if (scopes_.empty()) {
-        push_scope();
+        pushScope();
     }
     auto& scope = scopes_.back();
     if (scope.count(name) != 0) {
@@ -1342,17 +1342,17 @@ std::optional<Diagnostic> SemanticAnalyzer::declare_var(
     }
     Symbol symbol;
     symbol.type = type;
-    symbol.is_callable = is_callable(type);
-    if (type.callable_return) {
-        symbol.callable_return_type = *type.callable_return;
+    symbol.isCallable = isCallable(type);
+    if (type.callableReturn) {
+        symbol.callableReturnType = *type.callableReturn;
     }
     symbol.kind = kind;
     scope[name] = symbol;
-    record_symbol(SemanticSymbol{name, kind, type, scopes_.size(), current_callable_name_, span});
+    recordSymbol(SemanticSymbol{name, kind, type, scopes_.size(), currentCallableName_, span});
     return std::nullopt;
 }
 
-const Symbol* SemanticAnalyzer::find_var(const std::string& name) const {
+const Symbol* SemanticAnalyzer::findVar(const std::string& name) const {
     for (auto scope = scopes_.rbegin(); scope != scopes_.rend(); ++scope) {
         auto found = scope->find(name);
         if (found != scope->end()) {
@@ -1362,7 +1362,7 @@ const Symbol* SemanticAnalyzer::find_var(const std::string& name) const {
     return nullptr;
 }
 // i think here we are checking to type are compatible
-bool SemanticAnalyzer::is_compatible(const Type& target, const Type& source) const {
+bool SemanticAnalyzer::isCompatible(const Type& target, const Type& source) const {
     if (target.base == TypeBase::Unknown || source.base == TypeBase::Unknown) {
         return true;
     }
@@ -1370,18 +1370,18 @@ bool SemanticAnalyzer::is_compatible(const Type& target, const Type& source) con
         return false;
     }
     if ((target.base == TypeBase::Float || target.base == TypeBase::Int) &&
-        target.scalar_dtype && source.scalar_dtype && target.scalar_dtype != source.scalar_dtype) {
+        target.scalarDtype && source.scalarDtype && target.scalarDtype != source.scalarDtype) {
         return false;
     }
     if (target.base == TypeBase::Tensor) {
-        if (target.tensor_dtype && source.tensor_dtype && target.tensor_dtype != source.tensor_dtype) {
+        if (target.tensorDtype && source.tensorDtype && target.tensorDtype != source.tensorDtype) {
             return false;
         }
-        if (target.tensor_shape_expr && source.tensor_shape_expr &&
-            target.tensor_shape_expr != source.tensor_shape_expr) {
+        if (target.tensorShapeExpr && source.tensorShapeExpr &&
+            target.tensorShapeExpr != source.tensorShapeExpr) {
             return false;
         }
-        if (target.tensor_rank && source.tensor_rank && target.tensor_rank != source.tensor_rank) {
+        if (target.tensorRank && source.tensorRank && target.tensorRank != source.tensorRank) {
             return false;
         }
     }
@@ -1390,7 +1390,7 @@ bool SemanticAnalyzer::is_compatible(const Type& target, const Type& source) con
             return false;
         }
         for (std::size_t index = 0; index < target.elements.size(); ++index) {
-            if (!is_compatible(target.elements[index], source.elements[index])) {
+            if (!isCompatible(target.elements[index], source.elements[index])) {
                 return false;
             }
         }
@@ -1401,22 +1401,22 @@ bool SemanticAnalyzer::is_compatible(const Type& target, const Type& source) con
         }
         return std::all_of(source.elements.begin(), source.elements.end(), [&](const Type& rhs) {
             return std::any_of(target.elements.begin(), target.elements.end(), [&](const Type& lhs) {
-                return is_compatible(lhs, rhs);
+                return isCompatible(lhs, rhs);
             });
         });
     }
     if (target.base == TypeBase::Callable) {
-        // here if we do 'c : callable' it doesn't have callable_return, we need to fix this
-        // if (!target.callable_return || !source.callable_return) {
-        //     return !target.callable_return && !source.callable_return;
+        // here if we do 'c : callable' it doesn't have callableReturn, we need to fix this
+        // if (!target.callableReturn || !source.callableReturn) {
+        //     return !target.callableReturn && !source.callableReturn;
         // }
-        // return is_compatible(*target.callable_return, *source.callable_return);
+        // return isCompatible(*target.callableReturn, *source.callableReturn);
         return true;
     }
     return true;
 }
 
-Type SemanticAnalyzer::merge_tensor_types(const Type& lhs, const Type& rhs) const {
+Type SemanticAnalyzer::mergeTensorTypes(const Type& lhs, const Type& rhs) const {
     if (lhs.base != TypeBase::Tensor) {
         return rhs;
     }
@@ -1424,53 +1424,53 @@ Type SemanticAnalyzer::merge_tensor_types(const Type& lhs, const Type& rhs) cons
         return lhs;
     }
     return Type::tensor(
-        lhs.tensor_dtype ? lhs.tensor_dtype : rhs.tensor_dtype,
-        lhs.tensor_shape_expr ? lhs.tensor_shape_expr : rhs.tensor_shape_expr,
-        lhs.tensor_rank ? lhs.tensor_rank : rhs.tensor_rank
+        lhs.tensorDtype ? lhs.tensorDtype : rhs.tensorDtype,
+        lhs.tensorShapeExpr ? lhs.tensorShapeExpr : rhs.tensorShapeExpr,
+        lhs.tensorRank ? lhs.tensorRank : rhs.tensorRank
     );
 }
 
 //reviewed
-std::optional<Diagnostic> SemanticAnalyzer::validate_declared_type(const Type& type, const SourceSpan& span) {
+std::optional<Diagnostic> SemanticAnalyzer::validateDeclaredType(const Type& type, const SourceSpan& span) {
     // static for this vector persist between calls.
     static const std::vector<std::string> tensor_dtypes = {
         "float16", "float32", "float64", "bfloat16", "int16", "int32", "int64",
     };
-    if (type.base == TypeBase::Int && type.scalar_dtype &&
-        !(*type.scalar_dtype == "int16" || *type.scalar_dtype == "int32" || *type.scalar_dtype == "int64")) {
-        return error(span, "Unsupported scalar integer type '" + *type.scalar_dtype + "'");
+    if (type.base == TypeBase::Int && type.scalarDtype &&
+        !(*type.scalarDtype == "int16" || *type.scalarDtype == "int32" || *type.scalarDtype == "int64")) {
+        return error(span, "Unsupported scalar integer type '" + *type.scalarDtype + "'");
     }
-    if (type.base == TypeBase::Float && type.scalar_dtype &&
-        !(*type.scalar_dtype == "float16" || *type.scalar_dtype == "float32" || *type.scalar_dtype == "float64")) {
-        return error(span, "Unsupported scalar float type '" + *type.scalar_dtype + "'");
+    if (type.base == TypeBase::Float && type.scalarDtype &&
+        !(*type.scalarDtype == "float16" || *type.scalarDtype == "float32" || *type.scalarDtype == "float64")) {
+        return error(span, "Unsupported scalar float type '" + *type.scalarDtype + "'");
     }
-    if (type.base == TypeBase::Tensor && type.tensor_dtype &&
-        std::find(tensor_dtypes.begin(), tensor_dtypes.end(), *type.tensor_dtype) == tensor_dtypes.end()) {
-        return error(span, "Unsupported tensor dtype '" + *type.tensor_dtype + "'");
+    if (type.base == TypeBase::Tensor && type.tensorDtype &&
+        std::find(tensor_dtypes.begin(), tensor_dtypes.end(), *type.tensorDtype) == tensor_dtypes.end()) {
+        return error(span, "Unsupported tensor dtype '" + *type.tensorDtype + "'");
     }
     // not sure here
     for (const auto& element : type.elements) {
-        if (auto diagnostic = validate_declared_type(element, span)) {
+        if (auto diagnostic = validateDeclaredType(element, span)) {
             return diagnostic;
         }
     }
-    if (type.callable_return) {
-        return validate_declared_type(*type.callable_return, span);
+    if (type.callableReturn) {
+        return validateDeclaredType(*type.callableReturn, span);
     }
     return std::nullopt;
 }
 
-std::optional<Diagnostic> SemanticAnalyzer::validate_signature_arity(
+std::optional<Diagnostic> SemanticAnalyzer::validateSignatureArity(
     const Signature& signature,
     std::size_t actual_arity,
     const SourceSpan& span
 ) {
-    if (actual_arity < signature.min_arity || actual_arity > signature.max_arity) {
+    if (actual_arity < signature.minArity || actual_arity > signature.maxArity) {
         std::ostringstream expected;
-        if (signature.min_arity == signature.max_arity) {
-            expected << signature.min_arity;
+        if (signature.minArity == signature.maxArity) {
+            expected << signature.minArity;
         } else {
-            expected << signature.min_arity << " to " << signature.max_arity;
+            expected << signature.minArity << " to " << signature.maxArity;
         }
         return error(
             span,
@@ -1481,115 +1481,115 @@ std::optional<Diagnostic> SemanticAnalyzer::validate_signature_arity(
     return std::nullopt;
 }
 
-std::optional<Diagnostic> SemanticAnalyzer::ensure_condition_type(
+std::optional<Diagnostic> SemanticAnalyzer::ensureConditionType(
     const Type& type,
     const SourceSpan& span,
     const std::string& context
 ) {
     if (!(type.base == TypeBase::Bool || type.base == TypeBase::Unknown)) {
-        return error(span, context + " must have type bool, but got " + type_to_string(type));
+        return error(span, context + " must have type bool, but got " + typeToString(type));
     }
     return std::nullopt;
 }
 
-std::optional<Diagnostic> SemanticAnalyzer::ensure_call_allowed(
+std::optional<Diagnostic> SemanticAnalyzer::ensureCallAllowed(
     const std::string& callee,
     bool is_layer,
     const SourceSpan& span
 ) {
-    if (is_layer && current_callable_kind_ == CallableKind::Function) {
+    if (is_layer && currentCallableKind_ == CallableKind::Function) {
         return error(span, "Function '" + callee + "' is a layer and cannot be called from fn");
     }
     return std::nullopt;
 }
 
 Diagnostic SemanticAnalyzer::error(const SourceSpan& span, const std::string& message) {
-    Diagnostic diagnostic = Diagnostic::error(DiagnosticCode::SemanticError, message).with_source_span(span);
-    last_diagnostic_ = diagnostic;
+    Diagnostic diagnostic = Diagnostic::error(DiagnosticCode::SemanticError, message).withSourceSpan(span);
+    lastDiagnostic_ = diagnostic;
     return diagnostic;
 }
 // this func pushing scope
-void SemanticAnalyzer::push_scope() {
+void SemanticAnalyzer::pushScope() {
     scopes_.push_back({});
 }
 
-void SemanticAnalyzer::pop_scope() {
+void SemanticAnalyzer::popScope() {
     if (!scopes_.empty()) {
         scopes_.pop_back();
     }
 }
 //reviewed
-void SemanticAnalyzer::record_symbol(SemanticSymbol symbol) {
-    semantic_info_.symbols.push_back(std::move(symbol));
+void SemanticAnalyzer::recordSymbol(SemanticSymbol symbol) {
+    semanticInfo_.symbols.push_back(std::move(symbol));
 }
 
-void SemanticAnalyzer::record_expr_type(const Expr& expr, Type type) {
-    semantic_info_.exprs.push_back(SemanticExprInfo{expr.span, std::move(type), current_callable_name_});
+void SemanticAnalyzer::recordExprType(const Expr& expr, Type type) {
+    semanticInfo_.exprs.push_back(SemanticExprInfo{expr.span, std::move(type), currentCallableName_});
 }
 
-void SemanticAnalyzer::record_identifier(
+void SemanticAnalyzer::recordIdentifier(
     const SourceSpan& span,
     const std::string& name,
     SemanticSymbolKind target,
     Type type
 ) {
-    semantic_info_.identifiers.push_back(
-        SemanticIdentifierInfo{span, name, target, std::move(type), current_callable_name_}
+    semanticInfo_.identifiers.push_back(
+        SemanticIdentifierInfo{span, name, target, std::move(type), currentCallableName_}
     );
 }
 
-void SemanticAnalyzer::record_assignment(
+void SemanticAnalyzer::recordAssignment(
     const SourceSpan& span,
     const std::string& name,
     SemanticSymbolKind target,
-    Type target_type,
-    Type value_type
+    Type targetType,
+    Type valueType
 ) {
-    semantic_info_.assignments.push_back(SemanticAssignmentInfo{
+    semanticInfo_.assignments.push_back(SemanticAssignmentInfo{
         span,
         name,
         target,
-        std::move(target_type),
-        std::move(value_type),
-        current_callable_name_,
+        std::move(targetType),
+        std::move(valueType),
+        currentCallableName_,
     });
 }
 
-void SemanticAnalyzer::record_config_field_access(
+void SemanticAnalyzer::recordConfigFieldAccess(
     const SourceSpan& span,
-    const std::string& config_name,
-    const std::string& field_name,
-    Type field_type
+    const std::string& configName,
+    const std::string& fieldName,
+    Type fieldType
 ) {
-    semantic_info_.config_field_accesses.push_back(
-        SemanticConfigFieldAccessInfo{span, config_name, field_name, std::move(field_type), current_callable_name_}
+    semanticInfo_.configFieldAccesses.push_back(
+        SemanticConfigFieldAccessInfo{span, configName, fieldName, std::move(fieldType), currentCallableName_}
     );
 }
 
-void SemanticAnalyzer::record_declaration(
+void SemanticAnalyzer::recordDeclaration(
     const SourceSpan& span,
     const std::string& name,
     SemanticSymbolKind kind,
-    Type final_type
+    Type finalType
 ) {
-    semantic_info_.declarations.push_back(
-        SemanticDeclarationInfo{span, name, kind, std::move(final_type) , current_callable_name_}
+    semanticInfo_.declarations.push_back(
+        SemanticDeclarationInfo{span, name, kind, std::move(finalType) , currentCallableName_}
     );
 }
 
-void SemanticAnalyzer::record_call(
+void SemanticAnalyzer::recordCall(
     const SourceSpan& span,
     const std::string& callee,
     SemanticCallTargetKind target,
-    Type result_type,
-    bool arrow_stage
+    Type resultType,
+    bool arrowStage
 ) {
-    semantic_info_.calls.push_back(
-        SemanticCallInfo{span, callee, target, std::move(result_type), current_callable_name_, arrow_stage}
+    semanticInfo_.calls.push_back(
+        SemanticCallInfo{span, callee, target, std::move(resultType), currentCallableName_, arrowStage}
     );
 }
 
-const char* semantic_symbol_kind_name(SemanticSymbolKind kind) {
+const char* semanticSymbolKindName(SemanticSymbolKind kind) {
     switch (kind) {
         case SemanticSymbolKind::BuiltinFunction:
             return "builtin";
@@ -1611,7 +1611,7 @@ const char* semantic_symbol_kind_name(SemanticSymbolKind kind) {
     return "local";
 }
 
-const char* semantic_call_target_kind_name(SemanticCallTargetKind kind) {
+const char* semanticCallTargetKindName(SemanticCallTargetKind kind) {
     switch (kind) {
         case SemanticCallTargetKind::BuiltinFunction:
             return "builtin";
@@ -1625,7 +1625,7 @@ const char* semantic_call_target_kind_name(SemanticCallTargetKind kind) {
     return "function";
 }
 
-std::string semantic_info_summary(const SemanticInfo& info, const Program& program) {
+std::string semanticInfoSummary(const SemanticInfo& info, const Program& program) {
     std::ostringstream out;
     out << "ok\n";
     out << "configs=" << program.configs.size() << '\n';
@@ -1636,7 +1636,7 @@ std::string semantic_info_summary(const SemanticInfo& info, const Program& progr
     out << "exprs=" << info.exprs.size() << '\n';
     out << "identifiers=" << info.identifiers.size() << '\n';
     out << "assignments=" << info.assignments.size() << '\n';
-    out << "config_field_accesses=" << info.config_field_accesses.size() << '\n';
+    out << "configFieldAccesses=" << info.configFieldAccesses.size() << '\n';
     out << "declarations=" << info.declarations.size() << '\n';
     out << "calls=" << info.calls.size();
     return out.str();

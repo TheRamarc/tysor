@@ -51,7 +51,7 @@ const ExecutionPlan* find_plan(const PlanModule& module, const std::string& entr
 
 std::optional<std::string> find_skipped_plan_reason(const PlanModule& module, const std::string& entry) {
     auto found = std::find_if(module.skipped.begin(), module.skipped.end(), [&](const PlanBuildSkipped& skipped) {
-        return skipped.function_name == entry;
+        return skipped.functionName == entry;
     });
     if (found == module.skipped.end()) {
         return std::nullopt;
@@ -60,13 +60,13 @@ std::optional<std::string> find_skipped_plan_reason(const PlanModule& module, co
 }
 
 const FeExecutionRun* find_train_run(const LoweredModule& lowered, const std::string& entry) {
-    if (!lowered.execution_plan) {
+    if (!lowered.executionPlan) {
         return nullptr;
     }
-    auto found = std::find_if(lowered.execution_plan->runs.begin(), lowered.execution_plan->runs.end(), [&](const FeExecutionRun& run) {
-        return run.model_name == entry;
+    auto found = std::find_if(lowered.executionPlan->runs.begin(), lowered.executionPlan->runs.end(), [&](const FeExecutionRun& run) {
+        return run.modelName == entry;
     });
-    return found == lowered.execution_plan->runs.end() ? nullptr : &*found;
+    return found == lowered.executionPlan->runs.end() ? nullptr : &*found;
 }
 
 std::string linear_weight_name(std::size_t output_id) {
@@ -83,24 +83,24 @@ std::string embedding_weight_name(std::size_t output_id) {
 
 const PlanParameter* find_plan_parameter(
     const ExecutionPlan& plan,
-    std::size_t owner_value,
+    std::size_t ownerValue,
     const std::string& role
 ) {
     auto found = std::find_if(plan.parameters.begin(), plan.parameters.end(), [&](const PlanParameter& parameter) {
-        return parameter.owner_value == owner_value && parameter.role == role;
+        return parameter.ownerValue == ownerValue && parameter.role == role;
     });
     return found == plan.parameters.end() ? nullptr : &*found;
 }
 
-const PlanParameter* find_plan_parameter_by_value(const ExecutionPlan& plan, std::size_t value_id) {
+const PlanParameter* find_plan_parameter_by_value(const ExecutionPlan& plan, std::size_t valueId) {
     auto found = std::find_if(plan.parameters.begin(), plan.parameters.end(), [&](const PlanParameter& parameter) {
-        return parameter.value_id == value_id;
+        return parameter.valueId == valueId;
     });
     return found == plan.parameters.end() ? nullptr : &*found;
 }
 
 std::optional<std::int64_t> known_graph_dim(const GraphTensorType& type, std::size_t index) {
-    if (!type.has_known_rank || index >= type.shape.size()) {
+    if (!type.hasKnownRank || index >= type.shape.size()) {
         return std::nullopt;
     }
     const GraphDim& dim = type.shape[index];
@@ -124,25 +124,25 @@ std::variant<SimpleTensor, Diagnostic> synthesize_model_parameter(
     const PlanValue& value,
     const PlanParameter& parameter
 ) {
-    const std::string dtype = parameter.tensor_type.dtype.value_or(value.type.tensor_dtype.value_or("float32"));
+    const std::string dtype = parameter.tensorType.dtype.value_or(value.type.tensorDtype.value_or("float32"));
     if (starts_with(parameter.name, "linear_") && parameter.role == "weight") {
-        auto in_features = known_graph_dim(parameter.tensor_type, 0);
-        auto out_features = known_graph_dim(parameter.tensor_type, 1);
+        auto in_features = known_graph_dim(parameter.tensorType, 0);
+        auto out_features = known_graph_dim(parameter.tensorType, 1);
         if (!in_features || !out_features) {
             return train_error("Linear weight parameter '" + parameter.name + "' requires known rank-2 shape");
         }
         return make_linear_weight(*in_features, *out_features, dtype);
     }
     if (starts_with(parameter.name, "linear_") && parameter.role == "bias") {
-        auto out_features = known_graph_dim(parameter.tensor_type, 0);
+        auto out_features = known_graph_dim(parameter.tensorType, 0);
         if (!out_features) {
             return train_error("Linear bias parameter '" + parameter.name + "' requires known rank-1 shape");
         }
         return make_linear_bias(*out_features, dtype);
     }
     if (starts_with(parameter.name, "embedding_") && parameter.role == "weight") {
-        auto num_embeddings = known_graph_dim(parameter.tensor_type, 0);
-        auto embedding_dim = known_graph_dim(parameter.tensor_type, 1);
+        auto num_embeddings = known_graph_dim(parameter.tensorType, 0);
+        auto embedding_dim = known_graph_dim(parameter.tensorType, 1);
         if (!num_embeddings || !embedding_dim) {
             return train_error("Embedding weight parameter '" + parameter.name + "' requires known rank-2 shape");
         }
@@ -636,8 +636,8 @@ std::variant<LinearSpec, Diagnostic> build_linear_spec(
     const TrainExecutionResult& execution
 ) {
     LinearSpec spec;
-    if (output.type.callable_return && output.type.callable_return->tensor_dtype) {
-        spec.closure.dtype = *output.type.callable_return->tensor_dtype;
+    if (output.type.callableReturn && output.type.callableReturn->tensorDtype) {
+        spec.closure.dtype = *output.type.callableReturn->tensorDtype;
     }
     if (op.inputs.size() == 1) {
         auto out_features = require_int(execution, op.inputs[0], "linear out_features");
@@ -674,27 +674,27 @@ std::variant<LinearSpec, Diagnostic> build_linear_spec(
     spec.weight_name = linear_weight_name(op.output);
     if (const PlanParameter* weight = find_plan_parameter(plan, op.output, "weight")) {
         spec.weight_name = weight->name;
-        spec.weight_type = weight->tensor_type;
-        if (auto in_features = known_graph_dim(weight->tensor_type, 0)) {
+        spec.weight_type = weight->tensorType;
+        if (auto in_features = known_graph_dim(weight->tensorType, 0)) {
             spec.closure.in_features = *in_features;
         }
-        if (auto out_features = known_graph_dim(weight->tensor_type, 1)) {
+        if (auto out_features = known_graph_dim(weight->tensorType, 1)) {
             spec.closure.out_features = *out_features;
         }
-        if (weight->tensor_type.dtype) {
-            spec.closure.dtype = *weight->tensor_type.dtype;
+        if (weight->tensorType.dtype) {
+            spec.closure.dtype = *weight->tensorType.dtype;
         }
     }
     if (spec.closure.with_bias) {
         spec.bias_name = linear_bias_name(op.output);
         if (const PlanParameter* bias = find_plan_parameter(plan, op.output, "bias")) {
             spec.bias_name = bias->name;
-            spec.bias_type = bias->tensor_type;
-            if (auto out_features = known_graph_dim(bias->tensor_type, 0)) {
+            spec.bias_type = bias->tensorType;
+            if (auto out_features = known_graph_dim(bias->tensorType, 0)) {
                 spec.closure.out_features = *out_features;
             }
-            if (bias->tensor_type.dtype) {
-                spec.closure.dtype = *bias->tensor_type.dtype;
+            if (bias->tensorType.dtype) {
+                spec.closure.dtype = *bias->tensorType.dtype;
             }
         }
     }
@@ -714,21 +714,21 @@ std::variant<EmbeddingSpec, Diagnostic> build_embedding_spec(
     EmbeddingSpec spec;
     spec.closure.num_embeddings = std::get<std::int64_t>(num_embeddings);
     spec.closure.embedding_dim = std::get<std::int64_t>(embedding_dim);
-    if (output.type.callable_return && output.type.callable_return->tensor_dtype) {
-        spec.closure.dtype = *output.type.callable_return->tensor_dtype;
+    if (output.type.callableReturn && output.type.callableReturn->tensorDtype) {
+        spec.closure.dtype = *output.type.callableReturn->tensorDtype;
     }
     spec.weight_name = embedding_weight_name(op.output);
     if (const PlanParameter* weight = find_plan_parameter(plan, op.output, "weight")) {
         spec.weight_name = weight->name;
-        spec.weight_type = weight->tensor_type;
-        if (auto num_embeddings = known_graph_dim(weight->tensor_type, 0)) {
+        spec.weight_type = weight->tensorType;
+        if (auto num_embeddings = known_graph_dim(weight->tensorType, 0)) {
             spec.closure.num_embeddings = *num_embeddings;
         }
-        if (auto embedding_dim = known_graph_dim(weight->tensor_type, 1)) {
+        if (auto embedding_dim = known_graph_dim(weight->tensorType, 1)) {
             spec.closure.embedding_dim = *embedding_dim;
         }
-        if (weight->tensor_type.dtype) {
-            spec.closure.dtype = *weight->tensor_type.dtype;
+        if (weight->tensorType.dtype) {
+            spec.closure.dtype = *weight->tensorType.dtype;
         }
     }
     return spec;
@@ -761,20 +761,20 @@ std::variant<TrainValue, Diagnostic> execute_binary(const PlanOp& op, const Trai
     const TrainValue& rhs = execution.values.at(op.inputs[1]);
     if (const auto* lhs_tensor = std::get_if<SimpleTensor>(&lhs)) {
         if (const auto* rhs_tensor = std::get_if<SimpleTensor>(&rhs)) {
-            auto result = elementwise_binary(op.binary_op, *lhs_tensor, *rhs_tensor);
+            auto result = elementwise_binary(op.binaryOp, *lhs_tensor, *rhs_tensor);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) return *diagnostic;
             return TrainValue{std::get<SimpleTensor>(std::move(result))};
         }
         auto scalar = require_number(rhs);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&scalar)) return *diagnostic;
-        auto result = tensor_scalar_binary(op.binary_op, *lhs_tensor, std::get<double>(scalar));
+        auto result = tensor_scalar_binary(op.binaryOp, *lhs_tensor, std::get<double>(scalar));
         if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) return *diagnostic;
         return TrainValue{std::get<SimpleTensor>(std::move(result))};
     }
     if (const auto* rhs_tensor = std::get_if<SimpleTensor>(&rhs)) {
         auto scalar = require_number(lhs);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&scalar)) return *diagnostic;
-        auto result = scalar_tensor_binary(op.binary_op, std::get<double>(scalar), *rhs_tensor);
+        auto result = scalar_tensor_binary(op.binaryOp, std::get<double>(scalar), *rhs_tensor);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) return *diagnostic;
         return TrainValue{std::get<SimpleTensor>(std::move(result))};
     }
@@ -782,7 +782,7 @@ std::variant<TrainValue, Diagnostic> execute_binary(const PlanOp& op, const Trai
     auto right = require_number(rhs);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&left)) return *diagnostic;
     if (const auto* diagnostic = std::get_if<Diagnostic>(&right)) return *diagnostic;
-    switch (op.binary_op) {
+    switch (op.binaryOp) {
         case FeBinaryOp::Add:
             return TrainValue{std::get<double>(left) + std::get<double>(right)};
         case FeBinaryOp::Sub:
@@ -798,7 +798,7 @@ std::variant<TrainValue, Diagnostic> execute_binary(const PlanOp& op, const Trai
     }
 }
 
-std::variant<TrainValue, Diagnostic> execute_op(
+std::variant<TrainValue, Diagnostic> executeOp(
     const PlanOp& op,
     const ExecutionPlan& plan,
     TrainExecutionResult& execution,
@@ -1010,8 +1010,8 @@ std::variant<TrainExecutionResult, Diagnostic> execute_train_plan(
     }
     for (const auto& step : plan.steps) {
         if (step.kind == PlanStepKind::AllocateHostValue) {
-            const PlanValue& value = plan.values[step.value_id];
-            if (value.is_parameter) {
+            const PlanValue& value = plan.values[step.valueId];
+            if (value.isParameter) {
                 if (value.type.kind != FeTypeKind::Tensor) {
                     return train_error("Train executor currently supports tensor parameters only");
                 }
@@ -1019,9 +1019,9 @@ std::variant<TrainExecutionResult, Diagnostic> execute_train_plan(
                 if (tensor == options.tensor_shapes.end()) {
                     return train_error("Missing --shape for tensor parameter '" + value.name + "'");
                 }
-                execution.values[value.id] = make_synthetic_tensor(tensor->second, value.type.tensor_dtype.value_or("float32"));
+                execution.values[value.id] = make_synthetic_tensor(tensor->second, value.type.tensorDtype.value_or("float32"));
             }
-            if (value.is_model_parameter) {
+            if (value.isModelParameter) {
                 if (value.id >= use_counts.size() || use_counts[value.id] == 0) {
                     continue;
                 }
@@ -1038,11 +1038,11 @@ std::variant<TrainExecutionResult, Diagnostic> execute_train_plan(
             continue;
         }
         if (step.kind == PlanStepKind::ExecuteOp) {
-            if (!step.op_index) {
+            if (!step.opIndex) {
                 return train_error("ExecuteOp step is missing an op index");
             }
-            const PlanOp& op = plan.ops[*step.op_index];
-            auto value = execute_op(op, plan, execution, parameters);
+            const PlanOp& op = plan.ops[*step.opIndex];
+            auto value = executeOp(op, plan, execution, parameters);
             if (const auto* diagnostic = std::get_if<Diagnostic>(&value)) {
                 return *diagnostic;
             }
@@ -1061,10 +1061,10 @@ std::variant<std::size_t, Diagnostic> resolve_objective_id(
     const FeExecutionRun& run,
     const ExecutionPlan& plan
 ) {
-    if (run.objective_symbol) {
-        auto found = plan.named_values.find(*run.objective_symbol);
-        if (found == plan.named_values.end()) {
-            return train_error("Could not resolve objective '" + *run.objective_symbol + "' in execution plan");
+    if (run.objectiveSymbol) {
+        auto found = plan.namedValues.find(*run.objectiveSymbol);
+        if (found == plan.namedValues.end()) {
+            return train_error("Could not resolve objective '" + *run.objectiveSymbol + "' in execution plan");
         }
         return found->second;
     }
@@ -1275,7 +1275,7 @@ std::variant<std::map<std::string, SimpleTensor>, Diagnostic> compute_parameter_
             const auto* rhs_tensor = std::get_if<SimpleTensor>(&rhs);
             if (lhs_tensor != nullptr && rhs_tensor != nullptr) {
                 const bool rhs_broadcast = is_trailing_vector_broadcast(*lhs_tensor, *rhs_tensor);
-                if (op.binary_op == FeBinaryOp::Add) {
+                if (op.binaryOp == FeBinaryOp::Add) {
                     if (auto diagnostic = accumulate_value(value_grads, op.inputs[0], grad)) return *diagnostic;
                     SimpleTensor rhs_grad = grad;
                     if (rhs_broadcast) {
@@ -1284,7 +1284,7 @@ std::variant<std::map<std::string, SimpleTensor>, Diagnostic> compute_parameter_
                         rhs_grad = std::get<SimpleTensor>(std::move(reduced));
                     }
                     if (auto diagnostic = accumulate_value(value_grads, op.inputs[1], rhs_grad)) return *diagnostic;
-                } else if (op.binary_op == FeBinaryOp::Sub) {
+                } else if (op.binaryOp == FeBinaryOp::Sub) {
                     if (auto diagnostic = accumulate_value(value_grads, op.inputs[0], grad)) return *diagnostic;
                     SimpleTensor rhs_grad = negate(grad);
                     if (rhs_broadcast) {
@@ -1293,7 +1293,7 @@ std::variant<std::map<std::string, SimpleTensor>, Diagnostic> compute_parameter_
                         rhs_grad = std::get<SimpleTensor>(std::move(reduced));
                     }
                     if (auto diagnostic = accumulate_value(value_grads, op.inputs[1], rhs_grad)) return *diagnostic;
-                } else if (op.binary_op == FeBinaryOp::Mul) {
+                } else if (op.binaryOp == FeBinaryOp::Mul) {
                     auto lhs_grad = elementwise_binary(FeBinaryOp::Mul, grad, *rhs_tensor);
                     auto rhs_grad = elementwise_binary(FeBinaryOp::Mul, grad, *lhs_tensor);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs_grad)) return *diagnostic;
@@ -1306,27 +1306,27 @@ std::variant<std::map<std::string, SimpleTensor>, Diagnostic> compute_parameter_
                     }
                     if (auto diagnostic = accumulate_value(value_grads, op.inputs[0], std::get<SimpleTensor>(lhs_grad))) return *diagnostic;
                     if (auto diagnostic = accumulate_value(value_grads, op.inputs[1], rhs_value_grad)) return *diagnostic;
-                } else if (op.binary_op == FeBinaryOp::Div) {
+                } else if (op.binaryOp == FeBinaryOp::Div) {
                     auto lhs_grad = elementwise_binary(FeBinaryOp::Div, grad, *rhs_tensor);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs_grad)) return *diagnostic;
                     if (auto diagnostic = accumulate_value(value_grads, op.inputs[0], std::get<SimpleTensor>(lhs_grad))) return *diagnostic;
                 }
             } else if (lhs_tensor != nullptr) {
-                if (op.binary_op == FeBinaryOp::Add || op.binary_op == FeBinaryOp::Sub) {
+                if (op.binaryOp == FeBinaryOp::Add || op.binaryOp == FeBinaryOp::Sub) {
                     if (auto diagnostic = accumulate_value(value_grads, op.inputs[0], grad)) return *diagnostic;
-                } else if (op.binary_op == FeBinaryOp::Mul || op.binary_op == FeBinaryOp::Div) {
+                } else if (op.binaryOp == FeBinaryOp::Mul || op.binaryOp == FeBinaryOp::Div) {
                     auto scalar = require_number(rhs);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&scalar)) return *diagnostic;
-                    auto input_grad = tensor_scalar_binary(op.binary_op, grad, std::get<double>(scalar));
+                    auto input_grad = tensor_scalar_binary(op.binaryOp, grad, std::get<double>(scalar));
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&input_grad)) return *diagnostic;
                     if (auto diagnostic = accumulate_value(value_grads, op.inputs[0], std::get<SimpleTensor>(input_grad))) return *diagnostic;
                 }
             } else if (rhs_tensor != nullptr) {
-                if (op.binary_op == FeBinaryOp::Add) {
+                if (op.binaryOp == FeBinaryOp::Add) {
                     if (auto diagnostic = accumulate_value(value_grads, op.inputs[1], grad)) return *diagnostic;
-                } else if (op.binary_op == FeBinaryOp::Sub) {
+                } else if (op.binaryOp == FeBinaryOp::Sub) {
                     if (auto diagnostic = accumulate_value(value_grads, op.inputs[1], negate(grad))) return *diagnostic;
-                } else if (op.binary_op == FeBinaryOp::Mul) {
+                } else if (op.binaryOp == FeBinaryOp::Mul) {
                     auto scalar = require_number(lhs);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&scalar)) return *diagnostic;
                     auto input_grad = tensor_scalar_binary(FeBinaryOp::Mul, grad, std::get<double>(scalar));
@@ -1341,7 +1341,7 @@ std::variant<std::map<std::string, SimpleTensor>, Diagnostic> compute_parameter_
         if (!parameter.trainable) {
             continue;
         }
-        auto found = value_grads.find(parameter.value_id);
+        auto found = value_grads.find(parameter.valueId);
         if (found == value_grads.end()) {
             continue;
         }
@@ -1359,7 +1359,7 @@ float tensor_sum(const SimpleTensor& tensor) {
 std::optional<Diagnostic> apply_sgd(
     std::map<std::string, SimpleTensor>& parameters,
     const std::map<std::string, SimpleTensor>& gradients,
-    double learning_rate
+    double learningRate
 ) {
     for (const auto& [name, grad] : gradients) {
         auto parameter = parameters.find(name);
@@ -1370,7 +1370,7 @@ std::optional<Diagnostic> apply_sgd(
             return train_error("Parameter gradient shape mismatch for '" + name + "'");
         }
         for (std::size_t index = 0; index < parameter->second.data.size(); ++index) {
-            parameter->second.data[index] -= static_cast<float>(learning_rate) * grad.data[index];
+            parameter->second.data[index] -= static_cast<float>(learningRate) * grad.data[index];
         }
     }
     return std::nullopt;
@@ -1387,13 +1387,13 @@ std::variant<std::string, Diagnostic> train_optimizer(const FeExecutionRun& run)
 }
 
 double train_learning_rate(const FeExecutionRun& run) {
-    if (!run.learning_rate) {
+    if (!run.learningRate) {
         return 0.01;
     }
-    if (const auto* value = std::get_if<double>(&run.learning_rate->value)) {
+    if (const auto* value = std::get_if<double>(&run.learningRate->value)) {
         return *value;
     }
-    if (const auto* value = std::get_if<std::int64_t>(&run.learning_rate->value)) {
+    if (const auto* value = std::get_if<std::int64_t>(&run.learningRate->value)) {
         return static_cast<double>(*value);
     }
     return 0.01;
@@ -1444,7 +1444,7 @@ std::optional<Diagnostic> run_train_plan_module(
     }
 
     std::map<std::string, SimpleTensor> parameters;
-    const double learning_rate = train_learning_rate(*run);
+    const double learningRate = train_learning_rate(*run);
     const std::int64_t iterations = train_iterations(*run);
 
     std::cout << "\n--- Training Output ---\n";
@@ -1464,7 +1464,7 @@ std::optional<Diagnostic> run_train_plan_module(
             return *diagnostic;
         }
         const float loss = tensor_sum(**std::get_if<const SimpleTensor*>(&objective));
-        if (auto diagnostic = apply_sgd(parameters, std::get<std::map<std::string, SimpleTensor>>(gradients), learning_rate)) {
+        if (auto diagnostic = apply_sgd(parameters, std::get<std::map<std::string, SimpleTensor>>(gradients), learningRate)) {
             return *diagnostic;
         }
         std::cout << "step=" << (step + 1)

@@ -40,7 +40,7 @@ std::optional<int> handle_builtin_command(const std::vector<std::string>& raw_ar
     if (raw_args.size() == 1 && raw_args[0] == "--metal-device") {
         auto result = probe_native_metal_device();
         if (const auto* diagnostic = std::get_if<Diagnostic>(&result)) {
-            std::cerr << diagnostic->to_string() << '\n';
+            std::cerr << diagnostic->toString() << '\n';
             return 1;
         }
         std::cout << "metal_device " << std::get<std::string>(result) << '\n';
@@ -86,7 +86,7 @@ std::optional<Diagnostic> unsupported_requested_actions(const CliOptions& option
         message << ' ' << action;
     }
     return Diagnostic::error(DiagnosticCode::CliArgsError, message.str())
-        .with_help("cpptysor currently supports compiler pipeline dumps and local --run execution");
+        .withHelp("cpptysor currently supports compiler pipeline dumps and local --run execution");
 }
 
 // Executes the compiled entry function using the appropriate backend runtime
@@ -125,7 +125,7 @@ int run_program(CliOptions options) {
     // Read the source file from disk
     auto source_result = read_source_file(*options.input_path);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&source_result)) {
-        std::cerr << diagnostic->to_string() << '\n';
+        std::cerr << diagnostic->toString() << '\n';
         return 1;
     }
 
@@ -136,7 +136,7 @@ int run_program(CliOptions options) {
     // Compile the source code to an execution plan
     CompileResult compiled_result = compile_source(source, options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&compiled_result)) {
-        std::cerr << diagnostic->to_string() << '\n';
+        std::cerr << diagnostic->toString() << '\n';
         return 1;
     }
 
@@ -148,7 +148,7 @@ int run_program(CliOptions options) {
     // Validate that the requested actions are supported
     if (const auto unsupported = unsupported_requested_actions(options)) {
         std::cout.flush();
-        std::cerr << unsupported->to_string() << '\n';
+        std::cerr << unsupported->toString() << '\n';
         return 1;
     }
 
@@ -156,7 +156,7 @@ int run_program(CliOptions options) {
     if (options.run) {
         if (const auto diagnostic = run_entry_function(compiled, options)) {
             std::cout.flush();
-            std::cerr << diagnostic->to_string() << '\n';
+            std::cerr << diagnostic->toString() << '\n';
             return 1;
         }
     }
@@ -165,14 +165,14 @@ int run_program(CliOptions options) {
     if (options.backward) {
         if (!compiled.plan) {
             std::cout.flush();
-            std::cerr << Diagnostic::error(DiagnosticCode::RuntimeBackwardError, "execution plan was not built for --backward").to_string() << '\n';
+            std::cerr << Diagnostic::error(DiagnosticCode::RuntimeBackwardError, "execution plan was not built for --backward").toString() << '\n';
             return 1;
         }
         GraphExecutorOptions executor_options;
         executor_options.tensor_shapes = options.tensor_shapes;
         if (const auto diagnostic = run_backward_plan_module(compiled.lowered, *compiled.plan, options.entry, executor_options)) {
             std::cout.flush();
-            std::cerr << diagnostic->to_string() << '\n';
+            std::cerr << diagnostic->toString() << '\n';
             return 1;
         }
     }
@@ -181,20 +181,20 @@ int run_program(CliOptions options) {
     if (options.train) {
         if (!compiled.plan) {
             std::cout.flush();
-            std::cerr << Diagnostic::error(DiagnosticCode::RuntimeTrainError, "execution plan was not built for --train").to_string() << '\n';
+            std::cerr << Diagnostic::error(DiagnosticCode::RuntimeTrainError, "execution plan was not built for --train").toString() << '\n';
             return 1;
         }
         GraphExecutorOptions executor_options;
         executor_options.tensor_shapes = options.tensor_shapes;
         if (const auto diagnostic = run_train_plan_module(compiled.lowered, *compiled.plan, options.entry, executor_options)) {
             std::cout.flush();
-            std::cerr << diagnostic->to_string() << '\n';
+            std::cerr << diagnostic->toString() << '\n';
             return 1;
         }
     }
 
     if (options.print_pipeline) {
-        std::cout << "pipeline=lexer->parser->semantic->frontend_ir->graph_ir->execution_plan->runtime\n";
+        std::cout << "pipeline=lexer->parser->semantic->frontend_ir->graph_ir->executionPlan->runtime\n";
     }
 
     return 0;

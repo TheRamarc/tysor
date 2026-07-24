@@ -39,68 +39,13 @@ enum class TypeBase {
  * tuple/list elements, or callable return types depending on its base kind.
  */
 struct Type {
-    /**
-     * @brief The core category of the type (e.g. Int, Tensor).
-     * 
-     * Why it exists: Determines how the type behaves and how it is validated.
-     * What it tracks: The TypeBase enum.
-     * What mutates/updates it: Initialized during parsing and immutable afterwards.
-     */
     TypeBase base = TypeBase::None;
-
-    /**
-     * @brief Sub-types for collections (Tuple, List).
-     * 
-     * Why it exists: Captures the types of inner elements in a collection.
-     * What it tracks: A list of nested Type objects.
-     * What mutates/updates it: Populated during parsing of collection types.
-     */
     std::vector<Type> elements;
-
-    /**
-     * @brief Return type if this is a Callable.
-     * 
-     * Why it exists: Specifies what a callable type yields when invoked.
-     * What it tracks: A unique pointer to the return Type.
-     * What mutates/updates it: Allocated during parsing of callable annotations.
-     */
-    std::unique_ptr<Type> callable_return;
-
-    /**
-     * @brief Data type string for scalar annotations.
-     * 
-     * Why it exists: Captures explicitly written scalar types (e.g. `f32`).
-     * What it tracks: The string representation of the dtype.
-     * What mutates/updates it: Set during parsing if an explicit type is provided.
-     */
-    std::optional<std::string> scalar_dtype;
-
-    /**
-     * @brief Data type string for tensor annotations.
-     * 
-     * Why it exists: Captures the element type of a tensor (e.g. `tensor<f32>`).
-     * What it tracks: The dtype string.
-     * What mutates/updates it: Set during parsing of tensor types.
-     */
-    std::optional<std::string> tensor_dtype;
-
-    /**
-     * @brief Shape expression for tensor annotations (e.g. "[B, C, H, W]").
-     * 
-     * Why it exists: Used to validate tensor dimension compatibility.
-     * What it tracks: The raw shape string.
-     * What mutates/updates it: Extracted during parsing of tensor types.
-     */
-    std::optional<std::string> tensor_shape_expr;
-
-    /**
-     * @brief Resolved rank of the tensor, if deducible.
-     * 
-     * Why it exists: Assists in structural type-checking for operations dependent on tensor rank.
-     * What it tracks: The number of dimensions.
-     * What mutates/updates it: Inferred from the parsed shape expression.
-     */
-    std::optional<std::size_t> tensor_rank;
+    std::unique_ptr<Type> callableReturn;
+    std::optional<std::string> scalarDtype;
+    std::optional<std::string> tensorDtype;
+    std::optional<std::string> tensorShapeExpr;
+    std::optional<std::size_t> tensorRank;
 
     Type() = default;
     Type(const Type& other);
@@ -110,25 +55,25 @@ struct Type {
 
     // Factory methods for constructing specific types:
     static Type unknown();
-    static Type int_type();
+    static Type intType();
     static Type int16();
     static Type int32();
     static Type int64();
-    static Type float_type();
+    static Type floatType();
     static Type float16();
     static Type float32();
     static Type float64();
-    static Type bool_type();
-    static Type str_type();
-    static Type None_type();
+    static Type boolType();
+    static Type strType();
+    static Type noneType();
     static Type tensor(
         std::optional<std::string> dtype,
-        std::optional<std::string> shape_expr,
+        std::optional<std::string> shapeExpr,
         std::optional<std::size_t> rank
     );
     static Type tuple(std::vector<Type> elements);
     static Type list(std::vector<Type> elements);
-    static Type callable(std::optional<Type> return_type);
+    static Type callable(std::optional<Type> returnType);
 };
 
 struct Expr;
@@ -311,32 +256,9 @@ struct BinaryExpr {
 };
 
 struct TernaryExpr {
-    /**
-     * @brief The expression to evaluate if the condition is true.
-     * 
-     * Why it exists: The positive branch of the ternary.
-     * What it tracks: A pointer to the 'then' Expr.
-     * What mutates/updates it: Populated during parsing.
-     */
-    ExprPtr then_expr;
-
-    /**
-     * @brief The boolean condition expression.
-     * 
-     * Why it exists: Determines which branch to take.
-     * What it tracks: A pointer to the conditional Expr.
-     * What mutates/updates it: Populated during parsing.
-     */
+    ExprPtr thenExpr;
     ExprPtr condition;
-
-    /**
-     * @brief The expression to evaluate if the condition is false.
-     * 
-     * Why it exists: The negative branch of the ternary.
-     * What it tracks: A pointer to the 'else' Expr.
-     * What mutates/updates it: Populated during parsing.
-     */
-    ExprPtr else_expr;
+    ExprPtr elseExpr;
 };
 
 struct TupleExpr {
@@ -435,388 +357,83 @@ struct Expr {
  * @brief Represents a variable declaration (e.g., `let x: int = 5`).
  */
 struct VarDecl {
-    /**
-     * @brief The name of the new variable.
-     * 
-     * Why it exists: Used to register the variable in the current scope.
-     * What it tracks: The identifier string.
-     * What mutates/updates it: Populated during parsing.
-     */
     std::string name;
-
-    /**
-     * @brief The explicitly annotated type (or Unknown if inferred).
-     * 
-     * Why it exists: Used to validate the initializer and type-check the variable.
-     * What it tracks: The parsed Type.
-     * What mutates/updates it: Populated during parsing.
-     */
     Type type;
-
-    /**
-     * @brief The initializer expression.
-     * 
-     * Why it exists: Provides the initial value of the variable.
-     * What it tracks: A pointer to the initialization Expr.
-     * What mutates/updates it: Populated during parsing.
-     */
     ExprPtr init;
-
-    /**
-     * @brief Optional array size for fixed-size declarations.
-     * 
-     * Why it exists: Used for array allocation if supported.
-     * What it tracks: The parsed integer size.
-     * What mutates/updates it: Populated during parsing of array types.
-     */
-    std::optional<std::size_t> array_size;
+    std::optional<std::size_t> arraySize;
 };
 
-/**
- * @brief Represents variable assignment (e.g., `x = 5`).
- */
 struct AssignStmt {
-    /**
-     * @brief The name of the target variable.
-     * 
-     * Why it exists: Identifies where the value should be stored.
-     * What it tracks: The identifier string.
-     * What mutates/updates it: Populated during parsing.
-     */
     std::string name;
-
-    /**
-     * @brief The new value to assign.
-     * 
-     * Why it exists: Provides the RHS of the assignment.
-     * What it tracks: A pointer to the value Expr.
-     * What mutates/updates it: Populated during parsing.
-     */
     ExprPtr value;
 };
 
-/**
- * @brief A block of statements enclosed in a new scope.
- */
 struct ScopeStmt {
-    /**
-     * @brief The sequence of statements in the block.
-     * 
-     * Why it exists: Holds the execution body of the scope.
-     * What it tracks: A list of Stmt objects.
-     * What mutates/updates it: Appended to while parsing the block.
-     */
     std::vector<Stmt> statements;
 };
 
 struct IfBranch {
-    /**
-     * @brief The condition for this branch.
-     * 
-     * Why it exists: Determines if this branch should execute.
-     * What it tracks: A pointer to the condition Expr.
-     * What mutates/updates it: Populated during parsing.
-     */
     ExprPtr condition;
-
-    /**
-     * @brief The body to execute if the condition is true.
-     * 
-     * Why it exists: The execution payload of the branch.
-     * What it tracks: A pointer to the body Stmt (usually a ScopeStmt).
-     * What mutates/updates it: Populated during parsing.
-     */
     StmtPtr body;
 };
 
 struct IfStmt {
-    /**
-     * @brief The main condition for the if statement.
-     * 
-     * Why it exists: Evaluated first to determine branch flow.
-     * What it tracks: A pointer to the main condition Expr.
-     * What mutates/updates it: Populated during parsing.
-     */
     ExprPtr condition;
-
-    /**
-     * @brief The body of the initial if branch.
-     * 
-     * Why it exists: Executed if the main condition is true.
-     * What it tracks: A pointer to the 'then' Stmt.
-     * What mutates/updates it: Populated during parsing.
-     */
-    StmtPtr then_stmt;
-
-    /**
-     * @brief Subsequent elif branches.
-     * 
-     * Why it exists: Handles chained conditional logic.
-     * What it tracks: A list of IfBranch objects.
-     * What mutates/updates it: Appended to while parsing `elif` blocks.
-     */
+    StmtPtr thenStmt;
     std::vector<IfBranch> elifs;
-
-    /**
-     * @brief The final else body (if present).
-     * 
-     * Why it exists: Executed if no prior conditions match.
-     * What it tracks: A pointer to the 'else' Stmt.
-     * What mutates/updates it: Populated during parsing of the `else` block.
-     */
-    StmtPtr else_stmt;
+    StmtPtr elseStmt;
 };
 
 struct ReturnStmt {
-    /**
-     * @brief The value to return.
-     * 
-     * Why it exists: The payload sent back to the caller.
-     * What it tracks: A pointer to the return Expr.
-     * What mutates/updates it: Populated during parsing.
-     */
     ExprPtr value;
 };
 
 struct ExprStmt {
-    /**
-     * @brief The expression to evaluate.
-     * 
-     * Why it exists: Allows expressions (like calls) to be used as statements.
-     * What it tracks: A pointer to the Expr.
-     * What mutates/updates it: Populated during parsing.
-     */
     ExprPtr value;
 };
 
-/**
- * @brief A discriminated union of all possible statement types.
- */
 using StmtKind = std::variant<ReturnStmt, ExprStmt, VarDecl, AssignStmt, ScopeStmt, IfStmt>;
 
-/**
- * @brief A generic Statement AST node wrapping a StmtKind with source location.
- */
 struct Stmt {
-    /**
-     * @brief The source location of this statement.
-     * 
-     * Why it exists: Used for reporting syntax or semantic errors.
-     * What it tracks: The span of tokens making up this statement.
-     * What mutates/updates it: Assigned when constructed by the parser.
-     */
     SourceSpan span{};
-
-    /**
-     * @brief The specific AST node payload.
-     * 
-     * Why it exists: Holds the structural data for the specific statement type.
-     * What it tracks: The StmtKind variant (e.g., IfStmt, AssignStmt).
-     * What mutates/updates it: Assigned at construction time.
-     */
     StmtKind kind;
 };
 
-/**
- * @brief Function or layer argument definition.
- */
 struct Arg {
-    /**
-     * @brief Name of the parameter.
-     * 
-     * Why it exists: Used to bind argument values to the local scope.
-     * What it tracks: The parameter identifier string.
-     * What mutates/updates it: Populated during parsing.
-     */
     std::string name;
-
-    /**
-     * @brief Type annotation of the parameter.
-     * 
-     * Why it exists: Enforces type checking at call sites.
-     * What it tracks: The parsed Type.
-     * What mutates/updates it: Populated during parsing.
-     */
     Type type;
-
-    /**
-     * @brief Optional default value.
-     * 
-     * Why it exists: Allows omitting arguments during a call.
-     * What it tracks: A pointer to the parsed default Expr.
-     * What mutates/updates it: Populated during parsing if an '=' is present.
-     */
-    ExprPtr default_value;
+    ExprPtr defaultValue;
 };
 
-/**
- * @brief Configuration struct field definition.
- */
 struct Field {
-    /**
-     * @brief Name of the config field.
-     * 
-     * Why it exists: Associates a value with a specific config attribute.
-     * What it tracks: The field identifier string.
-     * What mutates/updates it: Populated during parsing.
-     */
     std::string name;
-
-    /**
-     * @brief Type annotation of the field.
-     * 
-     * Why it exists: Validates the initializer and subsequent assignments.
-     * What it tracks: The parsed Type.
-     * What mutates/updates it: Populated during parsing.
-     */
     Type type;
-
-    /**
-     * @brief Initializer expression.
-     * 
-     * Why it exists: Provides the initial (or only) value of the config field.
-     * What it tracks: A pointer to the parsed initialization Expr.
-     * What mutates/updates it: Populated during parsing.
-     */
     ExprPtr init;
 };
 
-/**
- * @brief Represents a standard function definition (`fn`).
- */
 struct Function {
-    /**
-     * @brief The source location of the function definition.
-     * 
-     * Why it exists: Useful for error reporting on the function signature.
-     * What it tracks: The SourceSpan of the definition.
-     * What mutates/updates it: Populated during parsing.
-     */
     SourceSpan span{};
-
-    /**
-     * @brief The name of the function.
-     * 
-     * Why it exists: Used to call the function and register it in the symbol table.
-     * What it tracks: The function identifier string.
-     * What mutates/updates it: Populated during parsing.
-     */
     std::string name;
-
-    /**
-     * @brief The function arguments.
-     * 
-     * Why it exists: Defines the parameters the function accepts.
-     * What it tracks: A list of Arg objects.
-     * What mutates/updates it: Populated during parsing.
-     */
     std::vector<Arg> args;
-
-    /**
-     * @brief The return type of the function.
-     * 
-     * Why it exists: Used to validate return statements inside the function body.
-     * What it tracks: The parsed return Type.
-     * What mutates/updates it: Populated during parsing.
-     */
-    Type return_type;
-
-    /**
-     * @brief The function body block.
-     * 
-     * Why it exists: Contains the actual executable statements.
-     * What it tracks: A Stmt (usually a ScopeStmt variant).
-     * What mutates/updates it: Populated during parsing.
-     */
+    Type returnType;
     Stmt body;
 };
 
-/**
- * @brief Represents a neural network layer definition (`layer`).
- */
 struct Layer {
-    /**
-     * @brief The source location of the layer definition.
-     * 
-     * Why it exists: Useful for error reporting.
-     * What it tracks: The SourceSpan of the definition.
-     * What mutates/updates it: Populated during parsing.
-     */
     SourceSpan span{};
-
-    /**
-     * @brief The name of the layer.
-     * 
-     * Why it exists: Used to instantiate or call the layer.
-     * What it tracks: The layer identifier string.
-     * What mutates/updates it: Populated during parsing.
-     */
     std::string name;
-
-    /**
-     * @brief The layer arguments.
-     * 
-     * Why it exists: Defines initialization or invocation parameters.
-     * What it tracks: A list of Arg objects.
-     * What mutates/updates it: Populated during parsing.
-     */
     std::vector<Arg> args;
-
-    /**
-     * @brief The return type of the layer.
-     * 
-     * Why it exists: Validates the output of the layer.
-     * What it tracks: The parsed return Type.
-     * What mutates/updates it: Populated during parsing.
-     */
-    Type return_type;
-
-    /**
-     * @brief The layer body block.
-     * 
-     * Why it exists: Contains the logic to build the layer subgraph.
-     * What it tracks: A Stmt (usually a ScopeStmt variant).
-     * What mutates/updates it: Populated during parsing.
-     */
+    Type returnType;
     Stmt body;
 };
 
-/**
- * @brief Represents a configuration block (`config`).
- */
 struct Config {
-    /**
-     * @brief The source location of the config definition.
-     * 
-     * Why it exists: Useful for error reporting.
-     * What it tracks: The SourceSpan of the definition.
-     * What mutates/updates it: Populated during parsing.
-     */
     SourceSpan span{};
-
-    /**
-     * @brief The name of the configuration.
-     * 
-     * Why it exists: Used to reference the configuration block.
-     * What it tracks: The config identifier string.
-     * What mutates/updates it: Populated during parsing.
-     */
     std::string name;
-
-    /**
-     * @brief The configuration fields.
-     * 
-     * Why it exists: Holds the key-value attributes.
-     * What it tracks: A list of Field objects.
-     * What mutates/updates it: Populated during parsing.
-     */
     std::vector<Field> fields;
 };
 
-// Top-level module form. Configs may become train configs during lowering,
-// while layers/functions are candidates for graph construction.
 struct Program {
-    // Arena containing all AST nodes
     std::unique_ptr<Arena> arena;
     std::vector<Config> configs;
     std::vector<Layer> layers;
@@ -826,69 +443,67 @@ struct Program {
 
 using ParseResult = std::variant<Program, Diagnostic>;
 
-// Recursive-descent parser over an already-tokenized source stream. Parse
-// routines return owned AST nodes so the source text can be discarded.
 class Parser {
 public:
     explicit Parser(std::vector<Token> tokens);
 
-    std::variant<Program, Diagnostic> parse_program();
-    [[nodiscard]] std::optional<Diagnostic> take_last_diagnostic();
+    std::variant<Program, Diagnostic> parseProgram();
+    [[nodiscard]] std::optional<Diagnostic> takeLastDiagnostic();
 
 private:
     std::vector<Token> tokens_;
     std::size_t index_ = 0;
     std::unique_ptr<Arena> arena_;
-    std::optional<Diagnostic> last_diagnostic_;
+    std::optional<Diagnostic> lastDiagnostic_;
 
-    ExprPtr parse_expression();
-    ExprPtr parse_tuple_expression();
-    ExprPtr parse_conditional_expression();
-    ExprPtr parse_pipeline_expression();
-    ExprPtr parse_logical_or_expression();
-    ExprPtr parse_logical_and_expression();
-    ExprPtr parse_comparison_expression();
-    ExprPtr parse_additive_expression();
-    ExprPtr parse_multiplicative_expression();
-    ExprPtr parse_unary_expression();
-    ExprPtr parse_member_access_expression();
-    ExprPtr parse_primary_expression();
-    ExprPtr parse_list_expression();
-    ExprPtr make_expr(SourceSpan span, ExprKind kind);
+    ExprPtr parseExpression();
+    ExprPtr parseTupleExpression();
+    ExprPtr parseConditionalExpression();
+    ExprPtr parsePipelineExpression();
+    ExprPtr parseLogicalOrExpression();
+    ExprPtr parseLogicalAndExpression();
+    ExprPtr parseComparisonExpression();
+    ExprPtr parseAdditiveExpression();
+    ExprPtr parseMultiplicativeExpression();
+    ExprPtr parseUnaryExpression();
+    ExprPtr parseMemberAccessExpression();
+    ExprPtr parsePrimaryExpression();
+    ExprPtr parseListExpression();
+    ExprPtr makeExpr(SourceSpan span, ExprKind kind);
 
-    Stmt parse_stmt();
-    Stmt parse_scope();
-    Stmt parse_let_var_decl();
+    Stmt parseStmt();
+    Stmt parseScope();
+    Stmt parseLetVarDecl();
 
-    Type parse_type();
-    Type parse_list_type_after_open(const std::string& open_error);
-    Type parse_tuple_type_after_open(
+    Type parseType();
+    Type parseListTypeAfterOpen(const std::string& openError);
+    Type parseTupleTypeAfterOpen(
         TokenType open,
         TokenType close,
-        const std::string& open_error,
-        const std::string& close_error
+        const std::string& openError,
+        const std::string& closeError
     );
-    std::vector<Type> parse_type_list(TokenType terminator);
-    std::string parse_type_token_sequence(const std::vector<TokenType>& terminators);
+    std::vector<Type> parseTypeList(TokenType terminator);
+    std::string parseTypeTokenSequence(const std::vector<TokenType>& terminators);
 
-    Layer parse_layer();
-    Function parse_function();
-    Config parse_config();
-    std::vector<Arg> parse_callable_args();
-    Type parse_callable_return_type(const std::string& colon_error);
+    Layer parseLayer();
+    Function parseFunction();
+    Config parseConfig();
+    std::vector<Arg> parseCallableArgs();
+    Type parseCallableReturnType(const std::string& colonError);
 
     const Token* peek(std::size_t offset) const;
-    std::optional<TokenType> peek_kind(std::size_t offset) const;
+    std::optional<TokenType> peekKind(std::size_t offset) const;
     Token consume();
     Token expect(TokenType kind, const std::string& message);
-    std::string consume_ident(const std::string& message);
-    void consume_terminator();
+    std::string consumeIdent(const std::string& message);
+    void consumeTerminator();
 
-    [[noreturn]] void fail_here(const std::string& message);
-    [[noreturn]] void fail_token(const std::string& message, const Token& token);
+    [[noreturn]] void failHere(const std::string& message);
+    [[noreturn]] void failToken(const std::string& message, const Token& token);
     void record(Diagnostic diagnostic);
 };
 
-std::string type_to_string(const Type& type);
-std::string program_summary(const Program& program);
-std::string ast_to_string(const Program& program);
+std::string typeToString(const Type& type);
+std::string programSummary(const Program& program);
+std::string astToString(const Program& program);

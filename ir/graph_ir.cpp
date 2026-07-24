@@ -26,7 +26,7 @@ namespace {
 
 Diagnostic graph_error(std::string message) {
     return Diagnostic::error(DiagnosticCode::GraphIrError, std::move(message))
-        .with_help("Graph IR validation failed before backend planning. This usually means frontend lowering produced an invalid graph boundary.");
+        .withHelp("Graph IR validation failed before backend planning. This usually means frontend lowering produced an invalid graph boundary.");
 }
 
 const char* graph_node_kind_name(GraphNodeKind kind) {
@@ -52,22 +52,22 @@ std::string fe_type_to_graph_string(const FeType& type) {
         case FeTypeKind::Unknown:
             return "unknown";
         case FeTypeKind::Int:
-            return type.scalar_dtype.value_or("int");
+            return type.scalarDtype.value_or("int");
         case FeTypeKind::Float:
-            return type.scalar_dtype.value_or("float");
+            return type.scalarDtype.value_or("float");
         case FeTypeKind::Bool:
             return "bool";
         case FeTypeKind::Str:
             return "str";
         case FeTypeKind::Tensor:
-            if (type.tensor_dtype && type.tensor_shape_expr) {
-                return "tensor[" + *type.tensor_dtype + ", " + *type.tensor_shape_expr + "]";
+            if (type.tensorDtype && type.tensorShapeExpr) {
+                return "tensor[" + *type.tensorDtype + ", " + *type.tensorShapeExpr + "]";
             }
-            if (type.tensor_dtype) {
-                return "tensor[" + *type.tensor_dtype + "]";
+            if (type.tensorDtype) {
+                return "tensor[" + *type.tensorDtype + "]";
             }
-            if (type.tensor_shape_expr) {
-                return "tensor[" + *type.tensor_shape_expr + "]";
+            if (type.tensorShapeExpr) {
+                return "tensor[" + *type.tensorShapeExpr + "]";
             }
             return "tensor";
         case FeTypeKind::Tuple: {
@@ -95,7 +95,7 @@ std::string fe_type_to_graph_string(const FeType& type) {
             return out.str();
         }
         case FeTypeKind::Callable:
-            return "callable -> " + (type.callable_return ? fe_type_to_graph_string(*type.callable_return) : "void");
+            return "callable -> " + (type.callableReturn ? fe_type_to_graph_string(*type.callableReturn) : "void");
         case FeTypeKind::None:
             return "None";
     }
@@ -260,31 +260,31 @@ std::optional<GraphTensorType> tensor_type_from_fe_type(const FeType& type) {
         return std::nullopt;
     }
     GraphTensorType tensor;
-    tensor.dtype = type.tensor_dtype;
-    if (type.tensor_shape_expr) {
-        const std::string shape_expr = trim_copy(*type.tensor_shape_expr);
-        const bool looks_like_slice = type.tensor_rank && shape_expr.find(':') != std::string::npos;
+    tensor.dtype = type.tensorDtype;
+    if (type.tensorShapeExpr) {
+        const std::string shape_expr = trim_copy(*type.tensorShapeExpr);
+        const bool looks_like_slice = type.tensorRank && shape_expr.find(':') != std::string::npos;
         if (!looks_like_slice) {
             if (auto parsed_shape = parse_shape_expr(shape_expr)) {
                 tensor.shape = std::move(*parsed_shape);
-                tensor.has_known_rank = true;
+                tensor.hasKnownRank = true;
                 return tensor;
             }
         }
-        if (type.tensor_rank) {
-            tensor.shape.assign(*type.tensor_rank, GraphDim::unknown());
-            tensor.has_known_rank = true;
+        if (type.tensorRank) {
+            tensor.shape.assign(*type.tensorRank, GraphDim::unknown());
+            tensor.hasKnownRank = true;
             return tensor;
         }
         if (auto parsed_shape = parse_shape_expr(shape_expr)) {
             tensor.shape = std::move(*parsed_shape);
-            tensor.has_known_rank = true;
+            tensor.hasKnownRank = true;
             return tensor;
         }
     }
-    if (type.tensor_rank) {
-        tensor.shape.assign(*type.tensor_rank, GraphDim::unknown());
-        tensor.has_known_rank = true;
+    if (type.tensorRank) {
+        tensor.shape.assign(*type.tensorRank, GraphDim::unknown());
+        tensor.hasKnownRank = true;
     }
     return tensor;
 }
@@ -298,23 +298,23 @@ GraphTensorType unknown_tensor(std::optional<std::string> dtype = std::nullopt) 
 template <typename GraphT>
 std::variant<GraphTensorType, Diagnostic> require_tensor_type(
     const GraphT& graph,
-    std::size_t value_id,
+    std::size_t valueId,
     const std::string& label
 ) {
-    if (value_id >= graph.values.size()) {
-        return graph_error(label + " references missing value " + std::to_string(value_id));
+    if (valueId >= graph.values.size()) {
+        return graph_error(label + " references missing value " + std::to_string(valueId));
     }
-    const GraphValue& value = graph.values[value_id];
-    if (!value.tensor_type) {
+    const GraphValue& value = graph.values[valueId];
+    if (!value.tensorType) {
         return graph_error(label + " must be a tensor value");
     }
-    return *value.tensor_type;
+    return *value.tensorType;
 }
 
 template <typename GraphT>
-std::optional<std::int64_t> constant_int_value(const GraphT& graph, std::size_t value_id) {
+std::optional<std::int64_t> constant_int_value(const GraphT& graph, std::size_t valueId) {
     for (const auto& node : graph.nodes) {
-        if (node.output != value_id || node.kind != GraphNodeKind::Constant) {
+        if (node.output != valueId || node.kind != GraphNodeKind::Constant) {
             continue;
         }
         if (const auto* value = std::get_if<std::int64_t>(&node.constant.value)) {
@@ -326,9 +326,9 @@ std::optional<std::int64_t> constant_int_value(const GraphT& graph, std::size_t 
 }
 
 template <typename GraphT>
-std::optional<bool> constant_bool_value(const GraphT& graph, std::size_t value_id) {
+std::optional<bool> constant_bool_value(const GraphT& graph, std::size_t valueId) {
     for (const auto& node : graph.nodes) {
-        if (node.output != value_id || node.kind != GraphNodeKind::Constant) {
+        if (node.output != valueId || node.kind != GraphNodeKind::Constant) {
             continue;
         }
         if (const auto* value = std::get_if<bool>(&node.constant.value)) {
@@ -340,9 +340,9 @@ std::optional<bool> constant_bool_value(const GraphT& graph, std::size_t value_i
 }
 
 template <typename GraphT>
-const GraphNode* producer_node(const GraphT& graph, std::size_t value_id) {
+const GraphNode* producer_node(const GraphT& graph, std::size_t valueId) {
     auto found = std::find_if(graph.nodes.begin(), graph.nodes.end(), [&](const GraphNode& node) {
-        return node.output == value_id;
+        return node.output == valueId;
     });
     return found == graph.nodes.end() ? nullptr : &*found;
 }
@@ -360,7 +360,7 @@ std::optional<Diagnostic> ensure_compatible_dim(
         return std::nullopt;
     }
     if (lhs.kind == GraphDimKind::Known && rhs.kind == GraphDimKind::Known && lhs.value != rhs.value) {
-        return graph_error(context + " dimension mismatch: " + graph_dim_to_string(lhs) + " vs " + graph_dim_to_string(rhs));
+        return graph_error(context + " dimension mismatch: " + graphDimToString(lhs) + " vs " + graphDimToString(rhs));
     }
     if (lhs.kind == GraphDimKind::Symbolic && rhs.kind == GraphDimKind::Symbolic && lhs.symbol != rhs.symbol) {
         return graph_error(context + " symbolic dimension mismatch: " + lhs.symbol + " vs " + rhs.symbol);
@@ -378,7 +378,7 @@ std::optional<Diagnostic> ensure_same_shape(
     if (!same_dtype_or_unknown(lhs, rhs)) {
         return graph_error(context + " dtype mismatch: " + *lhs.dtype + " vs " + *rhs.dtype);
     }
-    if (!lhs.has_known_rank || !rhs.has_known_rank) {
+    if (!lhs.hasKnownRank || !rhs.hasKnownRank) {
         return std::nullopt;
     }
     if (lhs.shape.size() != rhs.shape.size()) {
@@ -403,7 +403,7 @@ std::optional<Diagnostic> ensure_trailing_vector_broadcast(
     if (!same_dtype_or_unknown(tensor, vector)) {
         return graph_error(context + " dtype mismatch: " + *tensor.dtype + " vs " + *vector.dtype);
     }
-    if (!tensor.has_known_rank || !vector.has_known_rank) {
+    if (!tensor.hasKnownRank || !vector.hasKnownRank) {
         return std::nullopt;
     }
     if (tensor.shape.size() != 2 || vector.shape.size() != 1) {
@@ -448,7 +448,7 @@ GraphDim multiply_dims(const std::vector<GraphDim>& dims) {
 }
 
 std::optional<std::int64_t> known_element_count(const GraphTensorType& tensor) {
-    if (!tensor.has_known_rank) {
+    if (!tensor.hasKnownRank) {
         return std::nullopt;
     }
     std::int64_t product = 1;
@@ -462,7 +462,7 @@ std::optional<std::int64_t> known_element_count(const GraphTensorType& tensor) {
 }
 
 bool has_known_dim(const GraphTensorType& tensor, std::size_t index) {
-    return tensor.has_known_rank &&
+    return tensor.hasKnownRank &&
            index < tensor.shape.size() &&
            tensor.shape[index].kind == GraphDimKind::Known;
 }
@@ -471,7 +471,7 @@ GraphTensorType tensor_with_shape(const GraphTensorType& source, std::vector<Gra
     GraphTensorType result;
     result.dtype = source.dtype;
     result.shape = std::move(shape);
-    result.has_known_rank = true;
+    result.hasKnownRank = true;
     return result;
 }
 
@@ -479,27 +479,27 @@ GraphTensorType merge_tensor_metadata(const GraphTensorType& existing, GraphTens
     if (!inferred.dtype) {
         inferred.dtype = existing.dtype;
     }
-    if (!inferred.has_known_rank && existing.has_known_rank) {
+    if (!inferred.hasKnownRank && existing.hasKnownRank) {
         inferred.shape = existing.shape;
-        inferred.has_known_rank = true;
+        inferred.hasKnownRank = true;
     }
     return inferred;
 }
 
 template <typename GraphT>
-std::size_t append_value(GraphT& graph, std::string name, FeType type, bool is_parameter) {
+std::size_t append_value(GraphT& graph, std::string name, FeType type, bool isParameter) {
     const std::size_t id = graph.values.size();
-    const bool requires_grad = is_parameter && type.kind == FeTypeKind::Tensor;
-    const auto tensor_type = tensor_type_from_fe_type(type);
-    graph.values.push_back(GraphValue{id, name, std::move(type), is_parameter, requires_grad, false, tensor_type});
+    const bool requiresGrad = isParameter && type.kind == FeTypeKind::Tensor;
+    const auto tensorType = tensor_type_from_fe_type(type);
+    graph.values.push_back(GraphValue{id, name, std::move(type), isParameter, requiresGrad, false, tensorType});
     if (!name.empty()) {
-        graph.named_values[name] = id;
+        graph.namedValues[name] = id;
     }
     return id;
 }
 
 std::string shape_expr_from_tensor_type(const GraphTensorType& tensor) {
-    if (!tensor.has_known_rank) {
+    if (!tensor.hasKnownRank) {
         return std::string{};
     }
     std::ostringstream out;
@@ -508,7 +508,7 @@ std::string shape_expr_from_tensor_type(const GraphTensorType& tensor) {
         if (index != 0) {
             out << ", ";
         }
-        out << graph_dim_to_string(tensor.shape[index]);
+        out << graphDimToString(tensor.shape[index]);
     }
     out << ']';
     return out.str();
@@ -516,38 +516,38 @@ std::string shape_expr_from_tensor_type(const GraphTensorType& tensor) {
 
 FeType fe_tensor_type_from_graph_tensor(const GraphTensorType& tensor) {
     std::optional<std::string> shape_expr;
-    if (tensor.has_known_rank) {
+    if (tensor.hasKnownRank) {
         shape_expr = shape_expr_from_tensor_type(tensor);
     }
-    return FeType::tensor(tensor.dtype, shape_expr, tensor.has_known_rank ? std::optional<std::size_t>{tensor.shape.size()} : std::nullopt);
+    return FeType::tensor(tensor.dtype, shape_expr, tensor.hasKnownRank ? std::optional<std::size_t>{tensor.shape.size()} : std::nullopt);
 }
 
 template <typename GraphT>
 std::size_t append_tensor_value(
     GraphT& graph,
     std::string name,
-    GraphTensorType tensor_type,
-    bool is_model_parameter
+    GraphTensorType tensorType,
+    bool isModelParameter
 ) {
     const std::size_t id = graph.values.size();
-    FeType type = fe_tensor_type_from_graph_tensor(tensor_type);
-    graph.values.push_back(GraphValue{id, name, std::move(type), false, is_model_parameter, is_model_parameter, tensor_type});
+    FeType type = fe_tensor_type_from_graph_tensor(tensorType);
+    graph.values.push_back(GraphValue{id, name, std::move(type), false, isModelParameter, isModelParameter, tensorType});
     if (!name.empty()) {
-        graph.named_values[name] = id;
+        graph.namedValues[name] = id;
     }
     return id;
 }
 
-std::string graph_linear_weight_name(std::size_t owner_value) {
-    return "linear_" + std::to_string(owner_value) + "_weight";
+std::string graph_linear_weight_name(std::size_t ownerValue) {
+    return "linear_" + std::to_string(ownerValue) + "_weight";
 }
 
-std::string graph_linear_bias_name(std::size_t owner_value) {
-    return "linear_" + std::to_string(owner_value) + "_bias";
+std::string graph_linear_bias_name(std::size_t ownerValue) {
+    return "linear_" + std::to_string(ownerValue) + "_bias";
 }
 
-std::string graph_embedding_weight_name(std::size_t owner_value) {
-    return "embedding_" + std::to_string(owner_value) + "_weight";
+std::string graph_embedding_weight_name(std::size_t ownerValue) {
+    return "embedding_" + std::to_string(ownerValue) + "_weight";
 }
 
 template <typename GraphT>
@@ -564,12 +564,12 @@ bool graph_has_parameter(const GraphT& graph, const std::string& name) {
 template <typename GraphT>
 const GraphParameter* find_graph_parameter(
     const GraphT& graph,
-    std::size_t owner_value,
+    std::size_t ownerValue,
     const std::string& role
 ) {
     if constexpr (std::is_same_v<GraphT, GraphLayer>) {
         auto found = std::find_if(graph.parameters.begin(), graph.parameters.end(), [&](const GraphParameter& parameter) {
-            return parameter.owner_value == owner_value && parameter.role == role;
+            return parameter.ownerValue == ownerValue && parameter.role == role;
         });
         return found == graph.parameters.end() ? nullptr : &*found;
     } else {
@@ -582,9 +582,9 @@ void append_graph_parameter(
     GraphT& graph,
     std::string name,
     std::string role,
-    std::size_t owner_value,
-    std::size_t value_id,
-    GraphTensorType tensor_type
+    std::size_t ownerValue,
+    std::size_t valueId,
+    GraphTensorType tensorType
 ) {
     if constexpr (std::is_same_v<GraphT, GraphLayer>) {
         if (graph_has_parameter(graph, name)) {
@@ -593,16 +593,16 @@ void append_graph_parameter(
         graph.parameters.push_back(GraphParameter{
             std::move(name),
             std::move(role),
-            owner_value,
-            value_id,
-            std::move(tensor_type),
+            ownerValue,
+            valueId,
+            std::move(tensorType),
             true
         });
     }
 }
 
 std::optional<GraphDim> last_dim(const GraphTensorType& tensor) {
-    if (!tensor.has_known_rank || tensor.shape.empty()) {
+    if (!tensor.hasKnownRank || tensor.shape.empty()) {
         return std::nullopt;
     }
     return tensor.shape.back();
@@ -615,7 +615,7 @@ GraphTensorType parameter_tensor(
     GraphTensorType tensor;
     tensor.dtype = std::move(dtype);
     tensor.shape = std::move(shape);
-    tensor.has_known_rank = true;
+    tensor.hasKnownRank = true;
     return tensor;
 }
 
@@ -767,14 +767,14 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_binary_tensor_typ
     const GraphT& graph,
     const GraphNode& node
 ) {
-    const auto& lhs = graph.values[node.inputs[0]].tensor_type;
-    const auto& rhs = graph.values[node.inputs[1]].tensor_type;
+    const auto& lhs = graph.values[node.inputs[0]].tensorType;
+    const auto& rhs = graph.values[node.inputs[1]].tensorType;
     if (lhs && rhs) {
-        const bool supports_trailing_broadcast = node.binary_op == FeBinaryOp::Add ||
-                                                 node.binary_op == FeBinaryOp::Sub ||
-                                                 node.binary_op == FeBinaryOp::Mul;
+        const bool supports_trailing_broadcast = node.binaryOp == FeBinaryOp::Add ||
+                                                 node.binaryOp == FeBinaryOp::Sub ||
+                                                 node.binaryOp == FeBinaryOp::Mul;
         if (supports_trailing_broadcast &&
-            lhs->has_known_rank && rhs->has_known_rank && lhs->shape.size() == 2 && rhs->shape.size() == 1) {
+            lhs->hasKnownRank && rhs->hasKnownRank && lhs->shape.size() == 2 && rhs->shape.size() == 1) {
             if (auto diagnostic = ensure_trailing_vector_broadcast(*lhs, *rhs, "binary op")) {
                 return *diagnostic;
             }
@@ -808,13 +808,13 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_matmul_tensor_typ
     if (!same_dtype_or_unknown(lhs_tensor, rhs_tensor)) {
         return graph_error("matmul dtype mismatch: " + *lhs_tensor.dtype + " vs " + *rhs_tensor.dtype);
     }
-    if (lhs_tensor.has_known_rank && lhs_tensor.shape.size() != 2) {
+    if (lhs_tensor.hasKnownRank && lhs_tensor.shape.size() != 2) {
         return graph_error("matmul lhs requires rank-2 tensor when rank is known");
     }
-    if (rhs_tensor.has_known_rank && rhs_tensor.shape.size() != 2) {
+    if (rhs_tensor.hasKnownRank && rhs_tensor.shape.size() != 2) {
         return graph_error("matmul rhs requires rank-2 tensor when rank is known");
     }
-    if (lhs_tensor.has_known_rank && rhs_tensor.has_known_rank) {
+    if (lhs_tensor.hasKnownRank && rhs_tensor.hasKnownRank) {
         if (auto diagnostic = ensure_compatible_dim(lhs_tensor.shape[1], rhs_tensor.shape[0], "matmul inner")) {
             return *diagnostic;
         }
@@ -859,7 +859,7 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_transpose_tensor_
     auto input = require_tensor_type(graph, node.inputs[0], "transpose input");
     if (const auto* diagnostic = std::get_if<Diagnostic>(&input)) return *diagnostic;
     GraphTensorType tensor = std::get<GraphTensorType>(input);
-    if (!tensor.has_known_rank) {
+    if (!tensor.hasKnownRank) {
         return tensor;
     }
     if (tensor.shape.size() != 2) {
@@ -884,7 +884,7 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_reduce_tensor_typ
     if (!axis) {
         return graph_error(node.op + " axis must be a compile-time integer constant in Graph IR");
     }
-    if (!input_tensor.has_known_rank) {
+    if (!input_tensor.hasKnownRank) {
         return unknown_tensor(input_tensor.dtype);
     }
     if (*axis < 0 || static_cast<std::size_t>(*axis) >= input_tensor.shape.size()) {
@@ -917,7 +917,7 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_cross_entropy_ten
     if (auto diagnostic = ensure_same_shape(logits_tensor, target_tensor, "cross_entropy")) {
         return *diagnostic;
     }
-    if (!logits_tensor.has_known_rank) {
+    if (!logits_tensor.hasKnownRank) {
         return unknown_tensor(logits_tensor.dtype);
     }
     std::vector<GraphDim> prefix;
@@ -935,7 +935,7 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_flatten_heads_ten
     auto input = require_tensor_type(graph, node.inputs[0], "flatten_heads input");
     if (const auto* diagnostic = std::get_if<Diagnostic>(&input)) return *diagnostic;
     const GraphTensorType input_tensor = std::get<GraphTensorType>(input);
-    if (!input_tensor.has_known_rank || input_tensor.shape.size() < 3) {
+    if (!input_tensor.hasKnownRank || input_tensor.shape.size() < 3) {
         return input_tensor;
     }
     std::vector<GraphDim> shape(input_tensor.shape.begin(), input_tensor.shape.end() - 2);
@@ -958,7 +958,7 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_repeat_kv_tensor_
     if (*repeats <= 0) {
         return graph_error("repeat_kv repeats must be positive");
     }
-    if (!tensor.has_known_rank) {
+    if (!tensor.hasKnownRank) {
         return tensor;
     }
     if (tensor.shape.size() < 2) {
@@ -978,7 +978,7 @@ std::optional<Diagnostic> validate_last_dim(
     std::int64_t expected,
     const std::string& context
 ) {
-    if (!tensor.has_known_rank || tensor.shape.empty()) {
+    if (!tensor.hasKnownRank || tensor.shape.empty()) {
         return std::nullopt;
     }
     const GraphDim& last = tensor.shape.back();
@@ -1018,7 +1018,7 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_linear_apply_tens
             return *diagnostic;
         }
     }
-    if (!input.has_known_rank || input.shape.empty()) {
+    if (!input.hasKnownRank || input.shape.empty()) {
         return unknown_tensor(input.dtype);
     }
     std::vector<GraphDim> shape = input.shape;
@@ -1039,7 +1039,7 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_embedding_apply_t
     if (!embedding_dim) {
         return graph_error("Embedding embedding_dim must be a compile-time integer constant in Graph IR");
     }
-    if (!input.has_known_rank) {
+    if (!input.hasKnownRank) {
         return unknown_tensor(input.dtype);
     }
     std::vector<GraphDim> shape = input.shape;
@@ -1160,16 +1160,16 @@ std::optional<Diagnostic> apply_inferred_tensor_type(
         return graph_error("Node output " + std::to_string(node.output) + " does not reference a value");
     }
     GraphValue& output = graph.values[node.output];
-    if (output.tensor_type) {
-        if (output.tensor_type->dtype && inferred->dtype && *output.tensor_type->dtype != *inferred->dtype) {
+    if (output.tensorType) {
+        if (output.tensorType->dtype && inferred->dtype && *output.tensorType->dtype != *inferred->dtype) {
             return graph_error(
                 "Inferred dtype for value %" + std::to_string(node.output) +
                 " conflicts with frontend dtype"
             );
         }
-        output.tensor_type = merge_tensor_metadata(*output.tensor_type, *inferred);
+        output.tensorType = merge_tensor_metadata(*output.tensorType, *inferred);
     } else {
-        output.tensor_type = *inferred;
+        output.tensorType = *inferred;
     }
     return std::nullopt;
 }
@@ -1221,7 +1221,7 @@ std::variant<std::optional<std::size_t>, Diagnostic> try_lower_linear_apply(
     if (weight == nullptr) {
         return graph_error("linear apply could not materialize a weight parameter");
     }
-    if (!has_known_dim(weight->tensor_type, 0) || !has_known_dim(weight->tensor_type, 1)) {
+    if (!has_known_dim(weight->tensorType, 0) || !has_known_dim(weight->tensorType, 1)) {
         return std::optional<std::size_t>{};
     }
 
@@ -1232,7 +1232,7 @@ std::variant<std::optional<std::size_t>, Diagnostic> try_lower_linear_apply(
         if (bias == nullptr) {
             return graph_error("linear apply could not materialize a bias parameter");
         }
-        if (!has_known_dim(bias->tensor_type, 0)) {
+        if (!has_known_dim(bias->tensorType, 0)) {
             return std::optional<std::size_t>{};
         }
     }
@@ -1247,7 +1247,7 @@ std::variant<std::optional<std::size_t>, Diagnostic> try_lower_linear_apply(
         graph_op_id_name("matmul"),
         FeBinaryOp::Add,
         FeValue::none(),
-        {input_id, weight->value_id},
+        {input_id, weight->valueId},
     };
     if (auto diagnostic = append_node(graph, std::move(matmul_node))) {
         return *diagnostic;
@@ -1264,7 +1264,7 @@ std::variant<std::optional<std::size_t>, Diagnostic> try_lower_linear_apply(
         std::nullopt,
         FeBinaryOp::Add,
         FeValue::none(),
-        {matmul_output, bias->value_id},
+        {matmul_output, bias->valueId},
     };
     if (auto diagnostic = append_node(graph, std::move(bias_node))) {
         return *diagnostic;
@@ -1273,11 +1273,11 @@ std::variant<std::optional<std::size_t>, Diagnostic> try_lower_linear_apply(
 }
 
 std::optional<std::string> graph_op_id_name(const std::string& name) {
-    auto id = lookup_op_id(name);
+    auto id = lookupOpId(name);
     if (!id) {
         return std::nullopt;
     }
-    return std::string(op_id_name(*id));
+    return std::string(opIdName(*id));
 }
 
 bool is_frontend_only_expr(const FeExprPtr& expr) {
@@ -1324,7 +1324,7 @@ public:
     std::variant<GraphT, Diagnostic> build() {
         GraphT graph;
         graph.name = callable_.name;
-        graph.return_type = callable_.return_type;
+        graph.returnType = callable_.returnType;
 
         for (const auto& param : callable_.params) {
             append_value(graph, param.first, param.second, true);
@@ -1336,25 +1336,25 @@ public:
                 if (is_frontend_only_expr(decl->value)) {
                     continue;
                 }
-                if (!decl->has_value || !decl->value) {
+                if (!decl->hasValue || !decl->value) {
                     return graph_error("Graph builder expected value");
                 }
-                auto value_id = lower_expr(decl->value, graph);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&value_id)) {
+                auto valueId = lower_expr(decl->value, graph);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&valueId)) {
                     return *diagnostic;
                 }
-                graph.named_values[decl->name] = std::get<std::size_t>(value_id);
-                graph.values[std::get<std::size_t>(value_id)].name = decl->name;
+                graph.namedValues[decl->name] = std::get<std::size_t>(valueId);
+                graph.values[std::get<std::size_t>(valueId)].name = decl->name;
             } else if (const auto* assign = std::get_if<FeAssignStmt>(&stmt.kind)) {
                 if (is_frontend_only_expr(assign->value)) {
                     continue;
                 }
-                auto value_id = lower_expr(assign->value, graph);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&value_id)) {
+                auto valueId = lower_expr(assign->value, graph);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&valueId)) {
                     return *diagnostic;
                 }
-                graph.named_values[assign->name] = std::get<std::size_t>(value_id);
-                graph.values[std::get<std::size_t>(value_id)].name = assign->name;
+                graph.namedValues[assign->name] = std::get<std::size_t>(valueId);
+                graph.values[std::get<std::size_t>(valueId)].name = assign->name;
             } else if (const auto* ret = std::get_if<FeReturnStmt>(&stmt.kind)) {
                 auto output_id = lower_expr(ret->value, graph);
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&output_id)) {
@@ -1367,11 +1367,11 @@ public:
         }
 
         if constexpr (std::is_same_v<GraphT, GraphLayer>) {
-            if (auto diagnostic = validate_graph_layer(graph)) {
+            if (auto diagnostic = validateGraphLayer(graph)) {
                 return *diagnostic;
             }
         } else {
-            if (auto diagnostic = validate_graph_function(graph)) {
+            if (auto diagnostic = validateGraphFunction(graph)) {
                 return *diagnostic;
             }
         }
@@ -1439,7 +1439,7 @@ private:
             }
             const std::size_t output = append_value(graph, std::string{}, expr->type, false);
             GraphNode node{
-                is_primitive_tensor_op(call->callee) ? GraphNodeKind::PrimitiveCall : GraphNodeKind::LibraryCall,
+                isPrimitiveTensorOp(call->callee) ? GraphNodeKind::PrimitiveCall : GraphNodeKind::LibraryCall,
                 output,
                 call->callee,
                 graph_op_id_name(call->callee),
@@ -1521,26 +1521,26 @@ private:
     }
 
     std::variant<std::size_t, Diagnostic> lookup_named_value(const std::string& name, const GraphT& graph) const {
-        auto found = graph.named_values.find(name);
-        if (found == graph.named_values.end()) {
+        auto found = graph.namedValues.find(name);
+        if (found == graph.namedValues.end()) {
             return graph_error("Graph builder could not resolve symbol '" + name + "'");
         }
         return found->second;
     }
 };
 
-GraphFunctionResult build_graph_function(const FeFunction& function) {
+GraphFunctionResult buildGraphFunction(const FeFunction& function) {
     return GraphBuilder<FeFunction, GraphFunction>(function).build();
 }
 
-GraphLayerResult build_graph_layer(const FeLayer& layer) {
+GraphLayerResult buildGraphLayer(const FeLayer& layer) {
     return GraphBuilder<FeLayer, GraphLayer>(layer).build();
 }
 
-std::variant<GraphModule, Diagnostic> build_graph_module(const LoweredModule& module) {
+std::variant<GraphModule, Diagnostic> buildGraphModule(const LoweredModule& module) {
     GraphModule graph_module;
     for (const auto& layer : module.layers) {
-        auto graph = build_graph_layer(layer);
+        auto graph = buildGraphLayer(layer);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&graph)) {
             graph_module.skipped.push_back(GraphBuildSkipped{layer.name, diagnostic->message});
             continue;
@@ -1548,7 +1548,7 @@ std::variant<GraphModule, Diagnostic> build_graph_module(const LoweredModule& mo
         graph_module.layers.push_back(std::get<GraphLayer>(std::move(graph)));
     }
     for (const auto& function : module.functions) {
-        auto graph = build_graph_function(function);
+        auto graph = buildGraphFunction(function);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&graph)) {
             graph_module.skipped.push_back(GraphBuildSkipped{function.name, diagnostic->message});
             continue;
@@ -1558,7 +1558,7 @@ std::variant<GraphModule, Diagnostic> build_graph_module(const LoweredModule& mo
     return graph_module;
 }
 
-std::string graph_dim_to_string(const GraphDim& dim) {
+std::string graphDimToString(const GraphDim& dim) {
     switch (dim.kind) {
         case GraphDimKind::Unknown:
             return "?";
@@ -1570,10 +1570,10 @@ std::string graph_dim_to_string(const GraphDim& dim) {
     return "?";
 }
 
-std::string graph_tensor_type_to_string(const GraphTensorType& type) {
+std::string graphTensorTypeToString(const GraphTensorType& type) {
     std::ostringstream out;
     out << type.dtype.value_or("tensor");
-    if (!type.has_known_rank) {
+    if (!type.hasKnownRank) {
         out << "[?]";
         return out.str();
     }
@@ -1582,7 +1582,7 @@ std::string graph_tensor_type_to_string(const GraphTensorType& type) {
         if (index != 0) {
             out << ", ";
         }
-        out << graph_dim_to_string(type.shape[index]);
+        out << graphDimToString(type.shape[index]);
     }
     out << ']';
     return out.str();
@@ -1613,7 +1613,7 @@ std::optional<Diagnostic> validate_graph_impl(const GraphT& graph) {
             return graph_error("Graph '" + graph.name + "' output " + std::to_string(output) + " does not reference a value");
         }
     }
-    for (const auto& named : graph.named_values) {
+    for (const auto& named : graph.namedValues) {
         if (named.first.empty()) {
             return graph_error("Graph '" + graph.name + "' has an empty named value");
         }
@@ -1633,16 +1633,16 @@ std::optional<Diagnostic> validate_graph_impl(const GraphT& graph) {
             if (parameter.role.empty()) {
                 return graph_error("Graph '" + graph.name + "' parameter '" + parameter.name + "' has an empty role");
             }
-            if (value_ids.find(parameter.owner_value) == value_ids.end()) {
+            if (value_ids.find(parameter.ownerValue) == value_ids.end()) {
                 return graph_error(
                     "Graph '" + graph.name + "' parameter '" + parameter.name +
-                    "' references missing owner value " + std::to_string(parameter.owner_value)
+                    "' references missing owner value " + std::to_string(parameter.ownerValue)
                 );
             }
-            if (value_ids.find(parameter.value_id) == value_ids.end()) {
+            if (value_ids.find(parameter.valueId) == value_ids.end()) {
                 return graph_error(
                     "Graph '" + graph.name + "' parameter '" + parameter.name +
-                    "' references missing value " + std::to_string(parameter.value_id)
+                    "' references missing value " + std::to_string(parameter.valueId)
                 );
             }
             if (!parameter_names.insert(parameter.name).second) {
@@ -1653,7 +1653,7 @@ std::optional<Diagnostic> validate_graph_impl(const GraphT& graph) {
 
     std::set<std::size_t> produced_values;
     for (const auto& value : graph.values) {
-        if (value.is_parameter || value.is_model_parameter) {
+        if (value.isParameter || value.isModelParameter) {
             produced_values.insert(value.id);
         }
     }
@@ -1698,15 +1698,15 @@ std::optional<Diagnostic> validate_graph_impl(const GraphT& graph) {
     return std::nullopt;
 }
 
-std::optional<Diagnostic> validate_graph_function(const GraphFunction& graph) {
+std::optional<Diagnostic> validateGraphFunction(const GraphFunction& graph) {
     return validate_graph_impl(graph);
 }
 
-std::optional<Diagnostic> validate_graph_layer(const GraphLayer& graph) {
+std::optional<Diagnostic> validateGraphLayer(const GraphLayer& graph) {
     return validate_graph_impl(graph);
 }
 
-std::string graph_module_summary(const GraphModule& module) {
+std::string graphModuleSummary(const GraphModule& module) {
     std::ostringstream out;
     out << "graph=layers:" << module.layers.size() << " functions:" << module.functions.size() << " skipped:" << module.skipped.size();
     return out.str();
@@ -1721,23 +1721,23 @@ void format_graph_body(std::ostringstream& out, const GraphT& graph, const std::
     }
     out << " nodes=" << graph.nodes.size()
         << " outputs=" << graph.outputs.size()
-        << " -> " << fe_type_to_graph_string(graph.return_type) << '\n';
+        << " -> " << fe_type_to_graph_string(graph.returnType) << '\n';
     for (const auto& value : graph.values) {
         out << "  %" << value.id;
         if (!value.name.empty()) {
             out << ' ' << value.name;
         }
         out << ": " << fe_type_to_graph_string(value.type);
-        if (value.tensor_type) {
-            out << " tensor=" << graph_tensor_type_to_string(*value.tensor_type);
+        if (value.tensorType) {
+            out << " tensor=" << graphTensorTypeToString(*value.tensorType);
         }
-        if (value.is_parameter) {
+        if (value.isParameter) {
             out << " param";
         }
-        if (value.requires_grad) {
-            out << " requires_grad";
+        if (value.requiresGrad) {
+            out << " requiresGrad";
         }
-        if (value.is_model_parameter) {
+        if (value.isModelParameter) {
             out << " model_param";
         }
         out << '\n';
@@ -1746,9 +1746,9 @@ void format_graph_body(std::ostringstream& out, const GraphT& graph, const std::
         for (const auto& parameter : graph.parameters) {
             out << "  param " << parameter.name
                 << " role=" << parameter.role
-                << " owner=%" << parameter.owner_value
-                << " value=%" << parameter.value_id
-                << " tensor=" << graph_tensor_type_to_string(parameter.tensor_type);
+                << " owner=%" << parameter.ownerValue
+                << " value=%" << parameter.valueId
+                << " tensor=" << graphTensorTypeToString(parameter.tensorType);
             if (parameter.trainable) {
                 out << " trainable";
             }
@@ -1762,11 +1762,11 @@ void format_graph_body(std::ostringstream& out, const GraphT& graph, const std::
         if (!node.op.empty()) {
             out << " op=" << node.op;
         }
-        if (node.op_id) {
-            out << " op_id=" << *node.op_id;
+        if (node.opId) {
+            out << " opId=" << *node.opId;
         }
         if (node.kind == GraphNodeKind::Binary) {
-            out << " op=" << fe_binary_op_to_graph_string(node.binary_op);
+            out << " op=" << fe_binary_op_to_graph_string(node.binaryOp);
         }
         if (node.kind == GraphNodeKind::Constant) {
             out << " value=" << fe_value_to_graph_string(node.constant);
@@ -1780,9 +1780,9 @@ void format_graph_body(std::ostringstream& out, const GraphT& graph, const std::
     out << '\n';
 }
 
-std::string graph_ir_to_string(const GraphModule& module) {
+std::string graphIrToString(const GraphModule& module) {
     std::ostringstream out;
-    out << graph_module_summary(module) << '\n';
+    out << graphModuleSummary(module) << '\n';
     for (const auto& graph : module.layers) {
         format_graph_body(out, graph, "graph layer ");
     }
@@ -1790,7 +1790,7 @@ std::string graph_ir_to_string(const GraphModule& module) {
         format_graph_body(out, graph, "graph fn ");
     }
     for (const auto& skipped : module.skipped) {
-        out << "// graph function: " << skipped.function_name << "\n"
+        out << "// graph function: " << skipped.functionName << "\n"
             << "// unavailable: " << skipped.reason << '\n';
     }
     return out.str();

@@ -19,7 +19,7 @@ std::string make_token_dump(const std::vector<Token>& tokens) {
         if (index != 0) {
             out << '\n';
         }
-        out << token_to_string(tokens[index]);
+        out << tokenToString(tokens[index]);
     }
     return out.str();
 }
@@ -28,7 +28,7 @@ std::string make_token_dump(const std::vector<Token>& tokens) {
 
 CompileResult compile_source(const std::string& source, const CliOptions& options) {
     // 1. Lexing phase: Convert raw source code string into token stream
-    TokenizeResult tokenized = tokenize_with_diagnostic(source);
+    TokenizeResult tokenized = tokenizeWithDiagnostic(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&tokenized)) {
         return *diagnostic;
     }
@@ -43,24 +43,24 @@ CompileResult compile_source(const std::string& source, const CliOptions& option
 
     // 2. Parsing phase: Convert token stream into an Abstract Syntax Tree (AST)
     Parser parser(compiled.tokens);
-    ParseResult parsed = parser.parse_program();
+    ParseResult parsed = parser.parseProgram();
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
         return *diagnostic;
     }
     compiled.program = std::get<Program>(std::move(parsed));
     if (options.ast) {
-        compiled.ast_dump = ast_to_string(compiled.program);
+        compiled.ast_dump = astToString(compiled.program);
     }
 
     // 3. Semantic Analysis phase: Resolve types, verify scoping and program correctness
     SemanticAnalyzer analyzer;
-    SemanticResult semantic_result = analyzer.analyze_with_info(compiled.program);
+    SemanticResult semantic_result = analyzer.analyzeWithInfo(compiled.program);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&semantic_result)) {
         return *diagnostic;
     }
     compiled.semantic_info = std::get<SemanticInfo>(std::move(semantic_result));
     if (options.semantics) {
-        compiled.semantics_dump = semantic_info_summary(compiled.semantic_info, compiled.program);
+        compiled.semantics_dump = semanticInfoSummary(compiled.semantic_info, compiled.program);
     }
 
     // 4. Frontend Lowering phase: Transform AST into a flat intermediate representation (IR)
@@ -71,30 +71,30 @@ CompileResult compile_source(const std::string& source, const CliOptions& option
     }
     compiled.lowered = std::get<LoweredModule>(std::move(frontend_result));
     if (options.ir) {
-        compiled.ir_dump = frontend_ir_to_string(compiled.lowered);
+        compiled.ir_dump = frontendIrToString(compiled.lowered);
     }
 
     // 5. Graph IR phase: Build an execution graph if required by the requested actions
     if (options.graph || options.plan || options.run || options.backward || options.train) {
-        auto graph_result = build_graph_module(compiled.lowered);
+        auto graph_result = buildGraphModule(compiled.lowered);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
             return *diagnostic;
         }
         compiled.graph = std::get<GraphModule>(std::move(graph_result));
         if (options.graph) {
-            compiled.graph_dump = graph_ir_to_string(*compiled.graph);
+            compiled.graph_dump = graphIrToString(*compiled.graph);
         }
     }
 
     // 6. Execution Plan phase: Create a backend-specific execution schedule
     if (options.plan || options.run || options.backward || options.train) {
-        auto plan_result = compile_plan_module(*compiled.graph, options.backend);
+        auto plan_result = compilePlanModule(*compiled.graph, options.backend);
         if (const auto* diagnostic = std::get_if<Diagnostic>(&plan_result)) {
             return *diagnostic;
         }
         compiled.plan = std::get<PlanModule>(std::move(plan_result));
         if (options.plan) {
-            compiled.plan_dump = execution_plan_to_string(*compiled.plan);
+            compiled.plan_dump = executionPlanToString(*compiled.plan);
         }
     }
     return compiled;
@@ -114,12 +114,12 @@ void print_compile_summary(const CompiledProgram& compiled) {
               << " layers:" << compiled.program.layers.size()
               << " functions:" << compiled.program.functions.size()
               << " globals:" << compiled.program.globals.size() << '\n';
-    std::cout << lowered_module_summary(compiled.lowered) << '\n';
+    std::cout << loweredModuleSummary(compiled.lowered) << '\n';
     if (compiled.graph.has_value()) {
-        std::cout << graph_module_summary(*compiled.graph) << '\n';
+        std::cout << graphModuleSummary(*compiled.graph) << '\n';
     }
     if (compiled.plan.has_value()) {
-        std::cout << execution_plan_summary(*compiled.plan) << '\n';
+        std::cout << executionPlanSummary(*compiled.plan) << '\n';
     }
 }
 

@@ -17,19 +17,19 @@
 namespace {
 
 std::variant<PlanModule, Diagnostic> plan_module(const std::string& source) {
-    TokenizeResult tokenized = tokenize_with_diagnostic(source);
+    TokenizeResult tokenized = tokenizeWithDiagnostic(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&tokenized)) {
         return *diagnostic;
     }
     Parser parser(std::get<std::vector<Token>>(std::move(tokenized)));
-    ParseResult parsed = parser.parse_program();
+    ParseResult parsed = parser.parseProgram();
     if (const auto* diagnostic = std::get_if<Diagnostic>(&parsed)) {
         return *diagnostic;
     }
 
     Program program = std::get<Program>(std::move(parsed));
     SemanticAnalyzer analyzer;
-    SemanticResult semantic_result = analyzer.analyze_with_info(program);
+    SemanticResult semantic_result = analyzer.analyzeWithInfo(program);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&semantic_result)) {
         return *diagnostic;
     }
@@ -40,12 +40,12 @@ std::variant<PlanModule, Diagnostic> plan_module(const std::string& source) {
         return *diagnostic;
     }
 
-    auto graph_result = build_graph_module(std::get<LoweredModule>(std::move(frontend_result)));
+    auto graph_result = buildGraphModule(std::get<LoweredModule>(std::move(frontend_result)));
     if (const auto* diagnostic = std::get_if<Diagnostic>(&graph_result)) {
         return *diagnostic;
     }
 
-    auto plan_result = compile_plan_module(std::get<GraphModule>(std::move(graph_result)), BackendKind::Local);
+    auto plan_result = compilePlanModule(std::get<GraphModule>(std::move(graph_result)), BackendKind::Local);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&plan_result)) {
         return *diagnostic;
     }
@@ -65,7 +65,7 @@ bool matmul_relu_executes() {
         "  return relu(matmul(x, w))\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
-        std::cerr << "executor-matmul: plan failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "executor-matmul: plan failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
@@ -74,7 +74,7 @@ bool matmul_relu_executes() {
     options.tensor_shapes["w"] = {1, 8};
     auto reference_execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&reference_execution)) {
-        std::cerr << "executor-matmul: reference execution failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "executor-matmul: reference execution failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const SimpleTensor* reference_output = single_tensor_output(std::get<GraphExecutionResult>(reference_execution));
@@ -88,7 +88,7 @@ bool matmul_relu_executes() {
     options.tensor_workspace = &workspace;
     auto execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&execution)) {
-        std::cerr << "executor-matmul: execution failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "executor-matmul: execution failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
@@ -120,7 +120,7 @@ bool runtime_tensor_data_is_aligned() {
     }
     auto reshaped = apply_reshape(tensor, std::vector<std::int64_t>{3, 2});
     if (const auto* diagnostic = std::get_if<Diagnostic>(&reshaped)) {
-        std::cerr << "executor-alignment: reshape failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "executor-alignment: reshape failed: " << diagnostic->toString() << '\n';
         return false;
     }
     SimpleTensor reshaped_tensor = std::get<SimpleTensor>(std::move(reshaped));
@@ -140,7 +140,7 @@ bool runtime_tensor_data_is_aligned() {
     SimpleTensor source_mutation = make_synthetic_tensor(std::vector<std::int64_t>{2, 3}, "float32");
     auto source_view_result = apply_reshape(source_mutation, std::vector<std::int64_t>{3, 2});
     if (const auto* diagnostic = std::get_if<Diagnostic>(&source_view_result)) {
-        std::cerr << "executor-alignment: source reshape failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "executor-alignment: source reshape failed: " << diagnostic->toString() << '\n';
         return false;
     }
     SimpleTensor source_view = std::get<SimpleTensor>(std::move(source_view_result));
@@ -155,7 +155,7 @@ bool runtime_tensor_data_is_aligned() {
     SimpleTensor heads = make_synthetic_tensor(std::vector<std::int64_t>{2, 3, 4}, "float32");
     auto flattened = apply_flatten_heads(heads);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&flattened)) {
-        std::cerr << "executor-alignment: flatten_heads failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "executor-alignment: flatten_heads failed: " << diagnostic->toString() << '\n';
         return false;
     }
     SimpleTensor flattened_tensor = std::get<SimpleTensor>(std::move(flattened));
@@ -174,7 +174,7 @@ bool callable_linear_and_tanh_execute() {
         "  return proj(x) -> Tanh()\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
-        std::cerr << "executor-linear: plan failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "executor-linear: plan failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
@@ -182,7 +182,7 @@ bool callable_linear_and_tanh_execute() {
     options.tensor_shapes["x"] = {2, 3};
     auto execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&execution)) {
-        std::cerr << "executor-linear: execution failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "executor-linear: execution failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
@@ -205,7 +205,7 @@ bool module_local_function_calls_execute() {
         "  return helper(x)\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
-        std::cerr << "executor-helper: plan failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "executor-helper: plan failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
@@ -213,7 +213,7 @@ bool module_local_function_calls_execute() {
     options.tensor_shapes["x"] = {1, 4};
     auto execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&execution)) {
-        std::cerr << "executor-helper: execution failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "executor-helper: execution failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
@@ -231,7 +231,7 @@ bool missing_shape_returns_runtime_diagnostic() {
         "  return relu(x)\n"
     );
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
-        std::cerr << "executor-missing-shape: plan failed: " << diagnostic->to_string() << '\n';
+        std::cerr << "executor-missing-shape: plan failed: " << diagnostic->toString() << '\n';
         return false;
     }
 

@@ -164,26 +164,26 @@ RuntimeTensorWorkspaceStats RuntimeTensorWorkspace::stats() const {
     return result;
 }
 
-SimpleTensor::SimpleTensor(std::vector<std::int64_t> tensor_shape, TensorData tensor_data, std::string tensor_dtype)
-    : shape(std::move(tensor_shape)), data(std::move(tensor_data)), dtype(std::move(tensor_dtype)) {}
+SimpleTensor::SimpleTensor(std::vector<std::int64_t> tensor_shape, TensorData tensor_data, std::string tensorDtype)
+    : shape(std::move(tensor_shape)), data(std::move(tensor_data)), dtype(std::move(tensorDtype)) {}
 
 // Keep existing vector-based construction sites working while normalizing the
 // stored tensor data into TensorData's aligned allocation policy.
 SimpleTensor::SimpleTensor(
     std::vector<std::int64_t> tensor_shape,
     std::vector<float> tensor_data,
-    std::string tensor_dtype
+    std::string tensorDtype
 )
     : shape(std::move(tensor_shape)),
       data(tensor_data.begin(), tensor_data.end()),
-      dtype(std::move(tensor_dtype)) {}
+      dtype(std::move(tensorDtype)) {}
 
 SimpleTensor::SimpleTensor(
     std::vector<std::int64_t> tensor_shape,
     std::initializer_list<float> tensor_data,
-    std::string tensor_dtype
+    std::string tensorDtype
 )
-    : shape(std::move(tensor_shape)), data(tensor_data.begin(), tensor_data.end()), dtype(std::move(tensor_dtype)) {}
+    : shape(std::move(tensor_shape)), data(tensor_data.begin(), tensor_data.end()), dtype(std::move(tensorDtype)) {}
 
 ShapeView::ShapeView(const std::vector<std::int64_t>& shape)
     : values_(shape.data()), size_(shape.size()) {}
@@ -207,7 +207,7 @@ bool ShapeView::empty() const {
     return size_ == 0;
 }
 
-std::size_t num_elements(ShapeView shape) {
+std::size_t numElements(ShapeView shape) {
     std::int64_t product = 1;
     for (const auto dim : shape) {
         product *= dim;
@@ -234,7 +234,7 @@ bool tensor_data_shares_storage(const SimpleTensor& lhs, const SimpleTensor& rhs
 }
 
 SimpleTensor make_synthetic_tensor(ShapeView shape, std::string dtype, RuntimeTensorWorkspace* workspace) {
-    const std::size_t element_count = num_elements(shape);
+    const std::size_t element_count = numElements(shape);
     // Synthetic parameters are created through TensorData so executor inputs
     // get the same alignment guarantees as intermediate tensors.
     TensorData data = data_with_capacity(element_count, workspace);
@@ -606,7 +606,7 @@ std::variant<SimpleTensor, Diagnostic> apply_reshape(
     RuntimeTensorWorkspace* workspace
 ) {
     (void)workspace;
-    if (input.data.size() != num_elements(shape)) {
+    if (input.data.size() != numElements(shape)) {
         return runtime_error("reshape requires matching element counts");
     }
     return SimpleTensor{copy_shape(shape), TensorData::shared_view(input.data), input.dtype};
@@ -713,7 +713,7 @@ std::variant<SimpleTensor, Diagnostic> apply_repeat_kv(
     );
     const auto outer = static_cast<std::size_t>(input.shape[0]);
     const auto heads = static_cast<std::size_t>(input.shape[1]);
-    TensorData data = zeroed_data(num_elements(output_shape), workspace);
+    TensorData data = zeroed_data(numElements(output_shape), workspace);
     for (std::size_t outer_index = 0; outer_index < outer; ++outer_index) {
         for (std::size_t head = 0; head < heads; ++head) {
             const std::size_t src_base = (outer_index * heads + head) * inner;

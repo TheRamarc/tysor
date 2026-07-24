@@ -98,13 +98,13 @@ bool linear_plan_passes_preflight() {
     plan.backend = BackendKind::Metal;
     plan.name = "model";
     plan.values.push_back(PlanValue{0, "x", FeType::tensor("float32", std::nullopt, 2), true, true, Placement::Host});
-    plan.values.push_back(PlanValue{1, "", FeType::int_type(), false, false, Placement::Host});
-    plan.values.push_back(PlanValue{2, "", FeType::int_type(), false, false, Placement::Host});
+    plan.values.push_back(PlanValue{1, "", FeType::intType(), false, false, Placement::Host});
+    plan.values.push_back(PlanValue{2, "", FeType::intType(), false, false, Placement::Host});
     plan.values.push_back(PlanValue{3, "proj", FeType::callable(FeType::tensor("float32", std::nullopt, 2)), false, false, Placement::Host});
     plan.values.push_back(PlanValue{4, "", FeType::tensor("float32", std::nullopt, 2), false, false, Placement::Device});
     plan.outputs = {4};
-    plan.ops.push_back(PlanOp{PlanOpKind::Constant, 1, "", std::nullopt, FeBinaryOp::Add, FeValue::int_value(3), {}, BackendKind::Metal});
-    plan.ops.push_back(PlanOp{PlanOpKind::Constant, 2, "", std::nullopt, FeBinaryOp::Add, FeValue::int_value(2), {}, BackendKind::Metal});
+    plan.ops.push_back(PlanOp{PlanOpKind::Constant, 1, "", std::nullopt, FeBinaryOp::Add, FeValue::intValue(3), {}, BackendKind::Metal});
+    plan.ops.push_back(PlanOp{PlanOpKind::Constant, 2, "", std::nullopt, FeBinaryOp::Add, FeValue::intValue(2), {}, BackendKind::Metal});
     plan.ops.push_back(PlanOp{PlanOpKind::LibraryCtor, 3, "linear", std::string("Linear"), FeBinaryOp::Add, FeValue::none(), {1, 2}, BackendKind::Metal});
     plan.ops.push_back(PlanOp{PlanOpKind::Apply, 4, "", std::nullopt, FeBinaryOp::Add, FeValue::none(), {3, 0}, BackendKind::Metal});
     plan.steps.push_back(PlanStep{PlanStepKind::AllocateHostValue, 0, std::nullopt});
