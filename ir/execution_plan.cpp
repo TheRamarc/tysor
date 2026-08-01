@@ -27,12 +27,12 @@ Diagnostic capability_error(BackendKind backend, std::size_t opIndex, std::strin
 }
 
 const std::vector<std::string>& primitiveOps() {
-    static const std::vector<std::string> names{"matmul", "relu", "scale"};
+    static const std::vector<std::string> names{"matmul", "relu", "scale", "print"};
     return names;
 }
 
 const std::vector<std::string>& primitive_op_ids() {
-    static const std::vector<std::string> names{"Matmul", "Relu", "Scale"};
+    static const std::vector<std::string> names{"Matmul", "Relu", "Scale", "Print"};
     return names;
 }
 

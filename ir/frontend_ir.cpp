@@ -283,10 +283,6 @@ void append_expr(std::ostringstream& out, const FeExprPtr& expr) {
                 out << value.callee << '(';
                 append_args(out, value.args);
                 out << ')';
-            } else if constexpr (std::is_same_v<T, FeLayerCtorExpr>) {
-                out << "layerCtor " << value.callee << '(';
-                append_args(out, value.args);
-                out << ')';
             } else if constexpr (std::is_same_v<T, FeApplyExpr>) {
                 out << "apply(";
                 append_expr(out, value.callee);
@@ -559,10 +555,7 @@ FeExprPtr FeExpr::call(Arena& arena, std::string callee, std::vector<FeCallArg> 
 }
 
 FeExprPtr FeExpr::layerCtor(Arena& arena, std::string callee, std::vector<FeCallArg> args, FeType type) {
-    auto expr = arena.allocate<FeExpr>();
-    expr->type = std::move(type);
-    expr->kind = FeLayerCtorExpr{std::move(callee), std::move(args)};
-    return expr;
+    return FeExpr::call(arena, std::move(callee), std::move(args), std::move(type));
 }
 
 FeExprPtr FeExpr::apply(Arena& arena, FeExprPtr callee, std::vector<FeCallArg> args, FeType type) {
@@ -1007,9 +1000,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lowerSemanticArrowCallStage
                 }
                 ctor_args.push_back(FeCallArg{arg.name, std::get<FeExprPtr>(std::move(lowered))});
             }
-            FeExprPtr callee_expr = isCallableLibraryOp(callee)
-                ? FeExpr::layerCtor(*arena_, callee, std::move(ctor_args), global->second)
-                : FeExpr::call(*arena_, callee, std::move(ctor_args), global->second);
+            FeExprPtr callee_expr = FeExpr::call(*arena_, callee, std::move(ctor_args), global->second);
             return FeExpr::apply(*arena_, callee_expr, std::vector<FeCallArg>{{std::nullopt, std::move(current)}}, resultType);
         }
     }

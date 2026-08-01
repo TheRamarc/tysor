@@ -192,19 +192,6 @@ struct FeCallExpr {
     std::vector<FeCallArg> args;
 };
 
-// Constructor-style library call that creates a callable object, like
-// linear(...), Embedding(...), or SiLU().
-struct FeLayerCtorExpr {
-    // Why it exists: To identify the target of a layer construction call.
-    // What it tracks: The name of the layer being instantiated.
-    // What mutates it: Extracted from syntax and stored as immutable.
-    std::string callee;
-    // Why it exists: To provide the necessary inputs for a constructor call.
-    // What it tracks: The sequence of lowered arguments.
-    // What mutates it: Built during expression lowering.
-    std::vector<FeCallArg> args;
-};
-
 // Applying a callable value to arguments. Example: if dense is a linear layer,
 // dense(x) lowers to FeApplyExpr.
 struct FeApplyExpr {
@@ -266,7 +253,6 @@ using FeExprKind = std::variant<
     FeConstantExpr,
     FeVarExpr,
     FeCallExpr,
-    FeLayerCtorExpr,
     FeApplyExpr,
     FeTupleExpr,
     FeListExpr,

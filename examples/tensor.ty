@@ -11,7 +11,6 @@ config modelconfig:
   dropout      : float32 = 0.0
   head_dim     : int32 = 8
   epochs       : int32 = 36
-  scheduler = cosine(warmup: 100)
 
 # ── Layers ──
 
@@ -28,18 +27,16 @@ layer GroupedQueryAttention(x: tensor): tensor:
    o_proj = linear(modelconfig.hidden_dim, modelconfig.hidden_dim)
 
    q = x -> q_proj() -> reshape(heads: modelconfig.n_heads) -> RotaryEmbedding()
-   mut k = x -> k_proj() -> reshape(heads: modelconfig.n_kv_heads) -> RotaryEmbedding()
-   mut v = x -> v_proj() -> reshape(heads: modelconfig.n_kv_heads)
-
-
-  k = k -> repeat_kv(modelconfig.n_heads / modelconfig.n_kv_heads)
-  v = v -> repeat_kv(modelconfig.n_heads / modelconfig.n_kv_heads)
+   k = x -> k_proj() -> reshape(heads: modelconfig.n_kv_heads) -> RotaryEmbedding()
+   v = x -> v_proj() -> reshape(heads: modelconfig.n_kv_heads)
+   k = k -> repeat_kv(modelconfig.n_heads / modelconfig.n_kv_heads)
+   v = v -> repeat_kv(modelconfig.n_heads / modelconfig.n_kv_heads)
 
   # attn = Dropout(Softmax(causal_mask(scale(q * k))))
-  
+
    attn = q * k -> scale( modelconfig.n_heads) -> causal_mask() -> Softmax() -> Dropout(modelconfig.dropout)
 
-  return attn * v -> flatten_heads() -> o_proj()
+   return attn * v -> flatten_heads() -> o_proj()
 
 layer SwiGLU(x: tensor): tensor:
    gate_proj = linear(modelconfig.hidden_dim, modelconfig.intermediate)
@@ -49,11 +46,11 @@ layer SwiGLU(x: tensor): tensor:
    gate = x -> gate_proj() -> SiLU()
    up   = x -> up_proj()
 
-  return gate * up -> down_proj()
+   return gate * up -> down_proj()
 
-layer DecoderBlock(mut x: tensor): tensor:
+layer DecoderBlock(x: tensor): tensor:
    x = x + (x -> RMSNorm() -> GroupedQueryAttention())
-  return x + (x -> RMSNorm() -> SwiGLU())
+   return x + (x -> RMSNorm() -> SwiGLU())
 
 # ── Model ───────
 
@@ -65,9 +62,5 @@ layer model(idx, targets=true): (tensor, tensor):
                -> DecoderBlock()[modelconfig.n_layers] 
                -> RMSNorm()
                -> linear(modelconfig.hidden_dim, modelconfig.vocab_size)
-   mut loss: callable 
-  if targets: 
-    loss = cross_entropy(logits, targets)
-  else:
-     loss = None
-  return logits, loss
+   loss = cross_entropy(logits, targets)
+   return logits, loss

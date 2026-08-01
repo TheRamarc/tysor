@@ -1,0 +1,7 @@
+layer model(): int16:
+	print(10)
+	print("this is right")
+	x = 13
+	print("this is number", x)
+	print("this is good we are making progress")
+	return 0

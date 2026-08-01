@@ -27,7 +27,7 @@ struct GraphExecutorOptions {
     RuntimeTensorWorkspace* tensor_workspace = nullptr;
 };
 
-using GraphRuntimeValue = std::variant<std::int64_t, double, bool, SimpleTensor>;
+using GraphRuntimeValue = std::variant<std::int64_t, double, bool, std::string, SimpleTensor>;
 
 // Stores the evaluated values of intermediate nodes and final outputs for a graph execution.
 struct GraphExecutionResult {

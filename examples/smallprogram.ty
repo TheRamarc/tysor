@@ -1,1 +1,13 @@
-y : callable = linear(5, 5)
+#x : tensor = Tensor(5, 5)
+layer model(x: tensor[float32], target: tensor[float32]): tensor[float32]:
+  proj = linear(3, 2, true)
+  logits = proj(x)
+  loss = cross_entropy(logits, target)
+  return loss
+
+config model:
+  optimizer = "sgd"
+  lr = 0.05
+  iteration = 2
+  objective = loss
+

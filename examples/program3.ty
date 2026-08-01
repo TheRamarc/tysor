@@ -1,0 +1,4 @@
+layer model(): int32:
+	x: int32 = 10
+	print(x)
+	return 0

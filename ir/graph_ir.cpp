@@ -1134,6 +1134,12 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_node_tensor_type(
         if (node.op == "matmul") {
             return infer_matmul_tensor_type(graph, node);
         }
+        if (node.op == "print" || (node.opId && *node.opId == "Print")) {
+            return std::optional<GraphTensorType>{};
+        }
+        if (node.inputs.empty()) {
+            return std::optional<GraphTensorType>{};
+        }
         auto input = require_tensor_type(graph, node.inputs[0], node.op + " input");
         if (const auto* diagnostic = std::get_if<Diagnostic>(&input)) return *diagnostic;
         return std::get<GraphTensorType>(input);
@@ -1361,6 +1367,14 @@ public:
                     return *diagnostic;
                 }
                 graph.outputs.push_back(std::get<std::size_t>(output_id));
+            } else if (const auto* expr_stmt = std::get_if<FeExprStmt>(&stmt.kind)) {
+                if (is_frontend_only_expr(expr_stmt->value)) {
+                    continue;
+                }
+                auto valueId = lower_expr(expr_stmt->value, graph);
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&valueId)) {
+                    return *diagnostic;
+                }
             } else {
                 return graph_error("Graph builder currently supports straight-line statements only");
             }
@@ -1438,35 +1452,15 @@ private:
                 inputs.push_back(std::get<std::size_t>(lowered));
             }
             const std::size_t output = append_value(graph, std::string{}, expr->type, false);
+            const bool is_ctor = expr->type.kind == FeTypeKind::Callable || isCallableLibraryOp(call->callee);
+            GraphNodeKind kind = is_ctor
+                ? GraphNodeKind::LibraryCtor
+                : (isPrimitiveTensorOp(call->callee) ? GraphNodeKind::PrimitiveCall : GraphNodeKind::LibraryCall);
             GraphNode node{
-                isPrimitiveTensorOp(call->callee) ? GraphNodeKind::PrimitiveCall : GraphNodeKind::LibraryCall,
+                kind,
                 output,
                 call->callee,
                 graph_op_id_name(call->callee),
-                FeBinaryOp::Add,
-                FeValue::none(),
-                std::move(inputs),
-            };
-            if (auto diagnostic = append_node(graph, std::move(node))) {
-                return *diagnostic;
-            }
-            return output;
-        }
-        if (const auto* ctor = std::get_if<FeLayerCtorExpr>(&expr->kind)) {
-            std::vector<std::size_t> inputs;
-            for (const auto& arg : ctor->args) {
-                auto lowered = lower_expr(arg.value, graph);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-                    return *diagnostic;
-                }
-                inputs.push_back(std::get<std::size_t>(lowered));
-            }
-            const std::size_t output = append_value(graph, std::string{}, expr->type, false);
-            GraphNode node{
-                GraphNodeKind::LibraryCtor,
-                output,
-                ctor->callee,
-                graph_op_id_name(ctor->callee),
                 FeBinaryOp::Add,
                 FeValue::none(),
                 std::move(inputs),

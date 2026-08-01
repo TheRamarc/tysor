@@ -244,6 +244,27 @@ bool missing_shape_returns_runtime_diagnostic() {
     return true;
 }
 
+bool print_builtin_executes() {
+    auto module_result = plan_module(
+        "layer model(x: tensor[float32]): tensor[float32]:\n"
+        "  print(x)\n"
+        "  return x\n"
+    );
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
+        std::cerr << "executor-print: plan failed: " << diagnostic->toString() << '\n';
+        return false;
+    }
+
+    GraphExecutorOptions options;
+    options.tensor_shapes["x"] = {2, 2};
+    auto execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&execution)) {
+        std::cerr << "executor-print: execution failed: " << diagnostic->toString() << '\n';
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -253,6 +274,7 @@ int main() {
         callable_linear_and_tanh_execute(),
         module_local_function_calls_execute(),
         missing_shape_returns_runtime_diagnostic(),
+        print_builtin_executes(),
     };
 
     for (bool check : checks) {

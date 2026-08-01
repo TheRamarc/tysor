@@ -99,7 +99,7 @@ std::vector<OpDefinition> make_ops() {
         op(OpId::CausalMask, signature("causal_mask", tensor_any(), {tensor_any()}, 1, 1), false, true, false, true, false),
         op(OpId::FlattenHeads, signature("flatten_heads", tensor_any(), {tensor_any()}, 1, 1), false, true, false, true, false),
         op(OpId::RepeatKv, signature("repeat_kv", tensor_any(), {tensor_any(), Type::intType()}, 2, 2), false, true, false, true, false),
-        op(OpId::Print, signature("print", Type::noneType(), {}, 0, 1), false, false, false, false, false),
+        op(OpId::Print, signature("print", Type::noneType(), {}, 0, 8), true, false, false, false, false),
     };
 }
 

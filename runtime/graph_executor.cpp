@@ -23,7 +23,7 @@ struct ActivationClosure {
 
 // RuntimeValue includes callable closures because graph lowering represents
 // layer constructors and later application as separate graph operations.
-using RuntimeValue = std::variant<std::int64_t, double, bool, SimpleTensor, LinearClosure, EmbeddingClosure, ActivationClosure>;
+using RuntimeValue = std::variant<std::int64_t, double, bool, std::string, SimpleTensor, LinearClosure, EmbeddingClosure, ActivationClosure>;
 
 struct RuntimeValueStore {
     explicit RuntimeValueStore(std::size_t size) : slots(size) {}
@@ -220,6 +220,9 @@ std::variant<GraphRuntimeValue, Diagnostic> to_graph_value(const RuntimeValue& v
     if (const auto* item = std::get_if<bool>(&value)) {
         return *item;
     }
+    if (const auto* item = std::get_if<std::string>(&value)) {
+        return *item;
+    }
     if (const auto* item = std::get_if<SimpleTensor>(&value)) {
         return *item;
     }
@@ -235,6 +238,8 @@ std::variant<RuntimeValue, Diagnostic> constant_to_runtime_value(const FeValue& 
             } else if constexpr (std::is_same_v<T, double>) {
                 return RuntimeValue{inner};
             } else if constexpr (std::is_same_v<T, bool>) {
+                return RuntimeValue{inner};
+            } else if constexpr (std::is_same_v<T, std::string>) {
                 return RuntimeValue{inner};
             } else {
                 return runtime_error("Unsupported graph constant");
@@ -392,6 +397,33 @@ std::variant<RuntimeValue, Diagnostic> execute_primitive(
                 return *diagnostic;
             }
             return RuntimeValue{std::get<SimpleTensor>(std::move(result))};
+        }
+        case OpId::Print: {
+            for (std::size_t index = 0; index < op.inputs.size(); ++index) {
+                auto val_ref = require_value_ref(values, op.inputs[index], "print target");
+                if (const auto* diagnostic = std::get_if<Diagnostic>(&val_ref)) {
+                    return *diagnostic;
+                }
+                if (index > 0) {
+                    std::cout << ' ';
+                }
+                const RuntimeValue& val = runtime_value_ref(val_ref);
+                if (const auto* tensor = std::get_if<SimpleTensor>(&val)) {
+                    print_tensor(*tensor);
+                } else if (const auto* item = std::get_if<std::int64_t>(&val)) {
+                    std::cout << *item;
+                } else if (const auto* item = std::get_if<double>(&val)) {
+                    std::cout << *item;
+                } else if (const auto* item = std::get_if<bool>(&val)) {
+                    std::cout << (*item ? "true" : "false");
+                } else if (const auto* item = std::get_if<std::string>(&val)) {
+                    std::cout << *item;
+                } else {
+                    std::cout << "<value>";
+                }
+            }
+            std::cout << '\n';
+            return RuntimeValue{std::int64_t(0)};
         }
         default:
             return runtime_error("Unsupported primitive graph op '" + op.op + "'");
@@ -1150,6 +1182,8 @@ void print_graph_runtime_value(const GraphRuntimeValue& value) {
         std::cout << "value=" << *item << '\n';
     } else if (const auto* item = std::get_if<bool>(&value)) {
         std::cout << "value=" << (*item ? "true" : "false") << '\n';
+    } else if (const auto* item = std::get_if<std::string>(&value)) {
+        std::cout << "value=" << *item << '\n';
     }
     std::cout << "------------------------\n";
 }
