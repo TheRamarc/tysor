@@ -3,7 +3,6 @@
 #include "arena.h"
 #include "diagnostic.h"
 #include "frontend_ir.h"
-#include "lexer.h"
 #include "parser.h"
 #include "semantic_analyzer.h"
 
