@@ -17,15 +17,18 @@ Metal execution.
 Implemented today:
 
 - Lexer, parser, semantic analyzer, and frontend IR lowering.
+- **Deterministic 32-bit `NodeId` AST Indexing**: Every parsed AST `Expr` and `Stmt` is assigned a unique `NodeId` for precise, span-independent tracking.
+- **$O(1)$ Side-Table Lookups**: `SemanticInfo` side-tables use hash maps to resolve expression types, identifiers, calls, declarations, and assignments in constant time.
+- **Modular IR Pipeline**: `FrontendLowerer` and `GraphBuilder` are fully modularized with dedicated expression and statement handlers.
+- **Unified Layer Constructors**: Unified function and layer constructor calls under `FeCallExpr` carrying `FeTypeKind::Callable`.
+- **Built-in `print(...)` Output**: Full support for printing tensors, scalars (`int`, `float`, `bool`), and string literals (`str`).
 - Graph IR for straight-line tensor functions/layers.
 - Symbolic and known tensor shape metadata in Graph IR.
 - Explicit Graph IR parameter values for `linear` weights and bias.
-- Execution plans with host/device placement, operation steps, outputs, and
-  trainable parameter metadata.
+- Execution plans with host/device placement, operation steps, outputs, and trainable parameter metadata.
 - Local runtime execution for tensor programs.
 - Experimental backward and SGD training paths for supported programs.
-- Runtime tensor alignment, metadata-only reshape/flatten views, and workspace
-  buffer reuse.
+- Runtime tensor alignment, metadata-only reshape/flatten views, and workspace buffer reuse.
 - Local `matmul + relu` fusion when intermediate preservation is disabled.
 - Metal backend plumbing and preflight/capability checks for supported kernels.
 
@@ -71,20 +74,20 @@ Requirements:
 Build:
 
 ```bash
-meson setup out/meson --buildtype=debug
-meson compile -C out/meson
+meson setup build --buildtype=debug
+meson compile -C build
 ```
 
 Run the full test suite:
 
 ```bash
-meson test -C out/meson
+meson test -C build
 ```
 
 Run the runtime benchmark:
 
 ```bash
-./out/meson/cpptysor_runtime_bench
+./build/cpptysor_runtime_bench
 ```
 
 ## CLI
@@ -92,38 +95,38 @@ Run the runtime benchmark:
 Show help:
 
 ```bash
-./out/meson/cpptysor --help
+./build/tysor --help
 ```
 
 Common inspection flow:
 
 ```bash
-./out/meson/cpptysor path/to/program.ty --tokens --ast --semantics --ir --graph --plan
+./build/tysor path/to/program.ty --tokens --ast --semantics --ir --graph --plan
 ```
 
 Run a local program:
 
 ```bash
-./out/meson/cpptysor path/to/program.ty --run --shape x=2x3
+./build/tysor path/to/program.ty --run --shape x=2x3
 ```
 
 Run a training config:
 
 ```bash
-./out/meson/cpptysor path/to/program.ty --train --shape x=2x3 --shape target=2x2
+./build/tysor path/to/program.ty --train --shape x=2x3 --shape target=2x2
 ```
 
 Select a backend:
 
 ```bash
-./out/meson/cpptysor path/to/program.ty --plan --backend local
-./out/meson/cpptysor path/to/program.ty --plan --backend metal
+./build/tysor path/to/program.ty --plan --backend local
+./build/tysor path/to/program.ty --plan --backend metal
 ```
 
 Probe Metal availability:
 
 ```bash
-./out/meson/cpptysor --metal-device
+./build/tysor --metal-device
 ```
 
 ## Minimal Runnable Program
@@ -139,13 +142,13 @@ layer model(x: tensor[float32]): tensor[float32]:
 Inspect the compiler output:
 
 ```bash
-./out/meson/cpptysor quickstart.ty --graph --plan
+./build/tysor quickstart.ty --graph --plan
 ```
 
 Run it with a synthetic input tensor:
 
 ```bash
-./out/meson/cpptysor quickstart.ty --run --shape x=2x3
+./build/tysor quickstart.ty --run --shape x=2x3
 ```
 
 ## Minimal Training Program
@@ -167,7 +170,7 @@ config model:
 Run:
 
 ```bash
-./out/meson/cpptysor train.ty --train --shape x=2x3 --shape target=2x2
+./build/tysor train.ty --train --shape x=2x3 --shape target=2x2
 ```
 
 ## Language Sketch
@@ -203,7 +206,7 @@ Supported builtin families:
 - Trainable/callable constructors: `linear`, `Embedding`
 - Activations/callables: `SiLU`, `GELU`, `Tanh`, `Sigmoid`, `Softmax`,
   `Dropout`, `RMSNorm`
-- Primitive tensor ops: `matmul`, `relu`, `scale`
+- Primitive tensor ops: `matmul`, `relu`, `scale`, `print`
 - Library tensor ops: `rms_norm`, `cross_entropy`, `rope`, `reshape`,
   `transpose`, `sum`, `mean`, `sqrt`, `rsqrt`, `causal_mask`,
   `flatten_heads`, `repeat_kv`
@@ -221,6 +224,7 @@ source of truth for a backend.
 - builtin arity/type checks
 - config field validation
 - training config validation
+- side-table indexing with deterministic `NodeId` map resolution
 
 `graph_ir` owns tensor graph correctness:
 
@@ -252,22 +256,22 @@ source of truth for a backend.
 Build everything:
 
 ```bash
-meson compile -C out/meson
+meson compile -C build
 ```
 
 Run one smoke executable:
 
 ```bash
-./out/meson/cpptysor_graph_ir_smoke
-./out/meson/cpptysor_execution_plan_smoke
-./out/meson/cpptysor_graph_executor_smoke
-./out/meson/cpptysor_train_smoke
+./build/cpptysor_graph_ir_smoke
+./build/cpptysor_execution_plan_smoke
+./build/cpptysor_graph_executor_smoke
+./build/cpptysor_train_smoke
 ```
 
 Run all tests:
 
 ```bash
-meson test -C out/meson
+meson test -C build
 ```
 
 Check formatting-related whitespace before committing:
@@ -280,12 +284,10 @@ git diff --check
 
 High-value next steps:
 
-- Lower remaining trainable callables, especially `Embedding`, into explicit
-  graph parameter dataflow.
+- Implement unified declarative `OpRegistry` for centralized built-in op type inference and kernel dispatch.
+- Lower remaining trainable callables, especially `Embedding`, into explicit graph parameter dataflow.
 - Add real input/data loading instead of synthetic runtime tensors.
 - Persist model parameter state for training.
-- Expand Graph IR autodiff instead of relying on executor-specific backward
-  paths.
+- Expand Graph IR autodiff instead of relying on executor-specific backward paths.
 - Grow backend kernels and capability tests for Metal/CUDA/ROCm.
-- Move more tensor shape facts out of CLI runtime shape hints and into compiler
-  inference where possible.
+- Move more tensor shape facts out of CLI runtime shape hints and into compiler inference where possible.
