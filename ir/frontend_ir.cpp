@@ -765,6 +765,107 @@ FrontendResult FrontendLowerer::lower() {
     return module;
 }
 
+std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lowerIdentifierExpr(const Expr& expr, const IdentifierExpr& ident) {
+    if (ident.name == "None") {
+        return FeExpr::constant(*arena_, FeValue::none(), FeType::none());
+    }
+    auto identifier = semanticIdentifierForExpr(expr, ident.name);
+    if (!identifier) {
+        return errorSpan(expr.span, "Frontend lowering missing semantic identifier info for '" + ident.name + "'");
+    }
+    if (identifier->target == SemanticSymbolKind::Config) {
+        return errorSpan(expr.span, "Config object '" + ident.name + "' cannot appear directly in lowered IR");
+    }
+    return FeExpr::var(*arena_, ident.name, lowerType(identifier->type));
+}
+
+std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lowerCallExpr(const Expr& expr, const CallExpr& call) {
+    auto semantic_call = semanticCallForExpr(expr, call.callee);
+    if (!semantic_call) {
+        return errorSpan(expr.span, "Frontend lowering missing semantic call info for '" + call.callee + "'");
+    }
+    std::vector<FeCallArg> args;
+    for (const auto& arg : call.args) {
+        auto lowered = lowerExpr(*arg.value);
+        if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
+            return *diagnostic;
+        }
+        args.push_back(FeCallArg{arg.name, std::get<FeExprPtr>(std::move(lowered))});
+    }
+    FeType resultType = lowerType(semantic_call->resultType);
+    if (semantic_call->target == SemanticCallTargetKind::CallableLocal) {
+        auto symbol = findSymbol(call.callee);
+        if (!symbol) {
+            return errorSpan(expr.span, "Frontend lowering could not resolve callable '" + call.callee + "'");
+        }
+        return FeExpr::apply(*arena_, FeExpr::var(*arena_, call.callee, *symbol), std::move(args), resultType);
+    }
+    if (isCallableLibraryOp(call.callee) && resultType.kind == FeTypeKind::Callable) {
+        return FeExpr::layerCtor(*arena_, call.callee, std::move(args), resultType);
+    }
+    return FeExpr::call(*arena_, call.callee, std::move(args), resultType);
+}
+
+std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lowerBinaryExpr(const Expr& expr, const BinaryExpr& binary) {
+    if (binary.op == TokenType::Dot) {
+        auto access = semanticConfigFieldAccessForExpr(expr);
+        if (!access) {
+            return errorSpan(expr.span, "Frontend lowering missing semantic config-field access info");
+        }
+        auto constant = evalConfigField(access->configName, access->fieldName, expr.span);
+        if (const auto* diagnostic = std::get_if<Diagnostic>(&constant)) {
+            return *diagnostic;
+        }
+        return FeExpr::constant(*arena_, std::get<FeValue>(std::move(constant)), lowerType(access->fieldType));
+    }
+    auto op = lowerBinaryOp(binary.op, expr.span);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&op)) {
+        return *diagnostic;
+    }
+    auto lhs = lowerExpr(*binary.lhs);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs)) {
+        return *diagnostic;
+    }
+    auto rhs = lowerExpr(*binary.rhs);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&rhs)) {
+        return *diagnostic;
+    }
+    auto type = requiredSemanticTypeForExpr(expr, "binary expression");
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
+        return *diagnostic;
+    }
+    return FeExpr::binary(*arena_, std::get<FeBinaryOp>(op), std::get<FeExprPtr>(std::move(lhs)), std::get<FeExprPtr>(std::move(rhs)), std::get<FeType>(std::move(type)));
+}
+
+std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lowerUnaryExpr(const Expr& expr, const UnaryExpr& unary) {
+    auto operand = lowerExpr(*unary.operand);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&operand)) {
+        return *diagnostic;
+    }
+    auto type = requiredSemanticTypeForExpr(expr, "unary expression");
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
+        return *diagnostic;
+    }
+    if (unary.op == TokenType::Minus) {
+        return FeExpr::binary(*arena_, 
+            FeBinaryOp::Sub,
+            FeExpr::constant(*arena_, FeValue::intValue(0), FeType::intType()),
+            std::get<FeExprPtr>(std::move(operand)),
+            std::get<FeType>(std::move(type))
+        );
+    }
+    auto op = lowerBinaryOp(unary.op, expr.span);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&op)) {
+        return *diagnostic;
+    }
+    return FeExpr::binary(*arena_, 
+        std::get<FeBinaryOp>(op),
+        std::get<FeExprPtr>(std::move(operand)),
+        FeExpr::constant(*arena_, FeValue::boolValue(false), FeType::boolType()),
+        std::get<FeType>(std::move(type))
+    );
+}
+
 std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lowerExpr(const Expr& expr) {
     return std::visit(
         [&](const auto& value) -> std::variant<FeExprPtr, Diagnostic> {
@@ -778,100 +879,15 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lowerExpr(const Expr& expr)
             } else if constexpr (std::is_same_v<T, StringLiteral>) {
                 return FeExpr::constant(*arena_, FeValue::stringValue(value.value), FeType::voidType());
             } else if constexpr (std::is_same_v<T, IdentifierExpr>) {
-                if (value.name == "None") {
-                    return FeExpr::constant(*arena_, FeValue::none(), FeType::none());
-                }
-                auto identifier = semanticIdentifierForExpr(expr, value.name);
-                if (!identifier) {
-                    return errorSpan(expr.span, "Frontend lowering missing semantic identifier info for '" + value.name + "'");
-                }
-                if (identifier->target == SemanticSymbolKind::Config) {
-                    return errorSpan(expr.span, "Config object '" + value.name + "' cannot appear directly in lowered IR");
-                }
-                return FeExpr::var(*arena_, value.name, lowerType(identifier->type));
+                return lowerIdentifierExpr(expr, value);
             } else if constexpr (std::is_same_v<T, CallExpr>) {
-                auto call = semanticCallForExpr(expr, value.callee);
-                if (!call) {
-                    return errorSpan(expr.span, "Frontend lowering missing semantic call info for '" + value.callee + "'");
-                }
-                std::vector<FeCallArg> args;
-                for (const auto& arg : value.args) {
-                    auto lowered = lowerExpr(*arg.value);
-                    if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-                        return *diagnostic;
-                    }
-                    args.push_back(FeCallArg{arg.name, std::get<FeExprPtr>(std::move(lowered))});
-                }
-                FeType resultType = lowerType(call->resultType);
-                if (call->target == SemanticCallTargetKind::CallableLocal) {
-                    auto symbol = findSymbol(value.callee);
-                    if (!symbol) {
-                        return errorSpan(expr.span, "Frontend lowering could not resolve callable '" + value.callee + "'");
-                    }
-                    return FeExpr::apply(*arena_, FeExpr::var(*arena_, value.callee, *symbol), std::move(args), resultType);
-                }
-                if (isCallableLibraryOp(value.callee) && resultType.kind == FeTypeKind::Callable) {
-                    return FeExpr::layerCtor(*arena_, value.callee, std::move(args), resultType);
-                }
-                return FeExpr::call(*arena_, value.callee, std::move(args), resultType);
+                return lowerCallExpr(expr, value);
             } else if constexpr (std::is_same_v<T, RepeatExpr>) {
                 return errorSpan(expr.span, "Repeat suffix '[n]' is only valid inside arrow pipeline stages");
             } else if constexpr (std::is_same_v<T, BinaryExpr>) {
-                if (value.op == TokenType::Dot) {
-                    auto access = semanticConfigFieldAccessForExpr(expr);
-                    if (!access) {
-                        return errorSpan(expr.span, "Frontend lowering missing semantic config-field access info");
-                    }
-                    auto constant = evalConfigField(access->configName, access->fieldName, expr.span);
-                    if (const auto* diagnostic = std::get_if<Diagnostic>(&constant)) {
-                        return *diagnostic;
-                    }
-                    return FeExpr::constant(*arena_, std::get<FeValue>(std::move(constant)), lowerType(access->fieldType));
-                }
-                auto op = lowerBinaryOp(value.op, expr.span);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&op)) {
-                    return *diagnostic;
-                }
-                auto lhs = lowerExpr(*value.lhs);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs)) {
-                    return *diagnostic;
-                }
-                auto rhs = lowerExpr(*value.rhs);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&rhs)) {
-                    return *diagnostic;
-                }
-                auto type = requiredSemanticTypeForExpr(expr, "binary expression");
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
-                    return *diagnostic;
-                }
-                return FeExpr::binary(*arena_, std::get<FeBinaryOp>(op), std::get<FeExprPtr>(std::move(lhs)), std::get<FeExprPtr>(std::move(rhs)), std::get<FeType>(std::move(type)));
+                return lowerBinaryExpr(expr, value);
             } else if constexpr (std::is_same_v<T, UnaryExpr>) {
-                auto operand = lowerExpr(*value.operand);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&operand)) {
-                    return *diagnostic;
-                }
-                auto type = requiredSemanticTypeForExpr(expr, "unary expression");
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&type)) {
-                    return *diagnostic;
-                }
-                if (value.op == TokenType::Minus) {
-                    return FeExpr::binary(*arena_, 
-                        FeBinaryOp::Sub,
-                        FeExpr::constant(*arena_, FeValue::intValue(0), FeType::intType()),
-                        std::get<FeExprPtr>(std::move(operand)),
-                        std::get<FeType>(std::move(type))
-                    );
-                }
-                auto op = lowerBinaryOp(value.op, expr.span);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&op)) {
-                    return *diagnostic;
-                }
-                return FeExpr::binary(*arena_, 
-                    std::get<FeBinaryOp>(op),
-                    std::get<FeExprPtr>(std::move(operand)),
-                    FeExpr::constant(*arena_, FeValue::boolValue(false), FeType::boolType()),
-                    std::get<FeType>(std::move(type))
-                );
+                return lowerUnaryExpr(expr, value);
             } else if constexpr (std::is_same_v<T, TernaryExpr>) {
                 auto condition = lowerExpr(*value.condition);
                 if (const auto* diagnostic = std::get_if<Diagnostic>(&condition)) {
@@ -927,8 +943,7 @@ std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lowerExpr(const Expr& expr)
                 return lowerArrowExpr(expr);
             }
         },
-        expr.kind
-    );
+        expr.kind);
 }
 
 std::variant<FeExprPtr, Diagnostic> FrontendLowerer::lowerArrowExpr(const Expr& expr) {
@@ -1184,91 +1199,111 @@ std::variant<std::vector<FeStmt>, Diagnostic> FrontendLowerer::lowerScope(const 
     return lowered;
 }
 
+std::variant<FeStmt, Diagnostic> FrontendLowerer::lowerReturnStmt(const ReturnStmt& stmt) {
+    auto lowered = lowerExpr(*stmt.value);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
+        return *diagnostic;
+    }
+    return FeStmt{FeReturnStmt{std::get<FeExprPtr>(std::move(lowered))}};
+}
+
+std::variant<FeStmt, Diagnostic> FrontendLowerer::lowerExprStmt(const ExprStmt& stmt) {
+    auto lowered = lowerExpr(*stmt.value);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
+        return *diagnostic;
+    }
+    return FeStmt{FeExprStmt{std::get<FeExprPtr>(std::move(lowered))}};
+}
+
+std::variant<FeStmt, Diagnostic> FrontendLowerer::lowerVarDeclStmt(const Stmt& parent, const VarDecl& stmt) {
+    auto declaration = semanticDeclarationForStmt(parent, stmt.name);
+    if (!declaration) {
+        return errorSpan(parent.span, "Frontend lowering missing semantic declaration info for '" + stmt.name + "'");
+    }
+    FeExprPtr lowered_value = nullptr;
+    bool hasValue = false;
+    if (stmt.init) {
+        auto lowered = lowerExpr(*stmt.init);
+        if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
+            return *diagnostic;
+        }
+        lowered_value = std::get<FeExprPtr>(std::move(lowered));
+        hasValue = true;
+    }
+    FeType type = lowerType(declaration->finalType);
+    bindSymbol(stmt.name, type);
+    return FeStmt{FeVarDeclStmt{stmt.name, type, lowered_value, hasValue}};
+}
+
+std::variant<FeStmt, Diagnostic> FrontendLowerer::lowerAssignStmt(const Stmt& parent, const AssignStmt& stmt) {
+    auto assignment = semanticAssignmentForStmt(parent, stmt.name);
+    if (!assignment) {
+        return errorSpan(parent.span, "Frontend lowering missing semantic assignment info for '" + stmt.name + "'");
+    }
+    auto lowered = lowerExpr(*stmt.value);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
+        return *diagnostic;
+    }
+    bindSymbol(stmt.name, lowerType(assignment->targetType));
+    return FeStmt{FeAssignStmt{stmt.name, std::get<FeExprPtr>(std::move(lowered))}};
+}
+
+std::variant<FeStmt, Diagnostic> FrontendLowerer::lowerIfStmt(const Stmt& parent, const IfStmt& stmt) {
+    auto condition = lowerExpr(*stmt.condition);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&condition)) {
+        return *diagnostic;
+    }
+    auto thenBody = lowerScope(*stmt.thenStmt);
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&thenBody)) {
+        return *diagnostic;
+    }
+    std::vector<FeElifBody> elifs;
+    for (const auto& branch : stmt.elifs) {
+        auto branch_condition = lowerExpr(*branch.condition);
+        if (const auto* diagnostic = std::get_if<Diagnostic>(&branch_condition)) {
+            return *diagnostic;
+        }
+        auto body = lowerScope(*branch.body);
+        if (const auto* diagnostic = std::get_if<Diagnostic>(&body)) {
+            return *diagnostic;
+        }
+        elifs.push_back(FeElifBody{
+            std::get<FeExprPtr>(std::move(branch_condition)),
+            std::get<std::vector<FeStmt>>(std::move(body)),
+        });
+    }
+    std::vector<FeStmt> elseBody;
+    if (stmt.elseStmt) {
+        auto lowered_else = lowerScope(*stmt.elseStmt);
+        if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered_else)) {
+            return *diagnostic;
+        }
+        elseBody = std::get<std::vector<FeStmt>>(std::move(lowered_else));
+    }
+    return FeStmt{FeIfStmt{
+        std::get<FeExprPtr>(std::move(condition)),
+        std::get<std::vector<FeStmt>>(std::move(thenBody)),
+        std::move(elifs),
+        std::move(elseBody),
+    }};
+}
+
 std::variant<FeStmt, Diagnostic> FrontendLowerer::lowerStmt(const Stmt& stmt) {
     return std::visit(
         [&](const auto& value) -> std::variant<FeStmt, Diagnostic> {
             using T = std::decay_t<decltype(value)>;
             if constexpr (std::is_same_v<T, ReturnStmt>) {
-                auto lowered = lowerExpr(*value.value);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-                    return *diagnostic;
-                }
-                return FeStmt{FeReturnStmt{std::get<FeExprPtr>(std::move(lowered))}};
+                return lowerReturnStmt(value);
             } else if constexpr (std::is_same_v<T, ExprStmt>) {
-                auto lowered = lowerExpr(*value.value);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-                    return *diagnostic;
-                }
-                return FeStmt{FeExprStmt{std::get<FeExprPtr>(std::move(lowered))}};
+                return lowerExprStmt(value);
             } else if constexpr (std::is_same_v<T, VarDecl>) {
-                auto declaration = semanticDeclarationForStmt(stmt, value.name);
-                if (!declaration) {
-                    return errorSpan(stmt.span, "Frontend lowering missing semantic declaration info for '" + value.name + "'");
-                }
-                FeExprPtr lowered_value = nullptr;
-                bool hasValue = false;
-                if (value.init) {
-                    auto lowered = lowerExpr(*value.init);
-                    if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-                        return *diagnostic;
-                    }
-                    lowered_value = std::get<FeExprPtr>(std::move(lowered));
-                    hasValue = true;
-                }
-                FeType type = lowerType(declaration->finalType);
-                bindSymbol(value.name, type);
-                return FeStmt{FeVarDeclStmt{value.name, type, lowered_value, hasValue}};
+                return lowerVarDeclStmt(stmt, value);
             } else if constexpr (std::is_same_v<T, AssignStmt>) {
-                auto assignment = semanticAssignmentForStmt(stmt, value.name);
-                if (!assignment) {
-                    return errorSpan(stmt.span, "Frontend lowering missing semantic assignment info for '" + value.name + "'");
-                }
-                auto lowered = lowerExpr(*value.value);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-                    return *diagnostic;
-                }
-                bindSymbol(value.name, lowerType(assignment->targetType));
-                return FeStmt{FeAssignStmt{value.name, std::get<FeExprPtr>(std::move(lowered))}};
+                return lowerAssignStmt(stmt, value);
             } else if constexpr (std::is_same_v<T, ScopeStmt>) {
                 return errorSpan(stmt.span, "Nested standalone scope statements are not supported in FE lowering");
             } else if constexpr (std::is_same_v<T, IfStmt>) {
-                auto condition = lowerExpr(*value.condition);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&condition)) {
-                    return *diagnostic;
-                }
-                auto thenBody = lowerScope(*value.thenStmt);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&thenBody)) {
-                    return *diagnostic;
-                }
-                std::vector<FeElifBody> elifs;
-                for (const auto& branch : value.elifs) {
-                    auto branch_condition = lowerExpr(*branch.condition);
-                    if (const auto* diagnostic = std::get_if<Diagnostic>(&branch_condition)) {
-                        return *diagnostic;
-                    }
-                    auto body = lowerScope(*branch.body);
-                    if (const auto* diagnostic = std::get_if<Diagnostic>(&body)) {
-                        return *diagnostic;
-                    }
-                    elifs.push_back(FeElifBody{
-                        std::get<FeExprPtr>(std::move(branch_condition)),
-                        std::get<std::vector<FeStmt>>(std::move(body)),
-                    });
-                }
-                std::vector<FeStmt> elseBody;
-                if (value.elseStmt) {
-                    auto lowered_else = lowerScope(*value.elseStmt);
-                    if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered_else)) {
-                        return *diagnostic;
-                    }
-                    elseBody = std::get<std::vector<FeStmt>>(std::move(lowered_else));
-                }
-                return FeStmt{FeIfStmt{
-                    std::get<FeExprPtr>(std::move(condition)),
-                    std::get<std::vector<FeStmt>>(std::move(thenBody)),
-                    std::move(elifs),
-                    std::move(elseBody),
-                }};
+                return lowerIfStmt(stmt, value);
             }
         },
         stmt.kind
@@ -1765,7 +1800,8 @@ std::variant<FeValue, Diagnostic> FrontendLowerer::evalUnary(TokenType op, const
 
 std::optional<SemanticCallInfo> FrontendLowerer::semanticCallForExpr(const Expr& expr, const std::string& callee) const {
     for (auto call = semanticInfo_.calls.rbegin(); call != semanticInfo_.calls.rend(); ++call) {
-        if (call->callee == callee && same_span(call->span, expr.span) && !call->arrowStage &&
+        bool id_match = (expr.id != 0 && call->nodeId == expr.id);
+        if (call->callee == callee && (id_match || same_span(call->span, expr.span)) && !call->arrowStage &&
             owner_matches(call->owner, currentOwner_)) {
             return *call;
         }
@@ -1785,7 +1821,8 @@ std::optional<SemanticCallInfo> FrontendLowerer::semanticCallForArrowStage(const
 
 std::optional<SemanticIdentifierInfo> FrontendLowerer::semanticIdentifierForExpr(const Expr& expr, const std::string& name) const {
     for (auto identifier = semanticInfo_.identifiers.rbegin(); identifier != semanticInfo_.identifiers.rend(); ++identifier) {
-        if (identifier->name == name && same_span(identifier->span, expr.span) &&
+        bool id_match = (expr.id != 0 && identifier->nodeId == expr.id);
+        if (identifier->name == name && (id_match || same_span(identifier->span, expr.span)) &&
             owner_matches(identifier->owner, currentOwner_)) {
             return *identifier;
         }
@@ -1795,7 +1832,8 @@ std::optional<SemanticIdentifierInfo> FrontendLowerer::semanticIdentifierForExpr
 
 std::optional<SemanticAssignmentInfo> FrontendLowerer::semanticAssignmentForStmt(const Stmt& stmt, const std::string& name) const {
     for (auto assignment = semanticInfo_.assignments.rbegin(); assignment != semanticInfo_.assignments.rend(); ++assignment) {
-        if (assignment->targetName == name && same_span(assignment->span, stmt.span) &&
+        bool id_match = (stmt.id != 0 && assignment->nodeId == stmt.id);
+        if (assignment->targetName == name && (id_match || same_span(assignment->span, stmt.span)) &&
             owner_matches(assignment->owner, currentOwner_)) {
             return *assignment;
         }
@@ -1805,7 +1843,8 @@ std::optional<SemanticAssignmentInfo> FrontendLowerer::semanticAssignmentForStmt
 
 std::optional<SemanticConfigFieldAccessInfo> FrontendLowerer::semanticConfigFieldAccessForExpr(const Expr& expr) const {
     for (auto access = semanticInfo_.configFieldAccesses.rbegin(); access != semanticInfo_.configFieldAccesses.rend(); ++access) {
-        if (same_span(access->span, expr.span) && owner_matches(access->owner, currentOwner_)) {
+        bool id_match = (expr.id != 0 && access->nodeId == expr.id);
+        if ((id_match || same_span(access->span, expr.span)) && owner_matches(access->owner, currentOwner_)) {
             return *access;
         }
     }
@@ -1814,7 +1853,8 @@ std::optional<SemanticConfigFieldAccessInfo> FrontendLowerer::semanticConfigFiel
 
 std::optional<SemanticDeclarationInfo> FrontendLowerer::semanticDeclarationForStmt(const Stmt& stmt, const std::string& name) const {
     for (auto declaration = semanticInfo_.declarations.rbegin(); declaration != semanticInfo_.declarations.rend(); ++declaration) {
-        if (declaration->name == name && same_span(declaration->span, stmt.span) &&
+        bool id_match = (stmt.id != 0 && declaration->nodeId == stmt.id);
+        if (declaration->name == name && (id_match || same_span(declaration->span, stmt.span)) &&
             owner_matches(declaration->owner, currentOwner_)) {
             return *declaration;
         }
@@ -1824,7 +1864,8 @@ std::optional<SemanticDeclarationInfo> FrontendLowerer::semanticDeclarationForSt
 
 std::optional<FeType> FrontendLowerer::semanticTypeForExpr(const Expr& expr) const {
     for (auto info = semanticInfo_.exprs.rbegin(); info != semanticInfo_.exprs.rend(); ++info) {
-        if (same_span(info->span, expr.span) && owner_matches(info->owner, currentOwner_)) {
+        bool id_match = (expr.id != 0 && info->nodeId == expr.id);
+        if ((id_match || same_span(info->span, expr.span)) && owner_matches(info->owner, currentOwner_)) {
             return lowerType(info->type);
         }
     }

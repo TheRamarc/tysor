@@ -288,7 +288,7 @@ private:
     bool computed = false;
     // To hold a runtieme or compile-time evaluated constant.
     MValue value = MValue::none();
-  }
+  };
 
   const Program &program_;
   const SemanticInfo &semanticInfo_;

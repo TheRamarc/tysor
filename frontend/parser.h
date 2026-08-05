@@ -339,6 +339,7 @@ struct Expr {
      * What it tracks: The span of tokens making up this expression.
      * What mutates/updates it: Assigned when the expression node is constructed by the parser.
      */
+    std::uint32_t id = 0;
     SourceSpan span{};
 
     /**
@@ -395,6 +396,7 @@ struct ExprStmt {
 using StmtKind = std::variant<ReturnStmt, ExprStmt, VarDecl, AssignStmt, ScopeStmt, IfStmt>;
 
 struct Stmt {
+    std::uint32_t id = 0;
     SourceSpan span{};
     StmtKind kind;
 };
@@ -470,6 +472,7 @@ private:
     ExprPtr parsePrimaryExpression();
     ExprPtr parseListExpression();
     ExprPtr makeExpr(SourceSpan span, ExprKind kind);
+    Stmt makeStmt(SourceSpan span, StmtKind kind);
 
     Stmt parseStmt();
     Stmt parseScope();
@@ -502,6 +505,8 @@ private:
     [[noreturn]] void failHere(const std::string& message);
     [[noreturn]] void failToken(const std::string& message, const Token& token);
     void record(Diagnostic diagnostic);
+
+    std::uint32_t nextNodeId_ = 1;
 };
 
 std::string typeToString(const Type& type);

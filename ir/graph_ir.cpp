@@ -1395,118 +1395,138 @@ public:
 private:
     const FeCallableT& callable_;
 
+    std::variant<std::size_t, Diagnostic> lowerConstantExpr(const FeConstantExpr& constant, const FeType& type, GraphT& graph) const {
+        const std::size_t output = append_value(graph, std::string{}, type, false);
+        GraphNode node{
+            GraphNodeKind::Constant,
+            output,
+            std::string{},
+            std::nullopt,
+            FeBinaryOp::Add,
+            constant.value,
+            {},
+        };
+        if (auto diagnostic = append_node(graph, std::move(node))) {
+            return *diagnostic;
+        }
+        return output;
+    }
+
+    std::variant<std::size_t, Diagnostic> lowerVarExpr(const FeVarExpr& var, GraphT& graph) const {
+        return lookup_named_value(var.symbol, graph);
+    }
+
+    std::variant<std::size_t, Diagnostic> lowerBinaryExpr(const FeBinaryExpr& binary, const FeType& type, GraphT& graph) const {
+        auto lhs = lower_expr(binary.lhs, graph);
+        if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs)) {
+            return *diagnostic;
+        }
+        auto rhs = lower_expr(binary.rhs, graph);
+        if (const auto* diagnostic = std::get_if<Diagnostic>(&rhs)) {
+            return *diagnostic;
+        }
+        const std::size_t output = append_value(graph, std::string{}, type, false);
+        GraphNode node{
+            GraphNodeKind::Binary,
+            output,
+            std::string{},
+            std::nullopt,
+            binary.op,
+            FeValue::none(),
+            {std::get<std::size_t>(lhs), std::get<std::size_t>(rhs)},
+        };
+        if (auto diagnostic = append_node(graph, std::move(node))) {
+            return *diagnostic;
+        }
+        return output;
+    }
+
+    std::variant<std::size_t, Diagnostic> lowerCallExpr(const FeCallExpr& call, const FeType& type, GraphT& graph) const {
+        std::vector<std::size_t> inputs;
+        for (const auto& arg : call.args) {
+            auto lowered = lower_expr(arg.value, graph);
+            if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
+                return *diagnostic;
+            }
+            inputs.push_back(std::get<std::size_t>(lowered));
+        }
+        const std::size_t output = append_value(graph, std::string{}, type, false);
+        const bool is_ctor = type.kind == FeTypeKind::Callable || isCallableLibraryOp(call.callee);
+        GraphNodeKind kind = is_ctor
+            ? GraphNodeKind::LibraryCtor
+            : (isPrimitiveTensorOp(call.callee) ? GraphNodeKind::PrimitiveCall : GraphNodeKind::LibraryCall);
+        GraphNode node{
+            kind,
+            output,
+            call.callee,
+            graph_op_id_name(call.callee),
+            FeBinaryOp::Add,
+            FeValue::none(),
+            std::move(inputs),
+        };
+        if (auto diagnostic = append_node(graph, std::move(node))) {
+            return *diagnostic;
+        }
+        return output;
+    }
+
+    std::variant<std::size_t, Diagnostic> lowerApplyExpr(const FeApplyExpr& apply, const FeType& type, GraphT& graph) const {
+        std::vector<std::size_t> inputs;
+        auto callee = lower_expr(apply.callee, graph);
+        if (const auto* diagnostic = std::get_if<Diagnostic>(&callee)) {
+            return *diagnostic;
+        }
+        inputs.push_back(std::get<std::size_t>(callee));
+        for (const auto& arg : apply.args) {
+            auto lowered = lower_expr(arg.value, graph);
+            if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
+                return *diagnostic;
+            }
+            inputs.push_back(std::get<std::size_t>(lowered));
+        }
+        if (inputs.size() == 2) {
+            auto lowered_linear = try_lower_linear_apply(graph, inputs[0], inputs[1], type);
+            if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered_linear)) {
+                return *diagnostic;
+            }
+            if (const auto lowered_output = std::get<std::optional<std::size_t>>(lowered_linear)) {
+                return *lowered_output;
+            }
+        }
+        const std::size_t output = append_value(graph, std::string{}, type, false);
+        GraphNode node{
+            GraphNodeKind::Apply,
+            output,
+            std::string{},
+            std::nullopt,
+            FeBinaryOp::Add,
+            FeValue::none(),
+            std::move(inputs),
+        };
+        if (auto diagnostic = append_node(graph, std::move(node))) {
+            return *diagnostic;
+        }
+        return output;
+    }
+
     std::variant<std::size_t, Diagnostic> lower_expr(const FeExprPtr& expr, GraphT& graph) const {
         if (!expr) {
             return graph_error("Graph builder expected expression");
         }
         if (const auto* constant = std::get_if<FeConstantExpr>(&expr->kind)) {
-            const std::size_t output = append_value(graph, std::string{}, expr->type, false);
-            GraphNode node{
-                GraphNodeKind::Constant,
-                output,
-                std::string{},
-                std::nullopt,
-                FeBinaryOp::Add,
-                constant->value,
-                {},
-            };
-            if (auto diagnostic = append_node(graph, std::move(node))) {
-                return *diagnostic;
-            }
-            return output;
+            return lowerConstantExpr(*constant, expr->type, graph);
         }
         if (const auto* var = std::get_if<FeVarExpr>(&expr->kind)) {
-            return lookup_named_value(var->symbol, graph);
+            return lowerVarExpr(*var, graph);
         }
         if (const auto* binary = std::get_if<FeBinaryExpr>(&expr->kind)) {
-            auto lhs = lower_expr(binary->lhs, graph);
-            if (const auto* diagnostic = std::get_if<Diagnostic>(&lhs)) {
-                return *diagnostic;
-            }
-            auto rhs = lower_expr(binary->rhs, graph);
-            if (const auto* diagnostic = std::get_if<Diagnostic>(&rhs)) {
-                return *diagnostic;
-            }
-            const std::size_t output = append_value(graph, std::string{}, expr->type, false);
-            GraphNode node{
-                GraphNodeKind::Binary,
-                output,
-                std::string{},
-                std::nullopt,
-                binary->op,
-                FeValue::none(),
-                {std::get<std::size_t>(lhs), std::get<std::size_t>(rhs)},
-            };
-            if (auto diagnostic = append_node(graph, std::move(node))) {
-                return *diagnostic;
-            }
-            return output;
+            return lowerBinaryExpr(*binary, expr->type, graph);
         }
         if (const auto* call = std::get_if<FeCallExpr>(&expr->kind)) {
-            std::vector<std::size_t> inputs;
-            for (const auto& arg : call->args) {
-                auto lowered = lower_expr(arg.value, graph);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-                    return *diagnostic;
-                }
-                inputs.push_back(std::get<std::size_t>(lowered));
-            }
-            const std::size_t output = append_value(graph, std::string{}, expr->type, false);
-            const bool is_ctor = expr->type.kind == FeTypeKind::Callable || isCallableLibraryOp(call->callee);
-            GraphNodeKind kind = is_ctor
-                ? GraphNodeKind::LibraryCtor
-                : (isPrimitiveTensorOp(call->callee) ? GraphNodeKind::PrimitiveCall : GraphNodeKind::LibraryCall);
-            GraphNode node{
-                kind,
-                output,
-                call->callee,
-                graph_op_id_name(call->callee),
-                FeBinaryOp::Add,
-                FeValue::none(),
-                std::move(inputs),
-            };
-            if (auto diagnostic = append_node(graph, std::move(node))) {
-                return *diagnostic;
-            }
-            return output;
+            return lowerCallExpr(*call, expr->type, graph);
         }
         if (const auto* apply = std::get_if<FeApplyExpr>(&expr->kind)) {
-            std::vector<std::size_t> inputs;
-            auto callee = lower_expr(apply->callee, graph);
-            if (const auto* diagnostic = std::get_if<Diagnostic>(&callee)) {
-                return *diagnostic;
-            }
-            inputs.push_back(std::get<std::size_t>(callee));
-            for (const auto& arg : apply->args) {
-                auto lowered = lower_expr(arg.value, graph);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered)) {
-                    return *diagnostic;
-                }
-                inputs.push_back(std::get<std::size_t>(lowered));
-            }
-            if (inputs.size() == 2) {
-                auto lowered_linear = try_lower_linear_apply(graph, inputs[0], inputs[1], expr->type);
-                if (const auto* diagnostic = std::get_if<Diagnostic>(&lowered_linear)) {
-                    return *diagnostic;
-                }
-                if (const auto lowered_output = std::get<std::optional<std::size_t>>(lowered_linear)) {
-                    return *lowered_output;
-                }
-            }
-            const std::size_t output = append_value(graph, std::string{}, expr->type, false);
-            GraphNode node{
-                GraphNodeKind::Apply,
-                output,
-                std::string{},
-                std::nullopt,
-                FeBinaryOp::Add,
-                FeValue::none(),
-                std::move(inputs),
-            };
-            if (auto diagnostic = append_node(graph, std::move(node))) {
-                return *diagnostic;
-            }
-            return output;
+            return lowerApplyExpr(*apply, expr->type, graph);
         }
         if (std::holds_alternative<FeListExpr>(expr->kind)) {
             return graph_error("Graph builder does not support list expressions yet");

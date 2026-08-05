@@ -636,6 +636,12 @@ private:
     std::optional<Diagnostic> lastDiagnostic_;
 
     std::variant<FeExprPtr, Diagnostic> lowerExpr(const Expr& expr);
+    std::variant<FeExprPtr, Diagnostic> lowerLiteralExpr(const Expr& expr);
+    std::variant<FeExprPtr, Diagnostic> lowerIdentifierExpr(const Expr& expr, const IdentifierExpr& ident);
+    std::variant<FeExprPtr, Diagnostic> lowerCallExpr(const Expr& expr, const CallExpr& call);
+    std::variant<FeExprPtr, Diagnostic> lowerBinaryExpr(const Expr& expr, const BinaryExpr& binary);
+    std::variant<FeExprPtr, Diagnostic> lowerUnaryExpr(const Expr& expr, const UnaryExpr& unary);
+
     std::variant<FeExprPtr, Diagnostic> lowerArrowExpr(const Expr& expr);
     std::variant<FeExprPtr, Diagnostic> lowerArrowStageExpr(const Expr& expr, FeExprPtr current);
     std::variant<FeExprPtr, Diagnostic> lowerArrowCallStage(
@@ -652,6 +658,11 @@ private:
     );
     std::variant<std::vector<FeStmt>, Diagnostic> lowerScope(const Stmt& stmt);
     std::variant<FeStmt, Diagnostic> lowerStmt(const Stmt& stmt);
+    std::variant<FeStmt, Diagnostic> lowerReturnStmt(const ReturnStmt& stmt);
+    std::variant<FeStmt, Diagnostic> lowerExprStmt(const ExprStmt& stmt);
+    std::variant<FeStmt, Diagnostic> lowerVarDeclStmt(const Stmt& parent, const VarDecl& stmt);
+    std::variant<FeStmt, Diagnostic> lowerAssignStmt(const Stmt& parent, const AssignStmt& stmt);
+    std::variant<FeStmt, Diagnostic> lowerIfStmt(const Stmt& parent, const IfStmt& stmt);
     std::variant<FeFunction, Diagnostic> lowerFunction(const Function& function);
     std::variant<FeLayer, Diagnostic> lowerLayer(const Layer& layer);
     std::variant<FeConfig, Diagnostic> lowerConfig(const Config& config);

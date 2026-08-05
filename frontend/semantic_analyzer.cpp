@@ -505,6 +505,7 @@ SemanticAnalyzer::analyzeExprStmt(const ExprStmt &value,
 
 std::optional<Diagnostic>
 SemanticAnalyzer::analyzeVarDeclStmt(const VarDecl &value,
+                                     std::uint32_t nodeId,
                                      const SourceSpan &span,
                                      const Program &program) {
   Type finalType = value.type;
@@ -533,12 +534,13 @@ SemanticAnalyzer::analyzeVarDeclStmt(const VarDecl &value,
   }
   const auto kind = currentCallableName_ ? SemanticSymbolKind::Local
                                          : SemanticSymbolKind::Global;
-  recordDeclaration(span, value.name, kind, finalType);
+  recordDeclaration(nodeId, span, value.name, kind, finalType);
   return declareVar(value.name, std::move(finalType), kind, span);
 }
 
 std::optional<Diagnostic>
 SemanticAnalyzer::analyzeAssignStmt(const AssignStmt &value,
+                                    std::uint32_t nodeId,
                                     const SourceSpan &span,
                                     const Program &program) {
   auto analyzed = analyzeExpr(*value.value, program);
@@ -551,18 +553,18 @@ SemanticAnalyzer::analyzeAssignStmt(const AssignStmt &value,
     // Variable not found, implicitly declare it in the current scope
     const auto kind = currentCallableName_ ? SemanticSymbolKind::Local
                                            : SemanticSymbolKind::Global;
-    recordDeclaration(span, value.name, kind, valueType);
+    recordDeclaration(nodeId, span, value.name, kind, valueType);
     if (auto diagnostic =
             declareVar(value.name, valueType, kind, span)) {
       return diagnostic;
     }
-    recordAssignment(span, value.name, kind, valueType, valueType);
+    recordAssignment(nodeId, span, value.name, kind, valueType, valueType);
   } else {
     if (!isCompatible(symbol->type, valueType)) {
       return error(span,
                    "Assignment type mismatch for '" + value.name + "'");
     }
-    recordAssignment(span, value.name, symbol->kind, symbol->type,
+    recordAssignment(nodeId, span, value.name, symbol->kind, symbol->type,
                      valueType);
   }
   return std::nullopt;
@@ -627,9 +629,9 @@ SemanticAnalyzer::analyzeStmt(const Stmt &stmt, const Program &program) {
         } else if constexpr (std::is_same_v<T, ExprStmt>) {
           return analyzeExprStmt(value, program);
         } else if constexpr (std::is_same_v<T, VarDecl>) {
-          return analyzeVarDeclStmt(value, stmt.span, program);
+          return analyzeVarDeclStmt(value, stmt.id, stmt.span, program);
         } else if constexpr (std::is_same_v<T, AssignStmt>) {
-          return analyzeAssignStmt(value, stmt.span, program);
+          return analyzeAssignStmt(value, stmt.id, stmt.span, program);
         } else if constexpr (std::is_same_v<T, ScopeStmt>) {
           return analyzeScopeStmt(value, program);
         } else if constexpr (std::is_same_v<T, IfStmt>) {
@@ -657,9 +659,9 @@ SemanticAnalyzer::analyzeExpr(const Expr &expr, const Program &program) {
         } else if constexpr (std::is_same_v<T, StringLiteral>) {
           return Type::strType();
         } else if constexpr (std::is_same_v<T, IdentifierExpr>) {
-          return visitIdentifier(value.name, expr.span);
+          return visitIdentifier(expr, value.name, expr.span);
         } else if constexpr (std::is_same_v<T, CallExpr>) {
-          return visitCall(value.callee, value.args, expr.span, program);
+          return visitCall(expr, value.callee, value.args, expr.span, program);
         } else if constexpr (std::is_same_v<T, RepeatExpr>) {
           return error(
               expr.span,
@@ -667,7 +669,7 @@ SemanticAnalyzer::analyzeExpr(const Expr &expr, const Program &program) {
         } else if constexpr (std::is_same_v<T, UnaryExpr>) {
           return visitUnary(*value.operand, value.op, expr.span, program);
         } else if constexpr (std::is_same_v<T, BinaryExpr>) {
-          return visitBinary(*value.lhs, *value.rhs, value.op, expr.span,
+          return visitBinary(expr, *value.lhs, *value.rhs, value.op, expr.span,
                              program);
         } else if constexpr (std::is_same_v<T, TernaryExpr>) {
           return visitTernary(*value.thenExpr, *value.condition,
@@ -712,24 +714,24 @@ SemanticAnalyzer::analyzeExpr(const Expr &expr, const Program &program) {
 }
 
 std::variant<Type, Diagnostic>
-SemanticAnalyzer::visitIdentifier(const std::string &name,
+SemanticAnalyzer::visitIdentifier(const Expr &expr, const std::string &name,
                                   const SourceSpan &span) {
   if (name == "None") {
     return Type::noneType();
   }
   if (const Symbol *symbol = findVar(name)) {
-    recordIdentifier(span, name, symbol->kind, symbol->type);
+    recordIdentifier(expr.id, span, name, symbol->kind, symbol->type);
     return symbol->type;
   }
   if (configs_.count(name) != 0) {
-    recordIdentifier(span, name, SemanticSymbolKind::Config, Type::noneType());
+    recordIdentifier(expr.id, span, name, SemanticSymbolKind::Config, Type::noneType());
     return Type::noneType();
   }
   return error(span, "Undefined variable '" + name + "'");
 }
 
 std::variant<Type, Diagnostic>
-SemanticAnalyzer::visitCall(const std::string &callee,
+SemanticAnalyzer::visitCall(const Expr &expr, const std::string &callee,
                             const std::vector<CallArgument> &args,
                             const SourceSpan &span, const Program &program) {
   auto function = functions_.find(callee);
@@ -759,7 +761,7 @@ SemanticAnalyzer::visitCall(const std::string &callee,
     }
     Type result =
         infer_call_result_type(callee, function->second.returnType, argTypes);
-    recordCall(span, callee,
+    recordCall(expr.id, span, callee,
                isBuiltinOp(callee) ? SemanticCallTargetKind::BuiltinFunction
                                    : SemanticCallTargetKind::Function,
                result, false);
@@ -791,7 +793,7 @@ SemanticAnalyzer::visitCall(const std::string &callee,
     }
     Type result =
         infer_call_result_type(callee, layer->second.returnType, argTypes);
-    recordCall(span, callee, SemanticCallTargetKind::Layer, result, false);
+    recordCall(expr.id, span, callee, SemanticCallTargetKind::Layer, result, false);
     return result;
   }
 
@@ -815,13 +817,13 @@ SemanticAnalyzer::visitCall(const std::string &callee,
       if (symbol->type.callableReturn->base == TypeBase::Tensor &&
           input_type.base == TypeBase::Tensor) {
         result = Type::tensor(input_type.tensorDtype,
-                              symbol->type.callableReturn->tensorShapeExpr,
-                              input_type.tensorRank);
+                               symbol->type.callableReturn->tensorShapeExpr,
+                               input_type.tensorRank);
       } else {
         result = *symbol->type.callableReturn;
       }
     }
-    recordCall(span, callee, SemanticCallTargetKind::CallableLocal, result,
+    recordCall(expr.id, span, callee, SemanticCallTargetKind::CallableLocal, result,
                false);
     return result;
   }
@@ -854,7 +856,7 @@ SemanticAnalyzer::visitUnary(const Expr &operand, TokenType op,
 }
 
 std::variant<Type, Diagnostic>
-SemanticAnalyzer::visitBinary(const Expr &lhs, const Expr &rhs, TokenType op,
+SemanticAnalyzer::visitBinary(const Expr &expr, const Expr &lhs, const Expr &rhs, TokenType op,
                               const SourceSpan &span, const Program &program) {
   if (op == TokenType::Dot) {
     const auto *lhs_id = std::get_if<IdentifierExpr>(&lhs.kind);
@@ -864,7 +866,7 @@ SemanticAnalyzer::visitBinary(const Expr &lhs, const Expr &rhs, TokenType op,
       if (config != configs_.end()) {
         auto field = config->second.find(rhs_id->name);
         if (field != config->second.end()) {
-          recordConfigFieldAccess(span, lhs_id->name, rhs_id->name,
+          recordConfigFieldAccess(expr.id, span, lhs_id->name, rhs_id->name,
                                   field->second);
           return field->second;
         }
@@ -991,7 +993,7 @@ std::variant<Type, Diagnostic>
 SemanticAnalyzer::analyzeStage(const Expr &expr, const Type &input_type,
                                const Program &program) {
   if (const auto *call = std::get_if<CallExpr>(&expr.kind)) {
-    return analyzeArrowCall(call->callee, call->args, expr.span, input_type,
+    return analyzeArrowCall(expr, call->callee, call->args, expr.span, input_type,
                             program);
   }
   if (const auto *repeat = std::get_if<RepeatExpr>(&expr.kind)) {
@@ -1007,7 +1009,7 @@ SemanticAnalyzer::analyzeStage(const Expr &expr, const Type &input_type,
                    "Repeated arrow stage count must have type int");
     }
     const auto &call = std::get<CallExpr>(repeat->stage->kind);
-    return analyzeArrowCall(call.callee, call.args, repeat->stage->span,
+    return analyzeArrowCall(*repeat->stage, call.callee, call.args, repeat->stage->span,
                             input_type, program);
   }
   if (const auto *unary = std::get_if<UnaryExpr>(&expr.kind)) {
@@ -1200,7 +1202,7 @@ SemanticAnalyzer::analyzeStage(const Expr &expr, const Type &input_type,
 }
 
 std::variant<Type, Diagnostic> SemanticAnalyzer::analyzeArrowCall(
-    const std::string &callee, const std::vector<CallArgument> &args,
+    const Expr &expr, const std::string &callee, const std::vector<CallArgument> &args,
     const SourceSpan &span, const Type &input_type, const Program &program) {
   std::vector<Type> argTypes{input_type};
   for (const auto &arg : args) {
@@ -1240,7 +1242,7 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyzeArrowCall(
       return *diagnostic;
     }
     Type result = std::get<Type>(std::move(unwrapped));
-    recordCall(span, callee,
+    recordCall(expr.id, span, callee,
                isBuiltinOp(callee) ? SemanticCallTargetKind::BuiltinFunction
                                    : SemanticCallTargetKind::Function,
                result, true);
@@ -1253,7 +1255,7 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyzeArrowCall(
       return *diagnostic;
     }
     Type result = layer->second.returnType;
-    recordCall(span, callee, SemanticCallTargetKind::Layer, result, true);
+    recordCall(expr.id, span, callee, SemanticCallTargetKind::Layer, result, true);
     return result;
   }
 
@@ -1272,7 +1274,7 @@ std::variant<Type, Diagnostic> SemanticAnalyzer::analyzeArrowCall(
       return *diagnostic;
     }
     Type result = std::get<Type>(std::move(unwrapped));
-    recordCall(span, callee, SemanticCallTargetKind::CallableLocal, result,
+    recordCall(expr.id, span, callee, SemanticCallTargetKind::CallableLocal, result,
                true);
     return result;
   }
@@ -1636,22 +1638,32 @@ void SemanticAnalyzer::recordSymbol(SemanticSymbol symbol) {
 }
 
 void SemanticAnalyzer::recordExprType(const Expr &expr, Type type) {
+  std::size_t idx = semanticInfo_.exprs.size();
   semanticInfo_.exprs.push_back(
-      SemanticExprInfo{expr.span, std::move(type), currentCallableName_});
+      SemanticExprInfo{expr.id, expr.span, std::move(type), currentCallableName_});
+  if (expr.id != 0) {
+    semanticInfo_.expr_index[expr.id] = idx;
+  }
 }
 
-void SemanticAnalyzer::recordIdentifier(const SourceSpan &span,
+void SemanticAnalyzer::recordIdentifier(std::uint32_t nodeId, const SourceSpan &span,
                                         const std::string &name,
                                         SemanticSymbolKind target, Type type) {
+  std::size_t idx = semanticInfo_.identifiers.size();
   semanticInfo_.identifiers.push_back(SemanticIdentifierInfo{
-      span, name, target, std::move(type), currentCallableName_});
+      nodeId, span, name, target, std::move(type), currentCallableName_});
+  if (nodeId != 0) {
+    semanticInfo_.identifier_index[nodeId] = idx;
+  }
 }
 
-void SemanticAnalyzer::recordAssignment(const SourceSpan &span,
+void SemanticAnalyzer::recordAssignment(std::uint32_t nodeId, const SourceSpan &span,
                                         const std::string &name,
                                         SemanticSymbolKind target,
                                         Type targetType, Type valueType) {
+  std::size_t idx = semanticInfo_.assignments.size();
   semanticInfo_.assignments.push_back(SemanticAssignmentInfo{
+      nodeId,
       span,
       name,
       target,
@@ -1659,31 +1671,46 @@ void SemanticAnalyzer::recordAssignment(const SourceSpan &span,
       std::move(valueType),
       currentCallableName_,
   });
+  if (nodeId != 0) {
+    semanticInfo_.assignment_index[nodeId] = idx;
+  }
 }
 
-void SemanticAnalyzer::recordConfigFieldAccess(const SourceSpan &span,
+void SemanticAnalyzer::recordConfigFieldAccess(std::uint32_t nodeId, const SourceSpan &span,
                                                const std::string &configName,
                                                const std::string &fieldName,
                                                Type fieldType) {
+  std::size_t idx = semanticInfo_.configFieldAccesses.size();
   semanticInfo_.configFieldAccesses.push_back(SemanticConfigFieldAccessInfo{
-      span, configName, fieldName, std::move(fieldType), currentCallableName_});
+      nodeId, span, configName, fieldName, std::move(fieldType), currentCallableName_});
+  if (nodeId != 0) {
+    semanticInfo_.config_access_index[nodeId] = idx;
+  }
 }
 
-void SemanticAnalyzer::recordDeclaration(const SourceSpan &span,
+void SemanticAnalyzer::recordDeclaration(std::uint32_t nodeId, const SourceSpan &span,
                                          const std::string &name,
                                          SemanticSymbolKind kind,
                                          Type finalType) {
+  std::size_t idx = semanticInfo_.declarations.size();
   semanticInfo_.declarations.push_back(SemanticDeclarationInfo{
-      span, name, kind, std::move(finalType), currentCallableName_});
+      nodeId, span, name, kind, std::move(finalType), currentCallableName_});
+  if (nodeId != 0) {
+    semanticInfo_.declaration_index[nodeId] = idx;
+  }
 }
 
-void SemanticAnalyzer::recordCall(const SourceSpan &span,
+void SemanticAnalyzer::recordCall(std::uint32_t nodeId, const SourceSpan &span,
                                   const std::string &callee,
                                   SemanticCallTargetKind target,
                                   Type resultType, bool arrowStage) {
+  std::size_t idx = semanticInfo_.calls.size();
   semanticInfo_.calls.push_back(
-      SemanticCallInfo{span, callee, target, std::move(resultType),
+      SemanticCallInfo{nodeId, span, callee, target, std::move(resultType),
                        currentCallableName_, arrowStage});
+  if (nodeId != 0) {
+    semanticInfo_.call_index[nodeId] = idx;
+  }
 }
 
 const char *semanticSymbolKindName(SemanticSymbolKind kind) {

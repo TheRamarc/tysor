@@ -17,12 +17,7 @@ SourceSpan span_of(const Token& token) {
     return SourceSpan{token.line, token.column};
 }
 
-Stmt make_stmt(SourceSpan span, StmtKind kind) {
-    Stmt stmt;
-    stmt.span = span;
-    stmt.kind = std::move(kind);
-    return stmt;
-}
+
 
 bool is_ident_like(TokenType kind) {
     switch (kind) {
@@ -472,7 +467,15 @@ Parser::Parser(std::vector<Token> tokens)
     : tokens_(std::move(tokens)), arena_(std::make_unique<Arena>()) {}
 
 ExprPtr Parser::makeExpr(SourceSpan span, ExprKind kind) {
-    return arena_->allocate<Expr>(Expr{span, std::move(kind)});
+    return arena_->allocate<Expr>(Expr{nextNodeId_++, span, std::move(kind)});
+}
+
+Stmt Parser::makeStmt(SourceSpan span, StmtKind kind) {
+    Stmt stmt;
+    stmt.id = nextNodeId_++;
+    stmt.span = span;
+    stmt.kind = std::move(kind);
+    return stmt;
 }
 
 std::optional<Diagnostic> Parser::takeLastDiagnostic() {
@@ -809,7 +812,7 @@ Stmt Parser::parseScope() {
         statements.push_back(parseStmt());
     }
     expect(TokenType::Dedent, "Expected DEDENT");
-    return make_stmt(span_of(indent_token), ScopeStmt{std::move(statements)});
+    return makeStmt(span_of(indent_token), ScopeStmt{std::move(statements)});
 }
 
 Type Parser::parseType() {
@@ -1026,7 +1029,7 @@ Stmt Parser::parseStmt() {
             Token start = consume();
             auto expr = parseExpression();
             consumeTerminator();
-            return make_stmt(span_of(start), ReturnStmt{std::move(expr)});
+            return makeStmt(span_of(start), ReturnStmt{std::move(expr)});
         }
         // case TokenType::Let:
         //     return parseLetVarDecl();
@@ -1052,15 +1055,15 @@ Stmt Parser::parseStmt() {
                 consumeTerminator();
                 
                 if (type.base != TypeBase::Unknown) {
-                    return make_stmt(span_of(start), VarDecl{std::move(name), std::move(type), std::move(init), std::nullopt});
+                    return makeStmt(span_of(start), VarDecl{std::move(name), std::move(type), std::move(init), std::nullopt});
                 } else {
-                    return make_stmt(span_of(start), AssignStmt{std::move(name), std::move(init)});
+                    return makeStmt(span_of(start), AssignStmt{std::move(name), std::move(init)});
                 }
             } else if (peekKind(1) == TokenType::OpenParen) {
                 Token start = *token;
                 auto expr = parseExpression();
                 consumeTerminator();
-                return make_stmt(span_of(start), ExprStmt{std::move(expr)});
+                return makeStmt(span_of(start), ExprStmt{std::move(expr)});
             }
             failToken("Unexpected identifier or missing assignment.", *token);
         // case TokenType::Mut:
@@ -1088,7 +1091,7 @@ Stmt Parser::parseStmt() {
                 }
                 elseStmt = std::make_unique<Stmt>(parseScope());
             }
-            return make_stmt(
+            return makeStmt(
                 span_of(start),
                 IfStmt{
                     std::move(condition),

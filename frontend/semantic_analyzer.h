@@ -7,6 +7,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -200,303 +201,56 @@ struct SemanticSymbol {
  * @brief Type information deduced for a specific expression span.
  */
 struct SemanticExprInfo {
-  /**
-   * @brief The source location of the expression.
-   *
-   * Why it exists: Used as a key to look up type information for a specific AST
-   * node. What it tracks: The SourceSpan where the expression is located. What
-   * mutates/updates it: Populated during AST traversal.
-   */
+  std::uint32_t nodeId = 0;
   SourceSpan span{};
-
-  /**
-   * @brief The inferred type of the expression.
-   *
-   * Why it exists: Prevents re-running type inference during lowering.
-   * What it tracks: The deduced Type of the expression.
-   * What mutates/updates it: Populated during type analysis.
-   */
   Type type;
-
-  /**
-   * @brief The function/layer owning this expression.
-   *
-   * Why it exists: Disambiguates identical spans across multiple parsed files
-   * (if concatenated) or inline contexts. What it tracks: The name of the
-   * surrounding callable context. What mutates/updates it: Populated during AST
-   * traversal.
-   */
   std::optional<std::string> owner;
 };
 
-/**
- * @brief Resolution information for an identifier expression.
- */
 struct SemanticIdentifierInfo {
-  /**
-   * @brief The source location of the identifier.
-   *
-   * Why it exists: Maps the resolution info back to the specific IdentifierExpr
-   * AST node. What it tracks: The SourceSpan of the identifier token. What
-   * mutates/updates it: Populated during AST traversal.
-   */
+  std::uint32_t nodeId = 0;
   SourceSpan span{};
-
-  /**
-   * @brief The string name of the identifier.
-   *
-   * Why it exists: Provides the name to look up in the current scope.
-   * What it tracks: The identifier text.
-   * What mutates/updates it: Populated from the AST node.
-   */
   std::string name;
-
-  /**
-   * @brief The resolved target kind (local, global, layer, etc.).
-   *
-   * Why it exists: Informs the backend whether to emit a local load, function
-   * pointer, or parameter access. What it tracks: The SemanticSymbolKind
-   * determined from scope lookup. What mutates/updates it: Populated after
-   * resolving the name.
-   */
   SemanticSymbolKind target = SemanticSymbolKind::Local;
-
-  /**
-   * @brief The resolved type of the identifier.
-   *
-   * Why it exists: Caches type information so lowering doesn't re-resolve the
-   * name. What it tracks: The Type from the corresponding Symbol. What
-   * mutates/updates it: Populated during type analysis.
-   */
   Type type;
-
-  /**
-   * @brief The function/layer owning this identifier.
-   *
-   * Why it exists: Contextual disambiguation.
-   * What it tracks: The enclosing callable name.
-   * What mutates/updates it: Populated during AST traversal.
-   */
   std::optional<std::string> owner;
 };
 
-/**
- * @brief Validation info for an assignment statement.
- */
 struct SemanticAssignmentInfo {
-  /**
-   * @brief The source location of the assignment.
-   *
-   * Why it exists: Used to map this info to the corresponding AssignStmt AST
-   * node. What it tracks: The SourceSpan of the assignment. What
-   * mutates/updates it: Populated during AST traversal.
-   */
+  std::uint32_t nodeId = 0;
   SourceSpan span{};
-
-  /**
-   * @brief The name of the variable being assigned to.
-   *
-   * Why it exists: Identifies the target of the store operation.
-   * What it tracks: The LHS identifier text.
-   * What mutates/updates it: Populated from the AST.
-   */
   std::string targetName;
-
-  /**
-   * @brief The resolved target kind of the variable.
-   *
-   * Why it exists: Helps determine the correct store instruction (e.g., local
-   * vs global). What it tracks: The SemanticSymbolKind of the target. What
-   * mutates/updates it: Resolved by looking up the target name in the current
-   * scope.
-   */
   SemanticSymbolKind targetKind = SemanticSymbolKind::Local;
-
-  /**
-   * @brief The expected type of the target variable.
-   *
-   * Why it exists: Needed to validate that the assigned value matches.
-   * What it tracks: The target's registered Type.
-   * What mutates/updates it: Found during scope lookup.
-   */
   Type targetType;
-
-  /**
-   * @brief The inferred type of the assigned value.
-   *
-   * Why it exists: Ensures the RHS evaluates to an appropriate type.
-   * What it tracks: The Type of the expression being assigned.
-   * What mutates/updates it: Populated after analyzing the RHS expression.
-   */
   Type valueType;
-
-  /**
-   * @brief The function/layer owning this assignment.
-   *
-   * Why it exists: Contextual disambiguation.
-   * What it tracks: The enclosing callable name.
-   * What mutates/updates it: Populated during AST traversal.
-   */
   std::optional<std::string> owner;
 };
 
-/**
- * @brief Validation info for a config field access (e.g. `cfg.learningRate`).
- */
 struct SemanticConfigFieldAccessInfo {
-  /**
-   * @brief The source location of the field access.
-   *
-   * Why it exists: Maps info back to the member access AST node.
-   * What it tracks: The SourceSpan of the access expression.
-   * What mutates/updates it: Populated during AST traversal.
-   */
+  std::uint32_t nodeId = 0;
   SourceSpan span{};
-
-  /**
-   * @brief The name of the config object.
-   *
-   * Why it exists: Identifies which configuration is being read.
-   * What it tracks: The text of the base identifier.
-   * What mutates/updates it: Extracted from the LHS of the member access.
-   */
   std::string configName;
-
-  /**
-   * @brief The name of the specific field within the config.
-   *
-   * Why it exists: Identifies the precise value being accessed.
-   * What it tracks: The text of the field identifier.
-   * What mutates/updates it: Extracted from the RHS of the member access.
-   */
   std::string fieldName;
-
-  /**
-   * @brief The resolved type of the config field.
-   *
-   * Why it exists: Needed for downstream operations consuming the field value.
-   * What it tracks: The type registered for this field in the configuration.
-   * What mutates/updates it: Looked up from the config definition during
-   * analysis.
-   */
   Type fieldType;
-
-  /**
-   * @brief The function/layer owning this access.
-   *
-   * Why it exists: Contextual disambiguation.
-   * What it tracks: The enclosing callable name.
-   * What mutates/updates it: Populated during AST traversal.
-   */
   std::optional<std::string> owner;
 };
 
-/**
- * @brief Type and scope info for a variable declaration.
- */
 struct SemanticDeclarationInfo {
-  /**
-   * @brief The source location of the declaration.
-   *
-   * Why it exists: Used to map info back to the VarDecl AST node.
-   * What it tracks: The SourceSpan of the declaration.
-   * What mutates/updates it: Populated during AST traversal.
-   */
+  std::uint32_t nodeId = 0;
   SourceSpan span{};
-
-  /**
-   * @brief The name of the declared variable.
-   *
-   * Why it exists: Associates the declared name for IR generation.
-   * What it tracks: The identifier text.
-   * What mutates/updates it: Extracted from the AST.
-   */
   std::string name;
-
-  /**
-   * @brief The symbol kind (e.g. local).
-   *
-   * Why it exists: Specifies how the variable should be allocated.
-   * What it tracks: The SemanticSymbolKind.
-   * What mutates/updates it: Set based on declaration context.
-   */
   SemanticSymbolKind kind = SemanticSymbolKind::Local;
-
-  /**
-   * @brief The deduced or explicitly stated type of the variable.
-   *
-   * Why it exists: Used for allocating appropriately sized storage.
-   * What it tracks: The final resolved Type.
-   * What mutates/updates it: Inferred from the initializer or type annotation.
-   */
   Type finalType;
-
-  /**
-   * @brief The function/layer owning this declaration.
-   *
-   * Why it exists: Contextual disambiguation.
-   * What it tracks: The enclosing callable name.
-   * What mutates/updates it: Populated during AST traversal.
-   */
   std::optional<std::string> owner;
 };
 
-/**
- * @brief Target resolution for a function/layer call.
- */
 struct SemanticCallInfo {
-  /**
-   * @brief The source location of the call expression.
-   *
-   * Why it exists: Used to map info back to the CallExpr AST node.
-   * What it tracks: The SourceSpan of the call.
-   * What mutates/updates it: Populated during AST traversal.
-   */
+  std::uint32_t nodeId = 0;
   SourceSpan span{};
-
-  /**
-   * @brief The name of the callable being invoked.
-   *
-   * Why it exists: Indicates which function/layer to dispatch to.
-   * What it tracks: The callee identifier text.
-   * What mutates/updates it: Extracted from the AST.
-   */
   std::string callee;
-
-  /**
-   * @brief The resolved kind of the callable target.
-   *
-   * Why it exists: Differentiates between built-in ops, user functions, and
-   * layers. What it tracks: The SemanticCallTargetKind enum. What
-   * mutates/updates it: Looked up from the symbol/function/layer tables.
-   */
   SemanticCallTargetKind target = SemanticCallTargetKind::Function;
-
-  /**
-   * @brief The inferred return type of the call.
-   *
-   * Why it exists: Required for further expression type-checking.
-   * What it tracks: The Type returned by the callable.
-   * What mutates/updates it: Looked up from the callable's signature.
-   */
   Type resultType;
-
-  /**
-   * @brief The function/layer owning this call.
-   *
-   * Why it exists: Contextual disambiguation.
-   * What it tracks: The enclosing callable name.
-   * What mutates/updates it: Populated during AST traversal.
-   */
   std::optional<std::string> owner;
-
-  /**
-   * @brief Whether this call is part of an Arrow pipeline expression (`->`).
-   *
-   * Why it exists: Arrow pipeline stages might need special lowering semantics.
-   * What it tracks: A boolean flag indicating pipeline involvement.
-   * What mutates/updates it: Set when traversing ArrowExpr branches.
-   */
   bool arrowStage = false;
 };
 
@@ -569,6 +323,68 @@ struct SemanticInfo {
    * What mutates/updates it: Appended during AST traversal.
    */
   std::vector<SemanticCallInfo> calls;
+
+  std::unordered_map<std::uint32_t, std::size_t> expr_index;
+  std::unordered_map<std::uint32_t, std::size_t> identifier_index;
+  std::unordered_map<std::uint32_t, std::size_t> assignment_index;
+  std::unordered_map<std::uint32_t, std::size_t> declaration_index;
+  std::unordered_map<std::uint32_t, std::size_t> call_index;
+  std::unordered_map<std::uint32_t, std::size_t> config_access_index;
+
+  const SemanticExprInfo* findExpr(std::uint32_t nodeId, const SourceSpan& span) const {
+    if (nodeId != 0) {
+      auto it = expr_index.find(nodeId);
+      if (it != expr_index.end() && it->second < exprs.size()) return &exprs[it->second];
+    }
+    for (const auto& item : exprs) {
+      if (item.span.line == span.line && item.span.column == span.column) return &item;
+    }
+    return nullptr;
+  }
+
+  const SemanticIdentifierInfo* findIdentifier(std::uint32_t nodeId, const SourceSpan& span) const {
+    if (nodeId != 0) {
+      auto it = identifier_index.find(nodeId);
+      if (it != identifier_index.end() && it->second < identifiers.size()) return &identifiers[it->second];
+    }
+    for (const auto& item : identifiers) {
+      if (item.span.line == span.line && item.span.column == span.column) return &item;
+    }
+    return nullptr;
+  }
+
+  const SemanticCallInfo* findCall(std::uint32_t nodeId, const SourceSpan& span) const {
+    if (nodeId != 0) {
+      auto it = call_index.find(nodeId);
+      if (it != call_index.end() && it->second < calls.size()) return &calls[it->second];
+    }
+    for (const auto& item : calls) {
+      if (item.span.line == span.line && item.span.column == span.column) return &item;
+    }
+    return nullptr;
+  }
+
+  const SemanticDeclarationInfo* findDeclaration(std::uint32_t nodeId, const SourceSpan& span) const {
+    if (nodeId != 0) {
+      auto it = declaration_index.find(nodeId);
+      if (it != declaration_index.end() && it->second < declarations.size()) return &declarations[it->second];
+    }
+    for (const auto& item : declarations) {
+      if (item.span.line == span.line && item.span.column == span.column) return &item;
+    }
+    return nullptr;
+  }
+
+  const SemanticAssignmentInfo* findAssignment(std::uint32_t nodeId, const SourceSpan& span) const {
+    if (nodeId != 0) {
+      auto it = assignment_index.find(nodeId);
+      if (it != assignment_index.end() && it->second < assignments.size()) return &assignments[it->second];
+    }
+    for (const auto& item : assignments) {
+      if (item.span.line == span.line && item.span.column == span.column) return &item;
+    }
+    return nullptr;
+  }
 };
 
 using SemanticResult = std::variant<SemanticInfo, Diagnostic>;
@@ -766,9 +582,11 @@ private:
   std::optional<Diagnostic> analyzeExprStmt(const ExprStmt &value,
                                             const Program &program);
   std::optional<Diagnostic> analyzeVarDeclStmt(const VarDecl &value,
+                                               std::uint32_t nodeId,
                                                const SourceSpan &span,
                                                const Program &program);
   std::optional<Diagnostic> analyzeAssignStmt(const AssignStmt &value,
+                                              std::uint32_t nodeId,
                                               const SourceSpan &span,
                                               const Program &program);
   std::optional<Diagnostic> analyzeScopeStmt(const ScopeStmt &value,
@@ -777,15 +595,15 @@ private:
                                           const Program &program);
   std::variant<Type, Diagnostic> analyzeExpr(const Expr &expr,
                                              const Program &program);
-  std::variant<Type, Diagnostic> visitIdentifier(const std::string &name,
+  std::variant<Type, Diagnostic> visitIdentifier(const Expr &expr, const std::string &name,
                                                  const SourceSpan &span);
   std::variant<Type, Diagnostic>
-  visitCall(const std::string &callee, const std::vector<CallArgument> &args,
+  visitCall(const Expr &expr, const std::string &callee, const std::vector<CallArgument> &args,
             const SourceSpan &span, const Program &program);
   std::variant<Type, Diagnostic> visitUnary(const Expr &operand, TokenType op,
                                             const SourceSpan &span,
                                             const Program &program);
-  std::variant<Type, Diagnostic> visitBinary(const Expr &lhs, const Expr &rhs,
+  std::variant<Type, Diagnostic> visitBinary(const Expr &expr, const Expr &lhs, const Expr &rhs,
                                              TokenType op,
                                              const SourceSpan &span,
                                              const Program &program);
@@ -801,7 +619,7 @@ private:
                                               const Type &input_type,
                                               const Program &program);
   std::variant<Type, Diagnostic> analyzeArrowCall(
-      const std::string &callee, const std::vector<CallArgument> &args,
+      const Expr &expr, const std::string &callee, const std::vector<CallArgument> &args,
       const SourceSpan &span, const Type &input_type, const Program &program);
   std::variant<Type, Diagnostic> unwrapCallableStage(const Type &stage_type,
                                                      const Type &input_type);
@@ -835,17 +653,17 @@ private:
   void popScope();
   void recordSymbol(SemanticSymbol symbol);
   void recordExprType(const Expr &expr, Type type);
-  void recordIdentifier(const SourceSpan &span, const std::string &name,
+  void recordIdentifier(std::uint32_t nodeId, const SourceSpan &span, const std::string &name,
                         SemanticSymbolKind target, Type type);
-  void recordAssignment(const SourceSpan &span, const std::string &name,
+  void recordAssignment(std::uint32_t nodeId, const SourceSpan &span, const std::string &name,
                         SemanticSymbolKind target, Type targetType,
                         Type valueType);
-  void recordConfigFieldAccess(const SourceSpan &span,
+  void recordConfigFieldAccess(std::uint32_t nodeId, const SourceSpan &span,
                                const std::string &configName,
                                const std::string &fieldName, Type fieldType);
-  void recordDeclaration(const SourceSpan &span, const std::string &name,
+  void recordDeclaration(std::uint32_t nodeId, const SourceSpan &span, const std::string &name,
                          SemanticSymbolKind kind, Type finalType);
-  void recordCall(const SourceSpan &span, const std::string &callee,
+  void recordCall(std::uint32_t nodeId, const SourceSpan &span, const std::string &callee,
                   SemanticCallTargetKind target, Type resultType,
                   bool arrowStage);
 };
