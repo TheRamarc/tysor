@@ -34,6 +34,10 @@ Type tensor_any() {
 Type infer_call_result_type(const std::string &callee,
                             const Type &declared_type,
                             const std::vector<Type> &argTypes) {
+  auto op_id = lookupOpId(callee);
+  if (op_id) {
+    return OpRegistry::instance().inferResultType(*op_id, declared_type, argTypes);
+  }
   if (declared_type.base == TypeBase::Callable && !argTypes.empty()) {
     if (declared_type.callableReturn &&
         declared_type.callableReturn->base == TypeBase::Tensor &&
@@ -45,31 +49,11 @@ Type infer_call_result_type(const std::string &callee,
     }
     return declared_type;
   }
-
   if (declared_type.base != TypeBase::Tensor || argTypes.empty() ||
       argTypes[0].base != TypeBase::Tensor) {
     return declared_type;
   }
-
   const Type &first = argTypes[0];
-  if (callee == "reshape") {
-    return Type::tensor(first.tensorDtype, std::nullopt, std::nullopt);
-  }
-  if (callee == "sum" || callee == "mean") {
-    return Type::tensor(first.tensorDtype, std::nullopt, 1);
-  }
-  if (callee == "matmul") {
-    return Type::tensor(first.tensorDtype, declared_type.tensorShapeExpr,
-                        first.tensorRank ? first.tensorRank
-                                         : declared_type.tensorRank);
-  }
-  if (callee == "cross_entropy") {
-    return Type::tensor(first.tensorDtype, declared_type.tensorShapeExpr,
-                        declared_type.tensorRank);
-  }
-  if (preservesFirstTensorArg(callee)) {
-    return first;
-  }
   return Type::tensor(first.tensorDtype, declared_type.tensorShapeExpr,
                       first.tensorRank);
 }

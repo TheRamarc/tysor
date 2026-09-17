@@ -331,57 +331,72 @@ struct SemanticInfo {
   std::unordered_map<std::uint32_t, std::size_t> call_index;
   std::unordered_map<std::uint32_t, std::size_t> config_access_index;
 
-  const SemanticExprInfo* findExpr(std::uint32_t nodeId, const SourceSpan& span) const {
+  const SemanticExprInfo *findExpr(std::uint32_t nodeId,
+                                   const SourceSpan &span) const {
     if (nodeId != 0) {
       auto it = expr_index.find(nodeId);
-      if (it != expr_index.end() && it->second < exprs.size()) return &exprs[it->second];
+      if (it != expr_index.end() && it->second < exprs.size())
+        return &exprs[it->second];
     }
-    for (const auto& item : exprs) {
-      if (item.span.line == span.line && item.span.column == span.column) return &item;
+    for (const auto &item : exprs) {
+      if (item.span.line == span.line && item.span.column == span.column)
+        return &item;
     }
     return nullptr;
   }
 
-  const SemanticIdentifierInfo* findIdentifier(std::uint32_t nodeId, const SourceSpan& span) const {
+  const SemanticIdentifierInfo *findIdentifier(std::uint32_t nodeId,
+                                               const SourceSpan &span) const {
     if (nodeId != 0) {
       auto it = identifier_index.find(nodeId);
-      if (it != identifier_index.end() && it->second < identifiers.size()) return &identifiers[it->second];
+      if (it != identifier_index.end() && it->second < identifiers.size())
+        return &identifiers[it->second];
     }
-    for (const auto& item : identifiers) {
-      if (item.span.line == span.line && item.span.column == span.column) return &item;
+    for (const auto &item : identifiers) {
+      if (item.span.line == span.line && item.span.column == span.column)
+        return &item;
     }
     return nullptr;
   }
 
-  const SemanticCallInfo* findCall(std::uint32_t nodeId, const SourceSpan& span) const {
+  const SemanticCallInfo *findCall(std::uint32_t nodeId,
+                                   const SourceSpan &span) const {
     if (nodeId != 0) {
       auto it = call_index.find(nodeId);
-      if (it != call_index.end() && it->second < calls.size()) return &calls[it->second];
+      if (it != call_index.end() && it->second < calls.size())
+        return &calls[it->second];
     }
-    for (const auto& item : calls) {
-      if (item.span.line == span.line && item.span.column == span.column) return &item;
+    for (const auto &item : calls) {
+      if (item.span.line == span.line && item.span.column == span.column)
+        return &item;
     }
     return nullptr;
   }
 
-  const SemanticDeclarationInfo* findDeclaration(std::uint32_t nodeId, const SourceSpan& span) const {
+  const SemanticDeclarationInfo *findDeclaration(std::uint32_t nodeId,
+                                                 const SourceSpan &span) const {
     if (nodeId != 0) {
       auto it = declaration_index.find(nodeId);
-      if (it != declaration_index.end() && it->second < declarations.size()) return &declarations[it->second];
+      if (it != declaration_index.end() && it->second < declarations.size())
+        return &declarations[it->second];
     }
-    for (const auto& item : declarations) {
-      if (item.span.line == span.line && item.span.column == span.column) return &item;
+    for (const auto &item : declarations) {
+      if (item.span.line == span.line && item.span.column == span.column)
+        return &item;
     }
     return nullptr;
   }
 
-  const SemanticAssignmentInfo* findAssignment(std::uint32_t nodeId, const SourceSpan& span) const {
+  const SemanticAssignmentInfo *findAssignment(std::uint32_t nodeId,
+                                               const SourceSpan &span) const {
     if (nodeId != 0) {
       auto it = assignment_index.find(nodeId);
-      if (it != assignment_index.end() && it->second < assignments.size()) return &assignments[it->second];
+      if (it != assignment_index.end() && it->second < assignments.size())
+        return &assignments[it->second];
     }
-    for (const auto& item : assignments) {
-      if (item.span.line == span.line && item.span.column == span.column) return &item;
+    for (const auto &item : assignments) {
+      if (item.span.line == span.line && item.span.column == span.column)
+        return &item;
     }
     return nullptr;
   }
@@ -595,16 +610,18 @@ private:
                                           const Program &program);
   std::variant<Type, Diagnostic> analyzeExpr(const Expr &expr,
                                              const Program &program);
-  std::variant<Type, Diagnostic> visitIdentifier(const Expr &expr, const std::string &name,
+  std::variant<Type, Diagnostic> visitIdentifier(const Expr &expr,
+                                                 const std::string &name,
                                                  const SourceSpan &span);
   std::variant<Type, Diagnostic>
-  visitCall(const Expr &expr, const std::string &callee, const std::vector<CallArgument> &args,
-            const SourceSpan &span, const Program &program);
+  visitCall(const Expr &expr, const std::string &callee,
+            const std::vector<CallArgument> &args, const SourceSpan &span,
+            const Program &program);
   std::variant<Type, Diagnostic> visitUnary(const Expr &operand, TokenType op,
                                             const SourceSpan &span,
                                             const Program &program);
-  std::variant<Type, Diagnostic> visitBinary(const Expr &expr, const Expr &lhs, const Expr &rhs,
-                                             TokenType op,
+  std::variant<Type, Diagnostic> visitBinary(const Expr &expr, const Expr &lhs,
+                                             const Expr &rhs, TokenType op,
                                              const SourceSpan &span,
                                              const Program &program);
   std::variant<Type, Diagnostic> visitTernary(const Expr &thenExpr,
@@ -618,9 +635,11 @@ private:
   std::variant<Type, Diagnostic> analyzeStage(const Expr &expr,
                                               const Type &input_type,
                                               const Program &program);
-  std::variant<Type, Diagnostic> analyzeArrowCall(
-      const Expr &expr, const std::string &callee, const std::vector<CallArgument> &args,
-      const SourceSpan &span, const Type &input_type, const Program &program);
+  std::variant<Type, Diagnostic>
+  analyzeArrowCall(const Expr &expr, const std::string &callee,
+                   const std::vector<CallArgument> &args,
+                   const SourceSpan &span, const Type &input_type,
+                   const Program &program);
   std::variant<Type, Diagnostic> unwrapCallableStage(const Type &stage_type,
                                                      const Type &input_type);
   std::optional<Diagnostic> validateTrainConfig(const Config &config,
@@ -653,19 +672,21 @@ private:
   void popScope();
   void recordSymbol(SemanticSymbol symbol);
   void recordExprType(const Expr &expr, Type type);
-  void recordIdentifier(std::uint32_t nodeId, const SourceSpan &span, const std::string &name,
-                        SemanticSymbolKind target, Type type);
-  void recordAssignment(std::uint32_t nodeId, const SourceSpan &span, const std::string &name,
-                        SemanticSymbolKind target, Type targetType,
-                        Type valueType);
+  void recordIdentifier(std::uint32_t nodeId, const SourceSpan &span,
+                        const std::string &name, SemanticSymbolKind target,
+                        Type type);
+  void recordAssignment(std::uint32_t nodeId, const SourceSpan &span,
+                        const std::string &name, SemanticSymbolKind target,
+                        Type targetType, Type valueType);
   void recordConfigFieldAccess(std::uint32_t nodeId, const SourceSpan &span,
                                const std::string &configName,
                                const std::string &fieldName, Type fieldType);
-  void recordDeclaration(std::uint32_t nodeId, const SourceSpan &span, const std::string &name,
-                         SemanticSymbolKind kind, Type finalType);
-  void recordCall(std::uint32_t nodeId, const SourceSpan &span, const std::string &callee,
-                  SemanticCallTargetKind target, Type resultType,
-                  bool arrowStage);
+  void recordDeclaration(std::uint32_t nodeId, const SourceSpan &span,
+                         const std::string &name, SemanticSymbolKind kind,
+                         Type finalType);
+  void recordCall(std::uint32_t nodeId, const SourceSpan &span,
+                  const std::string &callee, SemanticCallTargetKind target,
+                  Type resultType, bool arrowStage);
 };
 
 const char *semanticSymbolKindName(SemanticSymbolKind kind);

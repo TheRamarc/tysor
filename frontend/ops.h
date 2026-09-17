@@ -5,7 +5,19 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
+
+/**
+ * @brief Categorizes built-in operations by role.
+ */
+enum class OpCategory {
+  Primitive,
+  LayerCtor,
+  Activation,
+  LibraryOp,
+  Utility,
+};
 
 /**
  * @brief Unique identifiers for built-in operations (both layers and primitive
@@ -69,6 +81,7 @@ struct BuiltinSignature {
  */
 struct OpDefinition {
   OpId id = OpId::Print;
+  OpCategory category = OpCategory::Utility;
   BuiltinSignature signature;
   bool isPrimitiveTensorOp = false;
   bool isLibraryOp = false;
@@ -76,6 +89,29 @@ struct OpDefinition {
   bool preservesFirstTensorArg = false;
   bool runtimeSupportsLibraryOp = false;
   RuntimePrimitiveKind runtimePrimitiveKind = RuntimePrimitiveKind::Unsupported;
+};
+
+/**
+ * @brief Centralized, high-performance registry for all built-in operations.
+ */
+class OpRegistry {
+public:
+  static const OpRegistry &instance();
+
+  const OpDefinition *lookup(std::string_view name) const;
+  const OpDefinition *lookup(OpId id) const;
+  std::optional<OpId> lookupId(std::string_view name) const;
+  const std::vector<OpDefinition> &allOps() const { return ops_; }
+
+  Type inferResultType(OpId id, const Type &declaredReturn,
+                       const std::vector<Type> &argTypes) const;
+
+private:
+  OpRegistry();
+
+  std::vector<OpDefinition> ops_;
+  std::unordered_map<std::string, std::size_t> nameMap_;
+  std::unordered_map<std::size_t, std::size_t> idMap_;
 };
 
 const std::vector<OpDefinition> &allOps();

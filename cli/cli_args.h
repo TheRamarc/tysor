@@ -13,7 +13,7 @@
  * @brief Identifies the target execution backend for the compiled program.
  */
 enum class BackendKind {
-    Local,
+    Host,
     Metal,
     PyTorch,
     Cuda,
@@ -158,7 +158,7 @@ struct CliOptions {
      * 2. What it tracks: The chosen BackendKind (e.g., Local, Metal, PyTorch).
      * 3. What mutates/updates it: Mutated by backend-specific command-line flags.
      */
-    BackendKind backend = BackendKind::Local;
+    BackendKind backend = BackendKind::Host;
 
     /**
      * @brief Shapes of input tensors for the entry function.

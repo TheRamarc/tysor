@@ -279,11 +279,17 @@ struct PlanBuildSkipped {
     std::string reason;
 };
 
+struct PlanBuildSkipped {
+    std::string functionName;
+    std::string reason;
+
+};
+
 struct PlanModule {
     // Why it exists: To determine which hardware executes this specific operation.
     // What it tracks: The execution environment assigned to this op (e.g., Local CPU, Metal).
     // What mutates it: Assigned by the execution planner.
-    BackendKind backend = BackendKind::Local;
+    BackendKind backend = BackendKind::Host;
     // Why it exists: To hold multiple executable units.
     // What it tracks: Built plans ready for runtime consumption.
     // What mutates it: Pushed into during module compilation.

@@ -28,6 +28,7 @@ BuiltinSignature signature(
  */
 OpDefinition op(
     OpId id,
+    OpCategory category,
     BuiltinSignature sig,
     bool primitive,
     bool library,
@@ -38,6 +39,7 @@ OpDefinition op(
 ) {
     return OpDefinition{
         id,
+        category,
         std::move(sig),
         primitive,
         library,
@@ -74,40 +76,119 @@ std::vector<Type> reshape_arg_types() {
  */
 std::vector<OpDefinition> make_ops() {
     return {
-        op(OpId::Linear, signature("linear", Type::callable(tensor_any()), {Type::intType(), Type::intType(), Type::boolType()}, 1, 3), false, true, true, false, true),
-        op(OpId::Tensor, signature("tensor", tensor_any(), {Type::intType(), Type::intType(), Type::boolType()}, 1, 3), false, true, true, false, true),
-        op(OpId::Matmul, signature("matmul", tensor_any(), {tensor_any(), tensor_any()}, 2, 2), true, false, false, false, false, RuntimePrimitiveKind::Matmul),
-        op(OpId::Relu, signature("relu", tensor_any(), {tensor_any()}, 1, 1), true, false, false, true, false, RuntimePrimitiveKind::Relu),
-        op(OpId::Scale, signature("scale", tensor_any(), {tensor_any(), Type::floatType()}, 2, 2), true, true, false, true, false, RuntimePrimitiveKind::Scale),
-        op(OpId::Silu, signature("SiLU", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
-        op(OpId::Gelu, signature("GELU", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
-        op(OpId::Tanh, signature("Tanh", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
-        op(OpId::Sigmoid, signature("Sigmoid", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
-        op(OpId::Softmax, signature("Softmax", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
-        op(OpId::RmsNorm, signature("RMSNorm", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
-        op(OpId::RmsNorm, signature("rms_norm", tensor_any(), {tensor_any(), Type::intType()}, 2, 2), false, true, false, true, false),
-        op(OpId::CrossEntropy, signature("cross_entropy", tensor_any(), {tensor_any(), tensor_any()}, 2, 2), false, true, false, false, false),
-        op(OpId::Embedding, signature("Embedding", Type::callable(tensor_any()), {Type::intType(), Type::intType()}, 2, 2), false, true, true, false, true),
-        op(OpId::Dropout, signature("Dropout", Type::callable(tensor_any()), {Type::floatType()}, 1, 1), false, true, true, false, true),
-        op(OpId::Rope, signature("rope", tensor_any(), {tensor_any(), Type::intType(), Type::floatType()}, 3, 3), false, true, false, true, false),
-        op(OpId::Reshape, signature("reshape", tensor_any(), reshape_arg_types(), 2, 8), false, true, false, false, false),
-        op(OpId::Transpose, signature("transpose", tensor_any(), {tensor_any()}, 1, 1), false, true, false, false, false),
-        op(OpId::Sum, signature("sum", Type::tensor(std::nullopt, std::nullopt, 1), {tensor_any(), Type::intType()}, 1, 2), false, true, false, false, false),
-        op(OpId::Mean, signature("mean", Type::tensor(std::nullopt, std::nullopt, 1), {tensor_any(), Type::intType()}, 1, 2), false, true, false, false, false),
-        op(OpId::Sqrt, signature("sqrt", tensor_any(), {tensor_any()}, 1, 1), false, true, false, true, false),
-        op(OpId::Rsqrt, signature("rsqrt", tensor_any(), {tensor_any()}, 1, 1), false, true, false, true, false),
-        op(OpId::CausalMask, signature("causal_mask", tensor_any(), {tensor_any()}, 1, 1), false, true, false, true, false),
-        op(OpId::FlattenHeads, signature("flatten_heads", tensor_any(), {tensor_any()}, 1, 1), false, true, false, true, false),
-        op(OpId::RepeatKv, signature("repeat_kv", tensor_any(), {tensor_any(), Type::intType()}, 2, 2), false, true, false, true, false),
-        op(OpId::Print, signature("print", Type::noneType(), {}, 0, 8), true, false, false, false, false),
+        op(OpId::Linear, OpCategory::LayerCtor, signature("linear", Type::callable(tensor_any()), {Type::intType(), Type::intType(), Type::boolType()}, 1, 3), false, true, true, false, true),
+        op(OpId::Tensor, OpCategory::LayerCtor, signature("tensor", tensor_any(), {Type::intType(), Type::intType(), Type::boolType()}, 1, 3), false, true, true, false, true),
+        op(OpId::Matmul, OpCategory::Primitive, signature("matmul", tensor_any(), {tensor_any(), tensor_any()}, 2, 2), true, false, false, false, false, RuntimePrimitiveKind::Matmul),
+        op(OpId::Relu, OpCategory::Primitive, signature("relu", tensor_any(), {tensor_any()}, 1, 1), true, false, false, true, false, RuntimePrimitiveKind::Relu),
+        op(OpId::Scale, OpCategory::Primitive, signature("scale", tensor_any(), {tensor_any(), Type::floatType()}, 2, 2), true, true, false, true, false, RuntimePrimitiveKind::Scale),
+        op(OpId::Silu, OpCategory::Activation, signature("SiLU", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
+        op(OpId::Gelu, OpCategory::Activation, signature("GELU", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
+        op(OpId::Tanh, OpCategory::Activation, signature("Tanh", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
+        op(OpId::Sigmoid, OpCategory::Activation, signature("Sigmoid", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
+        op(OpId::Softmax, OpCategory::Activation, signature("Softmax", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
+        op(OpId::RmsNorm, OpCategory::Activation, signature("RMSNorm", Type::callable(tensor_any()), {}, 0, 0), false, true, true, false, true),
+        op(OpId::RmsNorm, OpCategory::LibraryOp, signature("rms_norm", tensor_any(), {tensor_any(), Type::intType()}, 2, 2), false, true, false, true, false),
+        op(OpId::CrossEntropy, OpCategory::LibraryOp, signature("cross_entropy", tensor_any(), {tensor_any(), tensor_any()}, 2, 2), false, true, false, false, false),
+        op(OpId::Embedding, OpCategory::LayerCtor, signature("Embedding", Type::callable(tensor_any()), {Type::intType(), Type::intType()}, 2, 2), false, true, true, false, true),
+        op(OpId::Dropout, OpCategory::Activation, signature("Dropout", Type::callable(tensor_any()), {Type::floatType()}, 1, 1), false, true, true, false, true),
+        op(OpId::Rope, OpCategory::LibraryOp, signature("rope", tensor_any(), {tensor_any(), Type::intType(), Type::floatType()}, 3, 3), false, true, false, true, false),
+        op(OpId::Reshape, OpCategory::LibraryOp, signature("reshape", tensor_any(), reshape_arg_types(), 2, 8), false, true, false, false, false),
+        op(OpId::Transpose, OpCategory::LibraryOp, signature("transpose", tensor_any(), {tensor_any()}, 1, 1), false, true, false, false, false),
+        op(OpId::Sum, OpCategory::LibraryOp, signature("sum", Type::tensor(std::nullopt, std::nullopt, 1), {tensor_any(), Type::intType()}, 1, 2), false, true, false, false, false),
+        op(OpId::Mean, OpCategory::LibraryOp, signature("mean", Type::tensor(std::nullopt, std::nullopt, 1), {tensor_any(), Type::intType()}, 1, 2), false, true, false, false, false),
+        op(OpId::Sqrt, OpCategory::LibraryOp, signature("sqrt", tensor_any(), {tensor_any()}, 1, 1), false, true, false, true, false),
+        op(OpId::Rsqrt, OpCategory::LibraryOp, signature("rsqrt", tensor_any(), {tensor_any()}, 1, 1), false, true, false, true, false),
+        op(OpId::CausalMask, OpCategory::LibraryOp, signature("causal_mask", tensor_any(), {tensor_any()}, 1, 1), false, true, false, true, false),
+        op(OpId::FlattenHeads, OpCategory::LibraryOp, signature("flatten_heads", tensor_any(), {tensor_any()}, 1, 1), false, true, false, true, false),
+        op(OpId::RepeatKv, OpCategory::LibraryOp, signature("repeat_kv", tensor_any(), {tensor_any(), Type::intType()}, 2, 2), false, true, false, true, false),
+        op(OpId::Print, OpCategory::Utility, signature("print", Type::noneType(), {}, 0, 8), true, false, false, false, false),
     };
 }
 
 } // namespace
 
+const OpRegistry& OpRegistry::instance() {
+    static const OpRegistry registry;
+    return registry;
+}
+
+OpRegistry::OpRegistry() : ops_(make_ops()) {
+    for (std::size_t idx = 0; idx < ops_.size(); ++idx) {
+        nameMap_[ops_[idx].signature.name] = idx;
+        idMap_[static_cast<std::size_t>(ops_[idx].id)] = idx;
+    }
+}
+
+const OpDefinition* OpRegistry::lookup(std::string_view name) const {
+    auto found = nameMap_.find(std::string(name));
+    if (found == nameMap_.end()) {
+        return nullptr;
+    }
+    return &ops_[found->second];
+}
+
+const OpDefinition* OpRegistry::lookup(OpId id) const {
+    auto found = idMap_.find(static_cast<std::size_t>(id));
+    if (found == idMap_.end()) {
+        return nullptr;
+    }
+    return &ops_[found->second];
+}
+
+std::optional<OpId> OpRegistry::lookupId(std::string_view name) const {
+    const OpDefinition* def = lookup(name);
+    if (def == nullptr) {
+        return std::nullopt;
+    }
+    return def->id;
+}
+
+Type OpRegistry::inferResultType(OpId id, const Type &declared_type, const std::vector<Type> &argTypes) const {
+    if (declared_type.base == TypeBase::Callable && !argTypes.empty()) {
+        if (declared_type.callableReturn &&
+            declared_type.callableReturn->base == TypeBase::Tensor &&
+            argTypes[0].base == TypeBase::Tensor) {
+            return Type::callable(
+                Type::tensor(argTypes[0].tensorDtype,
+                             declared_type.callableReturn->tensorShapeExpr,
+                             argTypes[0].tensorRank));
+        }
+        return declared_type;
+    }
+
+    if (declared_type.base != TypeBase::Tensor || argTypes.empty() ||
+        argTypes[0].base != TypeBase::Tensor) {
+        return declared_type;
+    }
+
+    const Type &first = argTypes[0];
+    if (id == OpId::Reshape) {
+        return Type::tensor(first.tensorDtype, std::nullopt, std::nullopt);
+    }
+    if (id == OpId::Sum || id == OpId::Mean) {
+        return Type::tensor(first.tensorDtype, std::nullopt, 1);
+    }
+    if (id == OpId::Matmul) {
+        return Type::tensor(first.tensorDtype, declared_type.tensorShapeExpr,
+                            first.tensorRank ? first.tensorRank
+                                             : declared_type.tensorRank);
+    }
+    if (id == OpId::CrossEntropy) {
+        return Type::tensor(first.tensorDtype, declared_type.tensorShapeExpr,
+                            declared_type.tensorRank);
+    }
+
+    const OpDefinition* def = lookup(id);
+    if (def != nullptr && def->preservesFirstTensorArg) {
+        return first;
+    }
+
+    return Type::tensor(first.tensorDtype, declared_type.tensorShapeExpr,
+                        first.tensorRank);
+}
+
 const std::vector<OpDefinition>& allOps() {
-    static const std::vector<OpDefinition> ops = make_ops();
-    return ops;
+    return OpRegistry::instance().allOps();
 }
 
 std::vector<BuiltinSignature> allBuiltinSignatures() {
@@ -119,75 +200,41 @@ std::vector<BuiltinSignature> allBuiltinSignatures() {
 }
 
 const OpDefinition* lookupOp(std::string_view name) {
-    const auto& ops = allOps();
-    auto found = std::find_if(ops.begin(), ops.end(), [&](const OpDefinition& item) {
-        return std::string_view(item.signature.name) == name;
-    });
-    return found == ops.end() ? nullptr : &*found;
+    return OpRegistry::instance().lookup(name);
 }
 
 std::optional<OpId> lookupOpId(std::string_view name) {
-    const OpDefinition* item = lookupOp(name);
-    if (item == nullptr) {
-        return std::nullopt;
-    }
-    return item->id;
+    return OpRegistry::instance().lookupId(name);
 }
 
 const char* opIdName(OpId id) {
     switch (id) {
-        case OpId::Linear:
-            return "Linear";
-        case OpId::Tensor:
-            return "Tensor";
-        case OpId::Matmul:
-            return "Matmul";
-        case OpId::MatmulRelu:
-            return "MatmulRelu";
-        case OpId::Relu:
-            return "Relu";
-        case OpId::Scale:
-            return "Scale";
-        case OpId::Silu:
-            return "Silu";
-        case OpId::Gelu:
-            return "Gelu";
-        case OpId::Tanh:
-            return "Tanh";
-        case OpId::Sigmoid:
-            return "Sigmoid";
-        case OpId::Softmax:
-            return "Softmax";
-        case OpId::RmsNorm:
-            return "RmsNorm";
-        case OpId::CrossEntropy:
-            return "CrossEntropy";
-        case OpId::Embedding:
-            return "Embedding";
-        case OpId::Dropout:
-            return "Dropout";
-        case OpId::Rope:
-            return "Rope";
-        case OpId::Reshape:
-            return "Reshape";
-        case OpId::Transpose:
-            return "Transpose";
-        case OpId::Sum:
-            return "Sum";
-        case OpId::Mean:
-            return "Mean";
-        case OpId::Sqrt:
-            return "Sqrt";
-        case OpId::Rsqrt:
-            return "Rsqrt";
-        case OpId::CausalMask:
-            return "CausalMask";
-        case OpId::FlattenHeads:
-            return "FlattenHeads";
-        case OpId::RepeatKv:
-            return "RepeatKv";
-        case OpId::Print:
-            return "Print";
+        case OpId::Linear: return "Linear";
+        case OpId::Tensor: return "Tensor";
+        case OpId::Matmul: return "Matmul";
+        case OpId::MatmulRelu: return "MatmulRelu";
+        case OpId::Relu: return "Relu";
+        case OpId::Scale: return "Scale";
+        case OpId::Silu: return "Silu";
+        case OpId::Gelu: return "Gelu";
+        case OpId::Tanh: return "Tanh";
+        case OpId::Sigmoid: return "Sigmoid";
+        case OpId::Softmax: return "Softmax";
+        case OpId::RmsNorm: return "RmsNorm";
+        case OpId::CrossEntropy: return "CrossEntropy";
+        case OpId::Embedding: return "Embedding";
+        case OpId::Dropout: return "Dropout";
+        case OpId::Rope: return "Rope";
+        case OpId::Reshape: return "Reshape";
+        case OpId::Transpose: return "Transpose";
+        case OpId::Sum: return "Sum";
+        case OpId::Mean: return "Mean";
+        case OpId::Sqrt: return "Sqrt";
+        case OpId::Rsqrt: return "Rsqrt";
+        case OpId::CausalMask: return "CausalMask";
+        case OpId::FlattenHeads: return "FlattenHeads";
+        case OpId::RepeatKv: return "RepeatKv";
+        case OpId::Print: return "Print";
     }
     return "Unknown";
 }
