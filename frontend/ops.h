@@ -35,6 +35,7 @@ enum class OpId {
   Sigmoid,
   Softmax,
   RmsNorm,
+  RmsNormCall,
   CrossEntropy,
   Embedding,
   Dropout,
@@ -89,6 +90,9 @@ struct OpDefinition {
   bool preservesFirstTensorArg = false;
   bool runtimeSupportsLibraryOp = false;
   RuntimePrimitiveKind runtimePrimitiveKind = RuntimePrimitiveKind::Unsupported;
+  // Included in the shared backend capability set. New ops stay unsupported
+  // until a backend can execute them.
+  bool planSupported = false;
 };
 
 /**
@@ -119,6 +123,16 @@ std::vector<BuiltinSignature> allBuiltinSignatures();
 const OpDefinition *lookupOp(std::string_view name);
 std::optional<OpId> lookupOpId(std::string_view name);
 const char *opIdName(OpId id);
+bool identifiesOp(std::string_view name, OpId id);
+bool identifiesOp(std::string_view name, const std::optional<std::string> &opId,
+                  OpId id);
+bool isPlanActivation(std::string_view name);
+const std::vector<std::string> &planSupportedPrimitiveOps();
+const std::vector<std::string> &planSupportedPrimitiveOpIds();
+const std::vector<std::string> &planSupportedLibraryOps();
+const std::vector<std::string> &planSupportedLibraryOpIds();
+const std::vector<std::string> &planSupportedConstructorOps();
+const std::vector<std::string> &planSupportedConstructorOpIds();
 bool isBuiltinOp(std::string_view name);
 bool isPrimitiveTensorOp(std::string_view name);
 bool isLibraryOp(std::string_view name);

@@ -27,77 +27,27 @@ Diagnostic capability_error(BackendKind backend, std::size_t opIndex, std::strin
 }
 
 const std::vector<std::string>& primitiveOps() {
-    static const std::vector<std::string> names{"matmul", "relu", "scale", "print"};
-    return names;
+    return planSupportedPrimitiveOps();
 }
 
 const std::vector<std::string>& primitive_op_ids() {
-    static const std::vector<std::string> names{"Matmul", "Relu", "Scale", "Print"};
-    return names;
+    return planSupportedPrimitiveOpIds();
 }
 
 const std::vector<std::string>& libraryOps() {
-    static const std::vector<std::string> names{
-        "rms_norm",
-        "cross_entropy",
-        "reshape",
-        "transpose",
-        "sum",
-        "mean",
-        "sqrt",
-        "rsqrt",
-        "repeat_kv",
-        "flatten_heads",
-        "causal_mask",
-        "rope",
-    };
-    return names;
+    return planSupportedLibraryOps();
 }
 
 const std::vector<std::string>& library_op_ids() {
-    static const std::vector<std::string> names{
-        "RmsNorm",
-        "CrossEntropy",
-        "Reshape",
-        "Transpose",
-        "Sum",
-        "Mean",
-        "Sqrt",
-        "Rsqrt",
-        "RepeatKv",
-        "FlattenHeads",
-        "CausalMask",
-        "Rope",
-    };
-    return names;
+    return planSupportedLibraryOpIds();
 }
 
 const std::vector<std::string>& constructor_ops() {
-    static const std::vector<std::string> names{
-        "linear",
-        "Embedding",
-        "SiLU",
-        "GELU",
-        "Tanh",
-        "Sigmoid",
-        "Softmax",
-        "Dropout",
-    };
-    return names;
+    return planSupportedConstructorOps();
 }
 
 const std::vector<std::string>& constructor_op_ids() {
-    static const std::vector<std::string> names{
-        "Linear",
-        "Embedding",
-        "Silu",
-        "Gelu",
-        "Tanh",
-        "Sigmoid",
-        "Softmax",
-        "Dropout",
-    };
-    return names;
+    return planSupportedConstructorOpIds();
 }
 
 bool contains_string(const std::vector<std::string>& values, const std::string& target) {

@@ -14,7 +14,7 @@ config modelconfig:
 
 # ── Layers ──
 
-layer RMsNorm(x: tensor): tensor:
+layer RMSNorm(x: tensor): tensor:
   return x -> rms_norm(modelconfig.hidden_dim)
 
 layer RotaryEmbedding(x: tensor): tensor: 

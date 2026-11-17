@@ -158,6 +158,13 @@ struct PlanOp {
     std::optional<OpId> resolvedOp;
 };
 
+inline bool planOpIs(const PlanOp& op, OpId id) {
+    if (op.resolvedOp) {
+        return *op.resolvedOp == id;
+    }
+    return identifiesOp(op.op, op.opId, id);
+}
+
 enum class PlanStepKind {
     AllocateHostValue,
     AllocateDeviceValue,

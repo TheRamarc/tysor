@@ -34,6 +34,8 @@ frontend_sources = files(
   'ir/execution_plan.cpp',
   'ir/frontend_ir.cpp',
   'ir/graph_ir.cpp',
+  'ir/op.h',
+  'ir/tir.h',
 )
 
 runtime_sources = files(
