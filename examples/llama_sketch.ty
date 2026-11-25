@@ -1,3 +1,6 @@
+# Architectural language sketch for a full LLaMA-style decoder (not runnable end-to-end yet).
+# See examples/01..06 for runnable programs.
+
 # ── modelconfig ─
 config modelconfig:
   vocab_size   : int32   = 32000
@@ -32,8 +35,6 @@ layer GroupedQueryAttention(x: tensor): tensor:
    k = k -> repeat_kv(modelconfig.n_heads / modelconfig.n_kv_heads)
    v = v -> repeat_kv(modelconfig.n_heads / modelconfig.n_kv_heads)
 
-  # attn = Dropout(Softmax(causal_mask(scale(q * k))))
-
    attn = q * k -> scale( modelconfig.n_heads) -> causal_mask() -> Softmax() -> Dropout(modelconfig.dropout)
 
    return attn * v -> flatten_heads() -> o_proj()
@@ -55,8 +56,6 @@ layer DecoderBlock(x: tensor): tensor:
 # ── Model ───────
 
 layer model(idx, targets=true): (tensor, tensor):
-  # logits = linear(RMSNorm(DecoderBlock(Dropout(Embedding(idx))))) here DecoderBlock * modelconfig.n_layers is basically
-  # that DecoderBlock how DecoderBlock block the computation go through.
    logits = idx -> Embedding(modelconfig.vocab_size, modelconfig.hidden_dim)
                -> Dropout(modelconfig.dropout)
                -> DecoderBlock()[modelconfig.n_layers] 

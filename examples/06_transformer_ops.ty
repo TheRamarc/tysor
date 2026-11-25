@@ -1,0 +1,25 @@
+# Mini transformer-style sequence pipeline (Embedding, RMSNorm, RoPE, GQA, Softmax)
+# Train: ./build/tysor examples/06_transformer_ops.ty --train
+
+layer model(): tensor[float32]:
+  idx = tensor([1, 4, 7])
+  target = tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+  tok = Embedding(16, 8)
+  out_proj = linear(16, 3, false)
+
+  x = tok(idx)
+  x = rms_norm(x, 8)
+  x = reshape(x, 3, 2, 4)
+  x = rope(x, 4, 10000.0)
+  x = repeat_kv(x, 2)
+  x = causal_mask(x) -> Softmax()
+  x = flatten_heads(x)
+  logits = x -> out_proj()
+  loss = cross_entropy(logits, target)
+  return loss
+
+config model:
+  optimizer = "sgd"
+  lr = 0.1
+  iteration = 10
+  objective = loss

@@ -1,0 +1,10 @@
+# Run: ./build/tysor examples/02_tensors_and_ops.ty --run
+# Run on Metal: ./build/tysor examples/02_tensors_and_ops.ty --run --backend metal
+
+layer model(): tensor[float32]:
+  a = tensor([[1.0, -2.0, 3.0], [4.0, 5.0, -6.0]])
+  w = ones(3, 2)
+  b = zeros(2)
+  out = (matmul(a, w) + b) -> relu()
+  print("relu(a @ w) =", out)
+  return sum(out)

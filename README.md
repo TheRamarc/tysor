@@ -44,7 +44,7 @@ Important limits:
   `tensor[float32, [batch, 3]]`) still need CLI `--shape` entries at runtime.
 - Training supports local CPU SGD without external dataset loading or
   serialized model checkpoints yet.
-- `examples/tensor.ty` is currently an architectural sketch, not a guaranteed
+- `examples/llama_sketch.ty` is currently an architectural sketch, not a guaranteed
   runnable quick-start program.
 - PyTorch, CUDA, and ROCm are represented in backend enums/capability plumbing,
   but codegen/runtime execution is not ported yet.
@@ -60,7 +60,7 @@ backend/metal/     Metal executor bridge and kernel dispatch integration
 cli/               command-line parsing, compiler pipeline driver
 tests/             smoke tests for each compiler/runtime stage
 bench/             runtime microbenchmark executable
-examples/          runnable examples (quickstart.ty, smallprogram.ty) and sketches
+examples/          runnable examples (01..06) and architectural sketches
 core/              diagnostics, arena allocator, and source utilities
 ```
 
@@ -135,7 +135,7 @@ Probe Metal availability:
 
 ## Minimal Runnable Program
 
-Use [examples/quickstart.ty](examples/quickstart.ty) or create a small `.ty` file:
+Use [examples/03_linear_training.ty](examples/03_linear_training.ty) or create a small `.ty` file:
 
 ```tysor
 layer model(): tensor[float32]:
@@ -149,29 +149,38 @@ layer model(): tensor[float32]:
 config model:
   optimizer = "sgd"
   lr = 0.05
-  iteration = 5
+  iteration = 20
   objective = loss
 ```
 
 Inspect the compiler output:
 
 ```bash
-./build/tysor examples/quickstart.ty --graph --plan
+./build/tysor examples/03_linear_training.ty --graph --plan
 ```
 
 Run or train it directly (no `--shape` flags needed when tensor shapes are known):
 
 ```bash
-./build/tysor examples/quickstart.ty --run
-./build/tysor examples/quickstart.ty --train
+./build/tysor examples/03_linear_training.ty --run
+./build/tysor examples/03_linear_training.ty --train
 ```
 
 For models with unannotated or symbolic input parameters (such as
-`examples/smallprogram.ty`), supply input shapes via `--shape`:
+`examples/05_dynamic_shapes.ty`), supply input shapes via `--shape`:
 
 ```bash
-./build/tysor examples/smallprogram.ty --train --shape x=2x3 --shape target=2x2
+./build/tysor examples/05_dynamic_shapes.ty --train --shape x=2x3 --shape target=2x2
 ```
+
+More runnable examples in `examples/`:
+
+- `examples/01_hello_print.ty` — scalars and `print(...)` (`--run`)
+- `examples/02_tensors_and_ops.ty` — `tensor`, `zeros`, `ones`, `matmul`, `relu`, `sum` (`--run`)
+- `examples/03_linear_training.ty` — single-layer classifier training (`--train`)
+- `examples/04_xor_mlp_training.ty` — 2-layer MLP solving XOR (`--train`)
+- `examples/05_dynamic_shapes.ty` — symbolic `[batch, 3]` dimensions with `--shape` (`--train --shape x=2x3 --shape target=2x2`)
+- `examples/06_transformer_ops.ty` — `Embedding`, `rms_norm`, `rope`, `repeat_kv`, `causal_mask`, `Softmax`, `flatten_heads` (`--train`)
 
 ## Language Sketch
 

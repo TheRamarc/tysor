@@ -1,0 +1,18 @@
+# 2-layer MLP solving XOR with Tanh hidden activation
+# Train: ./build/tysor examples/04_xor_mlp_training.ty --train
+
+layer model(): tensor[float32]:
+  x = tensor([[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]])
+  target = tensor([[1.0, 0.0], [0.0, 1.0], [0.0, 1.0], [1.0, 0.0]])
+  fc1 = linear(2, 8, true)
+  fc2 = linear(8, 2, true)
+  hidden = fc1(x) -> Tanh()
+  logits = fc2(hidden)
+  loss = cross_entropy(logits, target)
+  return loss
+
+config model:
+  optimizer = "sgd"
+  lr = 0.2
+  iteration = 50
+  objective = loss

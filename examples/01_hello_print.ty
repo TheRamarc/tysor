@@ -1,0 +1,9 @@
+# Run: ./build/tysor examples/01_hello_print.ty --run
+
+layer model(): int32:
+  x: int32 = 10
+  print("hello from cpptysor")
+  print("x =", x)
+  x = 42
+  print("updated x =", x)
+  return 0

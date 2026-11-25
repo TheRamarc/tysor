@@ -1,0 +1,15 @@
+# Dynamic symbolic batch dimension resolved at runtime via --shape
+# Run:   ./build/tysor examples/05_dynamic_shapes.ty --run --shape x=2x3 --shape target=2x2
+# Train: ./build/tysor examples/05_dynamic_shapes.ty --train --shape x=2x3 --shape target=2x2
+
+layer model(x: tensor[float32, [batch, 3]], target: tensor[float32, [batch, 2]]): tensor[float32]:
+  proj = linear(3, 2, true)
+  logits = proj(x)
+  loss = cross_entropy(logits, target)
+  return loss
+
+config model:
+  optimizer = "sgd"
+  lr = 0.05
+  iteration = 10
+  objective = loss

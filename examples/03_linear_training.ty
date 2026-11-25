@@ -1,3 +1,6 @@
+# Run:   ./build/tysor examples/03_linear_training.ty --run
+# Train: ./build/tysor examples/03_linear_training.ty --train
+
 layer model(): tensor[float32]:
   x = tensor([[1.0, -2.0, 3.0], [4.0, 5.0, 6.0]])
   target = tensor([[1.0, 0.0], [0.0, 1.0]])
@@ -9,5 +12,5 @@ layer model(): tensor[float32]:
 config model:
   optimizer = "sgd"
   lr = 0.05
-  iteration = 50
+  iteration = 20
   objective = loss
