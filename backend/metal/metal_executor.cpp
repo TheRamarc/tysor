@@ -1,5 +1,7 @@
 #include "metal_executor.h"
 
+#include "runtime_utils.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <functional>
@@ -167,24 +169,23 @@ Diagnostic metal_error(std::string message) {
     return Diagnostic::error(DiagnosticCode::RuntimeExecutionError, std::move(message));
 }
 
-// Locates a specific execution plan by its entry function name
-const ExecutionPlan* find_plan(const PlanModule& module, const std::string& entry) {
-    auto found = std::find_if(module.plans.begin(), module.plans.end(), [&](const ExecutionPlan& plan) {
-        return plan.name == entry;
-    });
-    return found == module.plans.end() ? nullptr : &*found;
-}
-
-// Synthesizes a tensor with specific shape and type for testing/execution from CLI shapes
+// Synthesizes a tensor with specific shape and type using CLI shapes or static annotations
 std::variant<SimpleTensor, Diagnostic> make_tensor_argument(
     const PlanValue& value,
     const GraphExecutorOptions& options
 ) {
-    auto shape = options.tensor_shapes.find(value.name);
-    if (shape == options.tensor_shapes.end()) {
-        return metal_error("Missing --shape for tensor parameter '" + value.name + "'");
+    auto shape = resolve_tensor_argument_shape(
+        value,
+        options,
+        DiagnosticCode::RuntimeExecutionError
+    );
+    if (const auto* diagnostic = std::get_if<Diagnostic>(&shape)) {
+        return *diagnostic;
     }
-    return make_synthetic_tensor(shape->second, value.type.tensorDtype.value_or("float32"));
+    return make_synthetic_tensor(
+        std::get<std::vector<std::int64_t>>(shape),
+        value.type.tensorDtype.value_or("float32")
+    );
 }
 
 #if defined(__APPLE__)
@@ -1677,7 +1678,8 @@ std::optional<Diagnostic> validate_supported_plan(const ExecutionPlan& plan) {
             (op.kind == PlanOpKind::LibraryCall &&
              (op.op == "sqrt" || op.op == "rsqrt" || op.op == "reshape" || op.op == "transpose" ||
               op.op == "sum" || op.op == "mean" || op.op == "rms_norm" || op.op == "cross_entropy" ||
-              op.op == "repeat_kv" || op.op == "flatten_heads" || op.op == "causal_mask" || op.op == "rope"));
+              op.op == "repeat_kv" || op.op == "flatten_heads" || op.op == "causal_mask" || op.op == "rope" ||
+              op.op == "tensor" || op.op == "zeros" || op.op == "ones" || op.op == "randn"));
         if (op.kind == PlanOpKind::Apply && !op.inputs.empty()) {
             const PlanOp* callee = producer_for(op.inputs[0]);
             supported = callee != nullptr &&
@@ -1926,6 +1928,38 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                         return metal_error("Metal causal_mask requires a device tensor input");
                     }
                     result = dispatch_causal_mask(context.get(), *input);
+                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "tensor") {
+                    auto host_tensor = build_tensor_from_plan_constant(
+                        op,
+                        plan.values[op.output],
+                        nullptr,
+                        DiagnosticCode::RuntimeExecutionError
+                    );
+                    if (const auto* diagnostic = std::get_if<Diagnostic>(&host_tensor)) {
+                        return *diagnostic;
+                    }
+                    result = upload_tensor(context.get(), std::get<SimpleTensor>(std::move(host_tensor)));
+                } else if (op.kind == PlanOpKind::LibraryCall &&
+                           (op.op == "zeros" || op.op == "ones" || op.op == "randn")) {
+                    std::vector<std::int64_t> shape;
+                    shape.reserve(op.inputs.size());
+                    for (const std::size_t input_id : op.inputs) {
+                        auto dim = require_host_int(values, input_id, op.op + " dim");
+                        if (const auto* diagnostic = std::get_if<Diagnostic>(&dim)) {
+                            return *diagnostic;
+                        }
+                        if (std::get<std::int64_t>(dim) <= 0) {
+                            return metal_error(op.op + " dimensions must be positive");
+                        }
+                        shape.push_back(std::get<std::int64_t>(dim));
+                    }
+                    const std::string dtype = plan.values[op.output].type.tensorDtype.value_or("float32");
+                    SimpleTensor host_tensor = op.op == "zeros"
+                        ? make_filled_tensor(shape, 0.0F, dtype)
+                        : (op.op == "ones"
+                            ? make_filled_tensor(shape, 1.0F, dtype)
+                            : make_randn_tensor(shape, dtype));
+                    result = upload_tensor(context.get(), std::move(host_tensor));
                 } else if (op.kind == PlanOpKind::LibraryCall && op.op == "rope") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "rope input");
                     if (input == nullptr) {

@@ -2,7 +2,7 @@
 
 #include "execution_plan.h"
 #include "frontend_ir.h"
-#include "graph_executor.h"
+#include "cpu_executor.h"
 
 #include <string>
 

@@ -13,8 +13,8 @@ Diagnostic cli_error(std::string message) {
 
 // Parses a string backend identifier into the corresponding BackendKind enum.
 std::variant<BackendKind, Diagnostic> parse_backend(const std::string &value) {
-  if (value == "local") {
-    return BackendKind::Local;
+  if (value == "Host") {
+    return BackendKind::Host;
   }
   if (value == "metal") {
     return BackendKind::Metal;
@@ -79,8 +79,8 @@ parse_shape_spec(const std::string &spec) {
 
 const char *backend_name(BackendKind backend) {
   switch (backend) {
-  case BackendKind::Local:
-    return "local";
+  case BackendKind::Host:
+    return "Host";
   case BackendKind::Metal:
     return "metal";
   case BackendKind::PyTorch:

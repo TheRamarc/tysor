@@ -1,3 +1,4 @@
+x = 10
 layer model(): int16:
 	print(10)
 	print("this is right")

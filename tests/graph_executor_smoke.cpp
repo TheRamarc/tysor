@@ -1,6 +1,7 @@
 #include "execution_plan.h"
 #include "frontend_ir.h"
-#include "graph_executor.h"
+#include "cpu_executor.h"
+#include "cpu_kernels.h"
 #include "graph_ir.h"
 #include "lexer.h"
 #include "parser.h"
@@ -45,7 +46,7 @@ std::variant<PlanModule, Diagnostic> plan_module(const std::string& source) {
         return *diagnostic;
     }
 
-    auto plan_result = compilePlanModule(std::get<GraphModule>(std::move(graph_result)), BackendKind::Local);
+    auto plan_result = compilePlanModule(std::get<GraphModule>(std::move(graph_result)), BackendKind::Host);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&plan_result)) {
         return *diagnostic;
     }

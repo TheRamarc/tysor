@@ -1,4 +1,4 @@
-#include "backward_executor.h"
+#include "cpu_executor.h"
 #include "cli_pipeline.h"
 
 #include <iostream>
@@ -19,7 +19,7 @@ int main() {
     CliOptions options;
     options.input_path = "backward_smoke.ty";
     options.backward = true;
-    options.backend = BackendKind::Local;
+    options.backend = BackendKind::Host;
     options.tensor_shapes["x"] = {2, 3};
 
     auto compiled_result = compile_source(source, options);

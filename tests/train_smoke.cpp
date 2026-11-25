@@ -17,7 +17,7 @@ int run_train_smoke(
     CliOptions options;
     options.input_path = name + ".ty";
     options.train = true;
-    options.backend = BackendKind::Local;
+    options.backend = BackendKind::Host;
     options.tensor_shapes = shapes;
 
     auto compiled_result = compile_source(source, options);

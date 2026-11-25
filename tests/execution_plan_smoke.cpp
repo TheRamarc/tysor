@@ -24,7 +24,7 @@ PlanOp make_plan_op(PlanOpKind kind, std::string name) {
         FeBinaryOp::Add,
         FeValue::none(),
         {},
-        BackendKind::Local,
+        BackendKind::Host,
     };
 }
 
@@ -72,13 +72,13 @@ bool local_matmul_relu_plan_ok() {
         return false;
     }
 
-    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Local);
+    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Host);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
         std::cerr << "local-plan: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
     const PlanModule& module = std::get<PlanModule>(module_result);
-    if (module.plans.size() != 1 || module.backend != BackendKind::Local) {
+    if (module.plans.size() != 1 || module.backend != BackendKind::Host) {
         std::cerr << "local-plan: unexpected module shape\n";
         return false;
     }
@@ -120,7 +120,7 @@ bool output_only_optimizer_fuses_matmul_relu() {
         return false;
     }
 
-    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Local);
+    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Host);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
         std::cerr << "optimizer-fusion: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
@@ -143,7 +143,7 @@ bool output_only_optimizer_fuses_matmul_relu() {
         return false;
     }
 
-    if (checkPlanOpCapability(BackendKind::Local, optimized.ops.front()).status != CapabilityStatus::Supported ||
+    if (checkPlanOpCapability(BackendKind::Host, optimized.ops.front()).status != CapabilityStatus::Supported ||
         checkPlanOpCapability(BackendKind::Metal, optimized.ops.front()).status != CapabilityStatus::Unsupported) {
         std::cerr << "optimizer-fusion: unexpected fused op capability result\n";
         return false;
@@ -222,7 +222,7 @@ bool skipped_graphs_propagate_to_plan() {
         std::cerr << "skipped-plan: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
-    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Local);
+    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Host);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
         std::cerr << "skipped-plan: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
@@ -248,7 +248,7 @@ bool module_local_function_calls_survive_capability_validation() {
         return false;
     }
 
-    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Local);
+    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Host);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
         std::cerr << "function-call-plan: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;

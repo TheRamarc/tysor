@@ -16,6 +16,7 @@ if cpp.get_id() == 'msvc'
 endif
 
 include_dirs = include_directories(
+  'backend/cpu',
   'backend/metal',
   'cli',
   'core',
@@ -34,13 +35,12 @@ frontend_sources = files(
   'ir/execution_plan.cpp',
   'ir/frontend_ir.cpp',
   'ir/graph_ir.cpp',
-  'ir/op.h',
-  'ir/tir.h',
 )
 
 runtime_sources = files(
-  'runtime/backward_executor.cpp',
-  'runtime/graph_executor.cpp',
+  'backend/cpu/cpu_backward.cpp',
+  'backend/cpu/cpu_forward.cpp',
+  'backend/cpu/cpu_kernels.cpp',
   'runtime/runtime_tensor.cpp',
   'runtime/train_executor.cpp',
 )
@@ -138,7 +138,8 @@ graph_executor_smoke = executable(
   'cpptysor_graph_executor_smoke',
   files(
     'tests/graph_executor_smoke.cpp',
-    'runtime/graph_executor.cpp',
+    'backend/cpu/cpu_forward.cpp',
+    'backend/cpu/cpu_kernels.cpp',
     'runtime/runtime_tensor.cpp',
   ) + frontend_sources,
   include_directories: include_dirs,
@@ -151,7 +152,8 @@ runtime_bench = executable(
     'bench/runtime_bench.cpp',
     'cli/cli_args.cpp',
     'cli/cli_pipeline.cpp',
-    'runtime/graph_executor.cpp',
+    'backend/cpu/cpu_forward.cpp',
+    'backend/cpu/cpu_kernels.cpp',
     'runtime/runtime_tensor.cpp',
   ) + frontend_sources,
   include_directories: include_dirs,
@@ -164,8 +166,9 @@ backward_smoke = executable(
     'tests/backward_smoke.cpp',
     'cli/cli_args.cpp',
     'cli/cli_pipeline.cpp',
-    'runtime/backward_executor.cpp',
-    'runtime/graph_executor.cpp',
+    'backend/cpu/cpu_backward.cpp',
+    'backend/cpu/cpu_forward.cpp',
+    'backend/cpu/cpu_kernels.cpp',
     'runtime/runtime_tensor.cpp',
   ) + frontend_sources,
   include_directories: include_dirs,
@@ -178,7 +181,9 @@ train_smoke = executable(
     'tests/train_smoke.cpp',
     'cli/cli_args.cpp',
     'cli/cli_pipeline.cpp',
-    'runtime/graph_executor.cpp',
+    'backend/cpu/cpu_backward.cpp',
+    'backend/cpu/cpu_forward.cpp',
+    'backend/cpu/cpu_kernels.cpp',
     'runtime/runtime_tensor.cpp',
     'runtime/train_executor.cpp',
   ) + frontend_sources,
@@ -191,7 +196,8 @@ metal_executor_smoke = executable(
   files(
     'tests/metal_executor_smoke.cpp',
     'backend/metal/metal_executor.cpp',
-    'runtime/graph_executor.cpp',
+    'backend/cpu/cpu_forward.cpp',
+    'backend/cpu/cpu_kernels.cpp',
     'runtime/runtime_tensor.cpp',
   ) + frontend_sources + metal_bridge,
   include_directories: include_dirs,

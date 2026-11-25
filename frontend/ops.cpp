@@ -54,6 +54,13 @@ std::vector<Type> reshape_arg_types() {
   };
 }
 
+std::vector<Type> dim_list_arg_types() {
+  return {
+      Type::intType(), Type::intType(), Type::intType(), Type::intType(),
+      Type::intType(), Type::intType(), Type::intType(), Type::intType(),
+  };
+}
+
 /**
  * @brief Defines the table of all available built-in operations.
  *
@@ -67,10 +74,26 @@ std::vector<OpDefinition> make_ops() {
          signature("linear", Type::callable(tensor_any()),
                    {Type::intType(), Type::intType(), Type::boolType()}, 1, 3),
          false, true, true, false, true, true),
-      op(OpId::Tensor, OpCategory::LayerCtor,
-         signature("tensor", tensor_any(),
-                   {Type::intType(), Type::intType(), Type::boolType()}, 1, 3),
-         false, true, true, false, true, false),
+      op(OpId::Tensor, OpCategory::LibraryOp,
+         signature("tensor",
+                   Type::tensor("float32", std::nullopt, std::nullopt),
+                   {Type::list({})}, 1, 1),
+         false, true, false, false, true, true),
+      op(OpId::Zeros, OpCategory::LibraryOp,
+         signature("zeros",
+                   Type::tensor("float32", std::nullopt, std::nullopt),
+                   dim_list_arg_types(), 1, 8),
+         false, true, false, false, true, true),
+      op(OpId::Ones, OpCategory::LibraryOp,
+         signature("ones",
+                   Type::tensor("float32", std::nullopt, std::nullopt),
+                   dim_list_arg_types(), 1, 8),
+         false, true, false, false, true, true),
+      op(OpId::Randn, OpCategory::LibraryOp,
+         signature("randn",
+                   Type::tensor("float32", std::nullopt, std::nullopt),
+                   dim_list_arg_types(), 1, 8),
+         false, true, false, false, true, true),
       op(OpId::Matmul, OpCategory::Primitive,
          signature("matmul", tensor_any(), {tensor_any(), tensor_any()}, 2, 2),
          true, false, false, false, false, true, RuntimePrimitiveKind::Matmul),
@@ -207,6 +230,14 @@ Type OpRegistry::inferResultType(OpId id, const Type &declared_type,
     return declared_type;
   }
 
+  if (id == OpId::Zeros || id == OpId::Ones || id == OpId::Randn) {
+    return Type::tensor("float32", std::nullopt,
+                        static_cast<int>(argTypes.size()));
+  }
+  if (id == OpId::Tensor) {
+    return declared_type;
+  }
+
   if (declared_type.base != TypeBase::Tensor || argTypes.empty() ||
       argTypes[0].base != TypeBase::Tensor) {
     return declared_type;
@@ -264,6 +295,12 @@ const char *opIdName(OpId id) {
     return "Linear";
   case OpId::Tensor:
     return "Tensor";
+  case OpId::Zeros:
+    return "Zeros";
+  case OpId::Ones:
+    return "Ones";
+  case OpId::Randn:
+    return "Randn";
   case OpId::Matmul:
     return "Matmul";
   case OpId::MatmulRelu:

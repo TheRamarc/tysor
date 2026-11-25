@@ -1099,6 +1099,25 @@ std::variant<std::optional<GraphTensorType>, Diagnostic> infer_library_call_tens
     if (node.op == "repeat_kv") {
         return infer_repeat_kv_tensor_type(graph, node);
     }
+    if (node.op == "tensor") {
+        return std::optional<GraphTensorType>{};
+    }
+    if (node.op == "zeros" || node.op == "ones" || node.op == "randn") {
+        std::vector<GraphDim> dims;
+        dims.reserve(node.inputs.size());
+        for (const std::size_t input_id : node.inputs) {
+            auto dim = constant_int_value(graph, input_id);
+            if (!dim) {
+                dims.push_back(GraphDim::unknown());
+                continue;
+            }
+            if (*dim <= 0) {
+                return graph_error(node.op + " dimensions must be positive");
+            }
+            dims.push_back(GraphDim::known(*dim));
+        }
+        return GraphTensorType{std::string("float32"), std::move(dims), true};
+    }
     auto input = require_tensor_type(graph, node.inputs[0], node.op + " input");
     if (const auto* diagnostic = std::get_if<Diagnostic>(&input)) return *diagnostic;
     GraphTensorType input_tensor = std::get<GraphTensorType>(input);
@@ -1290,6 +1309,80 @@ bool is_frontend_only_expr(const FeExprPtr& expr) {
     return expr && std::holds_alternative<FeListExpr>(expr->kind);
 }
 
+std::optional<double> extract_numeric_constant(const FeExprPtr& expr) {
+    if (!expr) {
+        return std::nullopt;
+    }
+    if (const auto* constant = std::get_if<FeConstantExpr>(&expr->kind)) {
+        if (const auto* f = std::get_if<double>(&constant->value.value)) {
+            return *f;
+        }
+        if (const auto* i = std::get_if<std::int64_t>(&constant->value.value)) {
+            return static_cast<double>(*i);
+        }
+        return std::nullopt;
+    }
+    if (const auto* binary = std::get_if<FeBinaryExpr>(&expr->kind)) {
+        if (binary->op == FeBinaryOp::Sub) {
+            auto lhs = extract_numeric_constant(binary->lhs);
+            auto rhs = extract_numeric_constant(binary->rhs);
+            if (lhs && rhs) {
+                return *lhs - *rhs;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<Diagnostic> extract_tensor_literal(
+    const FeExprPtr& expr,
+    std::vector<std::int64_t>& shape,
+    std::vector<FeValue>& flat_values
+) {
+    if (!expr) {
+        return graph_error("tensor() expected a list literal argument");
+    }
+    if (const auto* list = std::get_if<FeListExpr>(&expr->kind)) {
+        if (list->elements.empty()) {
+            return graph_error("tensor() cannot be constructed from an empty list");
+        }
+        shape.push_back(static_cast<std::int64_t>(list->elements.size()));
+        const bool expect_nested = std::holds_alternative<FeListExpr>(list->elements.front()->kind);
+        std::vector<std::int64_t> expected_subshape;
+        for (std::size_t idx = 0; idx < list->elements.size(); ++idx) {
+            const FeExprPtr& element = list->elements[idx];
+            if (expect_nested) {
+                if (!element || !std::holds_alternative<FeListExpr>(element->kind)) {
+                    return graph_error("tensor() nested lists must have uniform depth");
+                }
+                std::vector<std::int64_t> subshape;
+                if (auto diagnostic = extract_tensor_literal(element, subshape, flat_values)) {
+                    return diagnostic;
+                }
+                if (idx == 0) {
+                    expected_subshape = std::move(subshape);
+                } else if (subshape != expected_subshape) {
+                    return graph_error("tensor() nested lists must have rectangular shape");
+                }
+            } else {
+                if (element && std::holds_alternative<FeListExpr>(element->kind)) {
+                    return graph_error("tensor() nested lists must have uniform depth");
+                }
+                auto number = extract_numeric_constant(element);
+                if (!number) {
+                    return graph_error("tensor() elements must be numeric constants");
+                }
+                flat_values.push_back(FeValue::floatValue(*number));
+            }
+        }
+        if (expect_nested) {
+            shape.insert(shape.end(), expected_subshape.begin(), expected_subshape.end());
+        }
+        return std::nullopt;
+    }
+    return graph_error("tensor() expects a numeric list literal such as tensor([[1.0, 2.0], [3.0, 4.0]])");
+}
+
 template <typename GraphT>
 std::optional<Diagnostic> validate_node_shape(
     const GraphT& graph,
@@ -1442,6 +1535,46 @@ private:
     }
 
     std::variant<std::size_t, Diagnostic> lowerCallExpr(const FeCallExpr& call, const FeType& type, GraphT& graph) const {
+        if (identifiesOp(call.callee, OpId::Tensor)) {
+            if (call.args.size() != 1) {
+                return graph_error("tensor() expects exactly 1 list argument");
+            }
+            std::vector<std::int64_t> shape;
+            std::vector<FeValue> flat_values;
+            if (auto diagnostic = extract_tensor_literal(call.args[0].value, shape, flat_values)) {
+                return *diagnostic;
+            }
+            std::vector<GraphDim> dims;
+            dims.reserve(shape.size());
+            for (const std::int64_t dim : shape) {
+                dims.push_back(GraphDim::known(dim));
+            }
+            FeType tensor_fe_type = type;
+            if (tensor_fe_type.kind != FeTypeKind::Tensor) {
+                tensor_fe_type = FeType::tensor("float32", std::nullopt, static_cast<int>(shape.size()));
+            } else if (!tensor_fe_type.tensorDtype) {
+                tensor_fe_type.tensorDtype = std::string("float32");
+            }
+            const std::size_t output = append_value(graph, std::string{}, tensor_fe_type, false);
+            graph.values[output].tensorType = GraphTensorType{
+                tensor_fe_type.tensorDtype.value_or("float32"),
+                std::move(dims),
+                true,
+            };
+            GraphNode node{
+                GraphNodeKind::LibraryCall,
+                output,
+                call.callee,
+                graph_op_id_name(call.callee),
+                FeBinaryOp::Add,
+                FeValue::listValue(std::move(flat_values)),
+                {},
+            };
+            if (auto diagnostic = append_node(graph, std::move(node))) {
+                return *diagnostic;
+            }
+            return output;
+        }
         std::vector<std::size_t> inputs;
         for (const auto& arg : call.args) {
             auto lowered = lower_expr(arg.value, graph);

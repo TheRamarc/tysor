@@ -72,9 +72,11 @@ bool op_ids_are_stable() {
     auto matmul = lookupOpId("matmul");
     auto tanh = lookupOpId("Tanh");
     auto rms_norm = lookupOpId("rms_norm");
+    auto rms_norm_layer = lookupOpId("RMSNorm");
     return expect(matmul && *matmul == OpId::Matmul, "matmul op id") &&
            expect(tanh && *tanh == OpId::Tanh, "Tanh op id") &&
-           expect(rms_norm && *rms_norm == OpId::RmsNorm, "rms_norm op id") &&
+           expect(rms_norm && *rms_norm == OpId::RmsNormCall, "rms_norm op id") &&
+           expect(rms_norm_layer && *rms_norm_layer == OpId::RmsNorm, "RMSNorm op id") &&
            expect(std::string(opIdName(OpId::Rsqrt)) == "Rsqrt", "op id name");
 }
 

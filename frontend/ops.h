@@ -50,7 +50,10 @@ enum class OpId {
   FlattenHeads,
   RepeatKv,
   Print,
-  Tensor
+  Tensor,
+  Zeros,
+  Ones,
+  Randn
 };
 
 /**

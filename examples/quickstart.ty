@@ -1,0 +1,13 @@
+layer model(): tensor[float32]:
+  x = tensor([[1.0, -2.0, 3.0], [4.0, 5.0, 6.0]])
+  target = tensor([[1.0, 0.0], [0.0, 1.0]])
+  proj = linear(3, 2, true)
+  logits = proj(x)
+  loss = cross_entropy(logits, target)
+  return loss
+
+config model:
+  optimizer = "sgd"
+  lr = 0.05
+  iteration = 50
+  objective = loss
