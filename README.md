@@ -26,11 +26,13 @@ Implemented today:
 - Symbolic and known tensor shape metadata in Graph IR.
 - Explicit Graph IR parameter values for `linear` weights and bias.
 - Execution plans with host/device placement, operation steps, outputs, and trainable parameter metadata.
-- Local runtime execution for tensor programs.
-- Experimental backward and SGD training paths for supported programs.
+- Local CPU backend (`backend/cpu/`) for forward execution, reverse-mode autodiff (`--backward`), and SGD training (`--train`).
+- Tensor literals (`tensor([[...]])`), tensor generators (`zeros`, `ones`, `randn`), and Xavier/normal PRNG parameter initialization.
+- Static shape resolution & CLI `--shape` conflict validation (no `--shape` needed for concrete `tensor[float32, [2, 3]]` annotations, literals, or generators).
 - Runtime tensor alignment, metadata-only reshape/flatten views, and workspace buffer reuse.
 - Local `matmul + relu` fusion when intermediate preservation is disabled.
 - Metal backend plumbing and preflight/capability checks for supported kernels.
+- Re-enabled smoke test suite (`meson test -C build`) covering lexer/parser through Metal preflight and training.
 
 Important limits:
 
@@ -38,9 +40,10 @@ Important limits:
 - Graph IR currently supports straight-line graphable functions. Parsed control
   flow exists, but non-straight-line functions are skipped during graph build.
 - Runtime tensors are float-backed; dtype is mostly compiler/runtime metadata.
-- Input tensors still need CLI `--shape` entries at runtime.
-- Training uses synthetic inputs/parameters and a small SGD path, not real data
-  loading or serialized model state yet.
+- Unannotated or symbolic `layer` parameters (e.g. `tensor[float32]` or
+  `tensor[float32, [batch, 3]]`) still need CLI `--shape` entries at runtime.
+- Training supports local CPU SGD without external dataset loading or
+  serialized model checkpoints yet.
 - `examples/tensor.ty` is currently an architectural sketch, not a guaranteed
   runnable quick-start program.
 - PyTorch, CUDA, and ROCm are represented in backend enums/capability plumbing,
@@ -51,13 +54,14 @@ Important limits:
 ```text
 frontend/          lexer, parser, semantic analyzer, builtin op registry
 ir/                frontend IR, graph IR, execution plan lowering/validation
-runtime/           local tensor runtime, graph executor, backward, train loop
+runtime/           shared host tensor container, runtime utils, training loop
+backend/cpu/       local CPU forward, backward, and tensor math kernels
 backend/metal/     Metal executor bridge and kernel dispatch integration
 cli/               command-line parsing, compiler pipeline driver
 tests/             smoke tests for each compiler/runtime stage
 bench/             runtime microbenchmark executable
-examples/          experimental language sketches
-core/              diagnostics and shared source utilities
+examples/          runnable examples (quickstart.ty, smallprogram.ty) and sketches
+core/              diagnostics, arena allocator, and source utilities
 ```
 
 ## Build
@@ -131,46 +135,42 @@ Probe Metal availability:
 
 ## Minimal Runnable Program
 
-Create a small `.ty` file:
+Use [examples/quickstart.ty](examples/quickstart.ty) or create a small `.ty` file:
 
 ```tysor
-layer model(x: tensor[float32]): tensor[float32]:
-  let proj = linear(3, 2, true)
-  return proj(x) -> Tanh()
-```
-
-Inspect the compiler output:
-
-```bash
-./build/tysor quickstart.ty --graph --plan
-```
-
-Run it with a synthetic input tensor:
-
-```bash
-./build/tysor quickstart.ty --run --shape x=2x3
-```
-
-## Minimal Training Program
-
-```tysor
-layer model(x: tensor[float32], target: tensor[float32]): tensor[float32]:
-  let proj = linear(3, 2, true)
-  let logits = proj(x)
-  let loss = cross_entropy(logits, target)
+layer model(): tensor[float32]:
+  x = tensor([[1.0, -2.0, 3.0], [4.0, 5.0, 6.0]])
+  target = tensor([[1.0, 0.0], [0.0, 1.0]])
+  proj = linear(3, 2, true)
+  logits = proj(x)
+  loss = cross_entropy(logits, target)
   return loss
 
 config model:
   optimizer = "sgd"
   lr = 0.05
-  iteration = 2
+  iteration = 5
   objective = loss
 ```
 
-Run:
+Inspect the compiler output:
 
 ```bash
-./build/tysor train.ty --train --shape x=2x3 --shape target=2x2
+./build/tysor examples/quickstart.ty --graph --plan
+```
+
+Run or train it directly (no `--shape` flags needed when tensor shapes are known):
+
+```bash
+./build/tysor examples/quickstart.ty --run
+./build/tysor examples/quickstart.ty --train
+```
+
+For models with unannotated or symbolic input parameters (such as
+`examples/smallprogram.ty`), supply input shapes via `--shape`:
+
+```bash
+./build/tysor examples/smallprogram.ty --train --shape x=2x3 --shape target=2x2
 ```
 
 ## Language Sketch
@@ -203,6 +203,7 @@ Useful syntax:
 
 Supported builtin families:
 
+- Tensor literals & generators: `tensor`, `zeros`, `ones`, `randn`
 - Trainable/callable constructors: `linear`, `Embedding`
 - Activations/callables: `SiLU`, `GELU`, `Tanh`, `Sigmoid`, `Softmax`,
   `Dropout`, `RMSNorm`
@@ -243,13 +244,13 @@ source of truth for a backend.
 - backend capability validation
 - local graph optimizations such as `matmul_relu`
 
-`runtime` owns actual execution:
+`runtime` & `backend/cpu` own actual execution:
 
-- aligned tensor storage
+- aligned shared tensor storage & PRNG weight initialization (`runtime/runtime_tensor.*`)
 - copy-on-write metadata views for reshape/flatten
-- local tensor kernels
+- local CPU forward, backward, and tensor math kernels (`backend/cpu/`)
 - workspace pooling for temporary tensors
-- backward/training support for the current supported subset
+- shared SGD training loop (`runtime/train_executor.*`)
 
 ## Development Commands
 
