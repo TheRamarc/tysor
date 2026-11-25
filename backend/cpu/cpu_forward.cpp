@@ -141,7 +141,7 @@ runtime_value_ref(const std::variant<const RuntimeValue *, Diagnostic> &value) {
 }
 
 std::variant<SimpleTensor, Diagnostic>
-make_tensor_argument(const PlanValue &value,
+make_tensor_argument(const GraphValue &value,
                      const GraphExecutorOptions &options,
                      RuntimeTensorWorkspace *workspace) {
   if (value.placement != Placement::Host) {
@@ -164,8 +164,8 @@ bool starts_with(const std::string &value, const std::string &prefix) {
 }
 
 std::variant<SimpleTensor, Diagnostic>
-make_model_parameter_tensor(const PlanValue &value,
-                            const PlanParameter &parameter,
+make_model_parameter_tensor(const GraphValue &value,
+                            const GraphParameter &parameter,
                             RuntimeTensorWorkspace *workspace) {
   const std::string dtype = parameter.tensorType.dtype.value_or(
       value.type.tensorDtype.value_or("float32"));
@@ -240,25 +240,25 @@ constant_to_runtime_value(const FeValue &value) {
       value.value);
 }
 
-std::optional<OpId> resolved_op_id(const PlanOp &op) {
+std::optional<OpId> resolved_op_id(const GraphNode &op) {
   if (op.resolvedOp) {
     return op.resolvedOp;
   }
   return lookupOpId(op.op);
 }
 
-std::vector<std::size_t> compute_runtime_use_counts(const ExecutionPlan &plan) {
+std::vector<std::size_t> compute_runtime_use_counts(const Graph &plan) {
   std::vector<std::size_t> counts(plan.values.size(), 0);
   for (const auto &step : plan.steps) {
-    if (step.kind == PlanStepKind::ExecuteOp && step.opIndex) {
-      for (const auto input_id : plan.ops[*step.opIndex].inputs) {
+    if (step.kind == GraphStepKind::ExecuteOp && step.opIndex) {
+      for (const auto input_id : plan.nodes[*step.opIndex].inputs) {
         if (input_id < counts.size()) {
           ++counts[input_id];
         }
       }
       continue;
     }
-    if (step.kind == PlanStepKind::MaterializeOutput &&
+    if (step.kind == GraphStepKind::MaterializeOutput &&
         step.valueId < counts.size()) {
       ++counts[step.valueId];
     }
@@ -298,7 +298,7 @@ void release_consumed_inputs(RuntimeValueStore &values,
 }
 
 std::variant<RuntimeValue, Diagnostic>
-execute_primitive(const PlanOp &op, const RuntimeValueStore &values,
+execute_primitive(const GraphNode &op, const RuntimeValueStore &values,
                   RuntimeTensorWorkspace &workspace) {
   // Evaluates primitive graph operations such as matmul and relu.
   // Maps the operation to the corresponding runtime tensor kernel.
@@ -422,7 +422,7 @@ execute_primitive(const PlanOp &op, const RuntimeValueStore &values,
 }
 
 std::variant<RuntimeValue, Diagnostic>
-execute_binary(const PlanOp &op, const RuntimeValueStore &values,
+execute_binary(const GraphNode &op, const RuntimeValueStore &values,
                RuntimeTensorWorkspace &workspace) {
   auto lhs_value = require_value_ref(values, op.inputs[0], "lhs");
   if (const auto *diagnostic = std::get_if<Diagnostic>(&lhs_value)) {
@@ -506,7 +506,7 @@ execute_binary(const PlanOp &op, const RuntimeValueStore &values,
 
 template <typename Function>
 std::variant<RuntimeValue, Diagnostic>
-unary_tensor_result(const PlanOp &op, const RuntimeValueStore &values,
+unary_tensor_result(const GraphNode &op, const RuntimeValueStore &values,
                     const std::string &label, RuntimeTensorWorkspace &workspace,
                     Function function) {
   auto input_value = require_value_ref(values, op.inputs[0], label);
@@ -529,7 +529,7 @@ unary_tensor_result(const PlanOp &op, const RuntimeValueStore &values,
 }
 
 std::variant<RuntimeValue, Diagnostic>
-execute_library_call(const PlanOp &op, const PlanValue &output,
+execute_library_call(const GraphNode &op, const GraphValue &output,
                      const RuntimeValueStore &values,
                      RuntimeTensorWorkspace &workspace) {
   const std::optional<OpId> opId = resolved_op_id(op);
@@ -763,7 +763,7 @@ execute_library_call(const PlanOp &op, const PlanValue &output,
 }
 
 std::variant<RuntimeValue, Diagnostic>
-execute_library_ctor(const PlanOp &op, const PlanValue &output,
+execute_library_ctor(const GraphNode &op, const GraphValue &output,
                      const RuntimeValueStore &values) {
   const std::optional<OpId> opId = resolved_op_id(op);
   if (!opId) {
@@ -889,7 +889,7 @@ execute_library_ctor(const PlanOp &op, const PlanValue &output,
 }
 
 std::variant<RuntimeValue, Diagnostic>
-execute_apply(const PlanOp &op, const ExecutionPlan &plan, const PlanValue &output,
+execute_apply(const GraphNode &op, const Graph &plan, const GraphValue &output,
               const RuntimeValueStore &values,
               const GraphExecutorOptions &options,
               RuntimeTensorWorkspace &workspace) {
@@ -919,7 +919,7 @@ execute_apply(const PlanOp &op, const ExecutionPlan &plan, const PlanValue &outp
     const std::string output_dtype =
         output.type.tensorDtype.value_or(closure->dtype);
     if (options.persistent_parameters != nullptr) {
-      const PlanParameter *param =
+      const GraphParameter *param =
           find_plan_parameter(plan, op.inputs[0], "weight");
       const std::string weight_name =
           param != nullptr
@@ -985,8 +985,8 @@ execute_apply(const PlanOp &op, const ExecutionPlan &plan, const PlanValue &outp
 }
 
 std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
-    const ExecutionPlan &plan, const GraphExecutorOptions &options,
-    const PlanModule *module, const std::vector<RuntimeValue> &arguments,
+    const Graph &plan, const GraphExecutorOptions &options,
+    const GraphModule *module, const std::vector<RuntimeValue> &arguments,
     std::set<std::string> &active_calls, RuntimeTensorWorkspace &workspace) {
   if (plan.backend != BackendKind::Host) {
     return runtime_error("Execution plan backend is not implemented yet");
@@ -1004,8 +1004,8 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
 
   for (const auto &step : plan.steps) {
     switch (step.kind) {
-    case PlanStepKind::AllocateHostValue: {
-      const PlanValue &value = plan.values[step.valueId];
+    case GraphStepKind::AllocateHostValue: {
+      const GraphValue &value = plan.values[step.valueId];
       if (value.placement != Placement::Host) {
         return runtime_error(
             "AllocateHostValue step requires a host-resident value");
@@ -1029,7 +1029,7 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
         if (value.id >= use_counts.size() || use_counts[value.id] == 0) {
           break;
         }
-        const PlanParameter *parameter =
+        const GraphParameter *parameter =
             find_plan_parameter_by_value(plan, value.id);
         if (parameter == nullptr) {
           return runtime_error("Model parameter value '" + value.name +
@@ -1060,23 +1060,23 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
       }
       break;
     }
-    case PlanStepKind::AllocateDeviceValue:
+    case GraphStepKind::AllocateDeviceValue:
       return runtime_error(
           "Local executor does not support device value allocation");
-    case PlanStepKind::ExecuteOp: {
+    case GraphStepKind::ExecuteOp: {
       if (!step.opIndex) {
         return runtime_error("ExecuteOp step is missing an op index");
       }
-      const PlanOp &op = plan.ops[*step.opIndex];
+      const GraphNode &op = plan.nodes[*step.opIndex];
       if (op.backend != BackendKind::Host) {
         return runtime_error(
             "Local executor cannot run non-local plan operations");
       }
 
       std::optional<std::variant<RuntimeValue, Diagnostic>> result;
-      if (op.kind == PlanOpKind::LibraryCall && module != nullptr && !op.opId &&
+      if (op.kind == GraphNodeKind::LibraryCall && module != nullptr && !op.opId &&
           !op.resolvedOp) {
-        const ExecutionPlan *callee = find_plan(*module, op.op);
+        const Graph *callee = find_plan(*module, op.op);
         if (callee != nullptr) {
           std::vector<RuntimeValue> call_args;
           call_args.reserve(op.inputs.size());
@@ -1105,24 +1105,24 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
 
       if (!result) {
         switch (op.kind) {
-        case PlanOpKind::Constant:
+        case GraphNodeKind::Constant:
           result = constant_to_runtime_value(op.constant);
           break;
-        case PlanOpKind::Binary:
+        case GraphNodeKind::Binary:
           result = execute_binary(op, state.values, workspace);
           break;
-        case PlanOpKind::PrimitiveCall:
+        case GraphNodeKind::PrimitiveCall:
           result = execute_primitive(op, state.values, workspace);
           break;
-        case PlanOpKind::LibraryCall:
+        case GraphNodeKind::LibraryCall:
           result = execute_library_call(op, plan.values[op.output],
                                         state.values, workspace);
           break;
-        case PlanOpKind::LibraryCtor:
+        case GraphNodeKind::LibraryCtor:
           result =
               execute_library_ctor(op, plan.values[op.output], state.values);
           break;
-        case PlanOpKind::Apply:
+        case GraphNodeKind::Apply:
           result = execute_apply(op, plan, plan.values[op.output], state.values,
                                  options, workspace);
           break;
@@ -1136,7 +1136,7 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
                               options.collect_intermediate_values);
       break;
     }
-    case PlanStepKind::MaterializeOutput: {
+    case GraphStepKind::MaterializeOutput: {
       if (options.collect_intermediate_values) {
         auto found =
             require_value(state.values, step.valueId, "graph output value");
@@ -1156,9 +1156,9 @@ std::variant<RuntimeExecutionState, Diagnostic> execute_plan_internal(
       }
       break;
     }
-    case PlanStepKind::UploadToDevice:
-    case PlanStepKind::DispatchDeviceOp:
-    case PlanStepKind::DownloadToHost:
+    case GraphStepKind::UploadToDevice:
+    case GraphStepKind::DispatchDeviceOp:
+    case GraphStepKind::DownloadToHost:
       return runtime_error(
           "Device execution plan steps are not implemented yet");
     }
@@ -1198,7 +1198,7 @@ public_result_from_state(RuntimeExecutionState state,
 } // namespace
 
 GraphExecutionResultVariant
-execute_execution_plan(const ExecutionPlan &plan,
+execute_execution_plan(const Graph &plan,
                        const GraphExecutorOptions &options) {
   std::set<std::string> active_calls;
   RuntimeTensorWorkspace local_workspace;
@@ -1206,12 +1206,12 @@ execute_execution_plan(const ExecutionPlan &plan,
                                           ? *options.tensor_workspace
                                           : local_workspace;
 
-  ExecutionPlan optimized_plan;
-  const ExecutionPlan *executionPlan = &plan;
+  Graph optimized_plan;
+  const Graph *executionPlan = &plan;
   if (!options.collect_intermediate_values) {
-    PlanOptimizationOptions optimization_options;
+    GraphOptimizationOptions optimization_options;
     optimization_options.preserveIntermediateValues = false;
-    optimized_plan = optimizeExecutionPlan(plan, optimization_options);
+    optimized_plan = optimizeGraph(plan, optimization_options);
     executionPlan = &optimized_plan;
   }
 
@@ -1226,9 +1226,9 @@ execute_execution_plan(const ExecutionPlan &plan,
 }
 
 GraphExecutionResultVariant
-execute_plan_module(const PlanModule &module, const std::string &entry,
+execute_plan_module(const GraphModule &module, const std::string &entry,
                     const GraphExecutorOptions &options) {
-  const ExecutionPlan *plan = find_plan(module, entry);
+  const Graph *plan = find_plan(module, entry);
   if (plan == nullptr) {
     return runtime_error("Entry function '" + entry +
                          "' not found in execution plan module");
@@ -1239,13 +1239,13 @@ execute_plan_module(const PlanModule &module, const std::string &entry,
                                           ? *options.tensor_workspace
                                           : local_workspace;
 
-  PlanModule optimized_module;
-  const PlanModule *execution_module = &module;
-  const ExecutionPlan *executionPlan = plan;
+  GraphModule optimized_module;
+  const GraphModule *execution_module = &module;
+  const Graph *executionPlan = plan;
   if (!options.collect_intermediate_values) {
-    PlanOptimizationOptions optimization_options;
+    GraphOptimizationOptions optimization_options;
     optimization_options.preserveIntermediateValues = false;
-    optimized_module = optimizePlanModule(module, optimization_options);
+    optimized_module = optimizeGraphModule(module, optimization_options);
     execution_module = &optimized_module;
     executionPlan = find_plan(*execution_module, entry);
     if (executionPlan == nullptr) {

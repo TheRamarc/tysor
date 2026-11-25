@@ -18,7 +18,7 @@ Diagnostic train_error(std::string message) {
     return Diagnostic::error(DiagnosticCode::RuntimeTrainError, std::move(message));
 }
 
-std::optional<std::string> find_skipped_plan_reason(const PlanModule& module, const std::string& entry) {
+std::optional<std::string> find_skipped_plan_reason(const GraphModule& module, const std::string& entry) {
     for (const auto& skipped : module.skipped) {
         if (skipped.functionName == entry) {
             return skipped.reason;
@@ -72,7 +72,7 @@ std::int64_t train_iterations(const FeExecutionRun& run) {
     return 1;
 }
 
-std::variant<std::size_t, Diagnostic> resolve_objective_id(const FeExecutionRun& run, const ExecutionPlan& plan) {
+std::variant<std::size_t, Diagnostic> resolve_objective_id(const FeExecutionRun& run, const Graph& plan) {
     if (run.objectiveSymbol) {
         auto found = plan.namedValues.find(*run.objectiveSymbol);
         if (found == plan.namedValues.end()) {
@@ -114,14 +114,14 @@ std::optional<Diagnostic> apply_sgd(
 
 std::optional<Diagnostic> run_train_plan_module(
     const LoweredModule& lowered,
-    const PlanModule& module,
+    const GraphModule& module,
     const std::string& entry,
     const GraphExecutorOptions& options
 ) {
     if (module.backend != BackendKind::Host) {
         return train_error("C++ train currently supports the local backend only");
     }
-    const ExecutionPlan* plan = find_plan(module, entry);
+    const Graph* plan = find_plan(module, entry);
     if (plan == nullptr) {
         if (auto skipped_reason = find_skipped_plan_reason(module, entry)) {
             return train_error("Entry function '" + entry + "' was skipped during graph planning: " + *skipped_reason);

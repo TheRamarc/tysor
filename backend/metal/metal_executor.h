@@ -19,7 +19,7 @@
  * @return GraphExecutionResultVariant The runtime values representing the execution results or a Diagnostic on error.
  */
 GraphExecutionResultVariant execute_metal_plan_module(
-    const PlanModule& module,
+    const GraphModule& module,
     const std::string& entry,
     const GraphExecutorOptions& options
 );

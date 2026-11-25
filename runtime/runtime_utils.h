@@ -1,7 +1,7 @@
 #pragma once
 
 #include "diagnostic.h"
-#include "execution_plan.h"
+#include "graph_ir.h"
 #include "cpu_executor.h"
 #include "runtime_tensor.h"
 
@@ -13,38 +13,46 @@
 #include <variant>
 #include <vector>
 
-inline const ExecutionPlan* find_plan(const PlanModule& module, const std::string& entry) {
-    auto found = std::find_if(
-        module.plans.begin(),
-        module.plans.end(),
-        [&](const ExecutionPlan& plan) { return plan.name == entry; }
+inline const Graph* find_plan(const GraphModule& module, const std::string& entry) {
+    auto found_layer = std::find_if(
+        module.layers.begin(),
+        module.layers.end(),
+        [&](const Graph& graph) { return graph.name == entry; }
     );
-    return found == module.plans.end() ? nullptr : &*found;
+    if (found_layer != module.layers.end()) {
+        return &*found_layer;
+    }
+    auto found_fn = std::find_if(
+        module.functions.begin(),
+        module.functions.end(),
+        [&](const Graph& graph) { return graph.name == entry; }
+    );
+    return found_fn == module.functions.end() ? nullptr : &*found_fn;
 }
 
-inline const PlanParameter* find_plan_parameter(
-    const ExecutionPlan& plan,
+inline const GraphParameter* find_plan_parameter(
+    const Graph& plan,
     std::size_t owner_value,
     const std::string& role
 ) {
     auto found = std::find_if(
         plan.parameters.begin(),
         plan.parameters.end(),
-        [&](const PlanParameter& parameter) {
+        [&](const GraphParameter& parameter) {
             return parameter.ownerValue == owner_value && parameter.role == role;
         }
     );
     return found == plan.parameters.end() ? nullptr : &*found;
 }
 
-inline const PlanParameter* find_plan_parameter_by_value(
-    const ExecutionPlan& plan,
+inline const GraphParameter* find_plan_parameter_by_value(
+    const Graph& plan,
     std::size_t value_id
 ) {
     auto found = std::find_if(
         plan.parameters.begin(),
         plan.parameters.end(),
-        [&](const PlanParameter& parameter) {
+        [&](const GraphParameter& parameter) {
             return parameter.valueId == value_id;
         }
     );
@@ -157,7 +165,7 @@ inline std::variant<bool, Diagnostic> require_bool(
 }
 
 inline std::variant<std::vector<std::int64_t>, Diagnostic> resolve_tensor_argument_shape(
-    const PlanValue& value,
+    const GraphValue& value,
     const GraphExecutorOptions& options,
     DiagnosticCode code = DiagnosticCode::RuntimeError
 ) {
@@ -216,8 +224,8 @@ inline std::variant<std::vector<std::int64_t>, Diagnostic> resolve_tensor_argume
 }
 
 inline std::variant<SimpleTensor, Diagnostic> build_tensor_from_plan_constant(
-    const PlanOp& op,
-    const PlanValue& output,
+    const GraphNode& op,
+    const GraphValue& output,
     RuntimeTensorWorkspace* workspace = nullptr,
     DiagnosticCode code = DiagnosticCode::RuntimeError
 ) {

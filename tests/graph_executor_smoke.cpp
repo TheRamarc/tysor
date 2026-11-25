@@ -1,8 +1,7 @@
-#include "execution_plan.h"
+#include "graph_ir.h"
 #include "frontend_ir.h"
 #include "cpu_executor.h"
 #include "cpu_kernels.h"
-#include "graph_ir.h"
 #include "lexer.h"
 #include "parser.h"
 #include "semantic_analyzer.h"
@@ -17,7 +16,7 @@
 
 namespace {
 
-std::variant<PlanModule, Diagnostic> plan_module(const std::string& source) {
+std::variant<GraphModule, Diagnostic> plan_module(const std::string& source) {
     TokenizeResult tokenized = tokenizeWithDiagnostic(source);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&tokenized)) {
         return *diagnostic;
@@ -46,11 +45,11 @@ std::variant<PlanModule, Diagnostic> plan_module(const std::string& source) {
         return *diagnostic;
     }
 
-    auto plan_result = compilePlanModule(std::get<GraphModule>(std::move(graph_result)), BackendKind::Host);
+    auto plan_result = scheduleGraphModule(std::get<GraphModule>(std::move(graph_result)), BackendKind::Host);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&plan_result)) {
         return *diagnostic;
     }
-    return std::get<PlanModule>(std::move(plan_result));
+    return std::get<GraphModule>(std::move(plan_result));
 }
 
 const SimpleTensor* single_tensor_output(const GraphExecutionResult& result) {
@@ -73,7 +72,7 @@ bool matmul_relu_executes() {
     GraphExecutorOptions options;
     options.tensor_shapes["x"] = {8, 1};
     options.tensor_shapes["w"] = {1, 8};
-    auto reference_execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
+    auto reference_execution = execute_plan_module(std::get<GraphModule>(module_result), "model", options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&reference_execution)) {
         std::cerr << "executor-matmul: reference execution failed: " << diagnostic->toString() << '\n';
         return false;
@@ -87,7 +86,7 @@ bool matmul_relu_executes() {
     RuntimeTensorWorkspace workspace;
     options.collect_intermediate_values = false;
     options.tensor_workspace = &workspace;
-    auto execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
+    auto execution = execute_plan_module(std::get<GraphModule>(module_result), "model", options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&execution)) {
         std::cerr << "executor-matmul: execution failed: " << diagnostic->toString() << '\n';
         return false;
@@ -181,7 +180,7 @@ bool callable_linear_and_tanh_execute() {
 
     GraphExecutorOptions options;
     options.tensor_shapes["x"] = {2, 3};
-    auto execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
+    auto execution = execute_plan_module(std::get<GraphModule>(module_result), "model", options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&execution)) {
         std::cerr << "executor-linear: execution failed: " << diagnostic->toString() << '\n';
         return false;
@@ -212,7 +211,7 @@ bool module_local_function_calls_execute() {
 
     GraphExecutorOptions options;
     options.tensor_shapes["x"] = {1, 4};
-    auto execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
+    auto execution = execute_plan_module(std::get<GraphModule>(module_result), "model", options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&execution)) {
         std::cerr << "executor-helper: execution failed: " << diagnostic->toString() << '\n';
         return false;
@@ -236,7 +235,7 @@ bool missing_shape_returns_runtime_diagnostic() {
         return false;
     }
 
-    auto execution = execute_plan_module(std::get<PlanModule>(module_result), "model", GraphExecutorOptions{});
+    auto execution = execute_plan_module(std::get<GraphModule>(module_result), "model", GraphExecutorOptions{});
     const auto* diagnostic = std::get_if<Diagnostic>(&execution);
     if (diagnostic == nullptr || diagnostic->code != DiagnosticCode::RuntimeError || diagnostic->message.find("--shape") == std::string::npos) {
         std::cerr << "executor-missing-shape: expected runtime shape diagnostic\n";
@@ -258,7 +257,7 @@ bool print_builtin_executes() {
 
     GraphExecutorOptions options;
     options.tensor_shapes["x"] = {2, 2};
-    auto execution = execute_plan_module(std::get<PlanModule>(module_result), "model", options);
+    auto execution = execute_plan_module(std::get<GraphModule>(module_result), "model", options);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&execution)) {
         std::cerr << "executor-print: execution failed: " << diagnostic->toString() << '\n';
         return false;

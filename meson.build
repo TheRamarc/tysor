@@ -32,7 +32,6 @@ frontend_sources = files(
   'frontend/ops.cpp',
   'frontend/parser.cpp',
   'frontend/semantic_analyzer.cpp',
-  'ir/execution_plan.cpp',
   'ir/frontend_ir.cpp',
   'ir/graph_ir.cpp',
 )

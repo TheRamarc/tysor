@@ -1,6 +1,5 @@
-#include "execution_plan.h"
-#include "frontend_ir.h"
 #include "graph_ir.h"
+#include "frontend_ir.h"
 #include "lexer.h"
 #include "parser.h"
 #include "semantic_analyzer.h"
@@ -15,8 +14,8 @@
 
 namespace {
 
-PlanOp make_plan_op(PlanOpKind kind, std::string name) {
-    return PlanOp{
+GraphNode make_plan_op(GraphNodeKind kind, std::string name) {
+    return GraphNode{
         kind,
         0,
         std::move(name),
@@ -72,37 +71,37 @@ bool local_matmul_relu_plan_ok() {
         return false;
     }
 
-    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Host);
+    auto module_result = scheduleGraphModule(std::get<GraphModule>(graphs), BackendKind::Host);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
         std::cerr << "local-plan: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
-    const PlanModule& module = std::get<PlanModule>(module_result);
-    if (module.plans.size() != 1 || module.backend != BackendKind::Host) {
+    const GraphModule& module = std::get<GraphModule>(module_result);
+    if (module.layers.size() != 1 || !module.functions.empty() || module.backend != BackendKind::Host || !module.scheduled) {
         std::cerr << "local-plan: unexpected module shape\n";
         return false;
     }
-    const ExecutionPlan& plan = module.plans.front();
-    if (plan.values.size() != 4 || plan.ops.size() != 2 || plan.outputs.size() != 1) {
-        std::cerr << "local-plan: unexpected plan shape\n" << executionPlanToString(module) << '\n';
+    const Graph& plan = module.layers.front();
+    if (plan.values.size() != 4 || plan.nodes.size() != 2 || plan.outputs.size() != 1) {
+        std::cerr << "local-plan: unexpected plan shape\n" << graphPlanToString(module) << '\n';
         return false;
     }
-    if (plan.ops[0].kind != PlanOpKind::PrimitiveCall || plan.ops[0].op != "matmul" ||
-        plan.ops[1].kind != PlanOpKind::PrimitiveCall || plan.ops[1].op != "relu") {
+    if (plan.nodes[0].kind != GraphNodeKind::PrimitiveCall || plan.nodes[0].op != "matmul" ||
+        plan.nodes[1].kind != GraphNodeKind::PrimitiveCall || plan.nodes[1].op != "relu") {
         std::cerr << "local-plan: expected matmul and relu primitive ops\n";
         return false;
     }
-    if (plan.ops[0].resolvedOp != OpId::Matmul || plan.ops[1].resolvedOp != OpId::Relu) {
+    if (plan.nodes[0].resolvedOp != OpId::Matmul || plan.nodes[1].resolvedOp != OpId::Relu) {
         std::cerr << "local-plan: expected resolved primitive op ids\n";
         return false;
     }
-    if (plan.steps.size() != plan.values.size() + plan.ops.size() + plan.outputs.size()) {
+    if (plan.steps.size() != plan.values.size() + plan.nodes.size() + plan.outputs.size()) {
         std::cerr << "local-plan: unexpected step count\n";
         return false;
     }
-    if (plan.steps[0].kind != PlanStepKind::AllocateHostValue ||
-        plan.steps[plan.values.size()].kind != PlanStepKind::ExecuteOp ||
-        plan.steps.back().kind != PlanStepKind::MaterializeOutput) {
+    if (plan.steps[0].kind != GraphStepKind::AllocateHostValue ||
+        plan.steps[plan.values.size()].kind != GraphStepKind::ExecuteOp ||
+        plan.steps.back().kind != GraphStepKind::MaterializeOutput) {
         std::cerr << "local-plan: unexpected step order\n";
         return false;
     }
@@ -120,38 +119,38 @@ bool output_only_optimizer_fuses_matmul_relu() {
         return false;
     }
 
-    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Host);
+    auto module_result = scheduleGraphModule(std::get<GraphModule>(graphs), BackendKind::Host);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
         std::cerr << "optimizer-fusion: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
 
-    const ExecutionPlan& plan = std::get<PlanModule>(module_result).plans.front();
-    PlanOptimizationOptions options;
+    const Graph& plan = std::get<GraphModule>(module_result).layers.front();
+    GraphOptimizationOptions options;
     options.preserveIntermediateValues = false;
-    ExecutionPlan optimized = optimizeExecutionPlan(plan, options);
-    if (auto diagnostic = validateExecutionPlan(optimized)) {
+    Graph optimized = optimizeGraph(plan, options);
+    if (auto diagnostic = validateGraph(optimized)) {
         std::cerr << "optimizer-fusion: optimized plan failed validation: " << diagnostic->toString() << '\n';
         return false;
     }
-    if (optimized.ops.size() != 1 || optimized.ops.front().kind != PlanOpKind::PrimitiveCall ||
-        optimized.ops.front().op != "matmul_relu" ||
-        optimized.ops.front().resolvedOp != OpId::MatmulRelu ||
-        optimized.ops.front().output != plan.outputs.front() ||
-        optimized.ops.front().inputs != std::vector<std::size_t>{0, 1}) {
+    if (optimized.nodes.size() != 1 || optimized.nodes.front().kind != GraphNodeKind::PrimitiveCall ||
+        optimized.nodes.front().op != "matmul_relu" ||
+        optimized.nodes.front().resolvedOp != OpId::MatmulRelu ||
+        optimized.nodes.front().output != plan.outputs.front() ||
+        optimized.nodes.front().inputs != std::vector<std::size_t>{0, 1}) {
         std::cerr << "optimizer-fusion: expected one fused matmul_relu op\n";
         return false;
     }
 
-    if (checkPlanOpCapability(BackendKind::Host, optimized.ops.front()).status != CapabilityStatus::Supported ||
-        checkPlanOpCapability(BackendKind::Metal, optimized.ops.front()).status != CapabilityStatus::Unsupported) {
+    if (checkGraphOpCapability(BackendKind::Host, optimized.nodes.front()).status != CapabilityStatus::Supported ||
+        checkGraphOpCapability(BackendKind::Metal, optimized.nodes.front()).status != CapabilityStatus::Unsupported) {
         std::cerr << "optimizer-fusion: unexpected fused op capability result\n";
         return false;
     }
 
-    PlanOptimizationOptions debug_options;
-    ExecutionPlan debug_plan = optimizeExecutionPlan(plan, debug_options);
-    if (debug_plan.ops.size() != 2) {
+    GraphOptimizationOptions debug_options;
+    Graph debug_plan = optimizeGraph(plan, debug_options);
+    if (debug_plan.nodes.size() != 2) {
         std::cerr << "optimizer-fusion: default optimization should preserve intermediates\n";
         return false;
     }
@@ -168,13 +167,13 @@ bool metal_plan_uses_device_placement() {
         return false;
     }
 
-    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Metal);
+    auto module_result = scheduleGraphModule(std::get<GraphModule>(graphs), BackendKind::Metal);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
         std::cerr << "metal-plan: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
-    const ExecutionPlan& plan = std::get<PlanModule>(module_result).plans.front();
-    if (plan.backend != BackendKind::Metal || plan.ops.empty() || plan.ops.front().backend != BackendKind::Metal) {
+    const Graph& plan = std::get<GraphModule>(module_result).layers.front();
+    if (plan.backend != BackendKind::Metal || plan.nodes.empty() || plan.nodes.front().backend != BackendKind::Metal) {
         std::cerr << "metal-plan: backend was not preserved\n";
         return false;
     }
@@ -186,9 +185,9 @@ bool metal_plan_uses_device_placement() {
         saw_device_value = saw_device_value || value.placement == Placement::Device;
     }
     for (const auto& step : plan.steps) {
-        saw_upload = saw_upload || step.kind == PlanStepKind::UploadToDevice;
-        saw_dispatch = saw_dispatch || step.kind == PlanStepKind::DispatchDeviceOp;
-        saw_download = saw_download || step.kind == PlanStepKind::DownloadToHost;
+        saw_upload = saw_upload || step.kind == GraphStepKind::UploadToDevice;
+        saw_dispatch = saw_dispatch || step.kind == GraphStepKind::DispatchDeviceOp;
+        saw_download = saw_download || step.kind == GraphStepKind::DownloadToHost;
     }
     if (!saw_device_value || !saw_upload || !saw_dispatch || !saw_download) {
         std::cerr << "metal-plan: missing expected device scheduling\n";
@@ -198,12 +197,12 @@ bool metal_plan_uses_device_placement() {
 }
 
 bool validation_rejects_bad_plan_references() {
-    ExecutionPlan plan;
+    Graph plan;
     plan.name = "bad";
-    plan.values.push_back(PlanValue{0, "x", FeType::tensor("float16", std::nullopt, std::nullopt), true, true, Placement::Host});
+    plan.values.push_back(GraphValue{0, "x", FeType::tensor("float16", std::nullopt, std::nullopt), true, true, false, std::nullopt, Placement::Host});
     plan.outputs = {42};
 
-    auto diagnostic = validateExecutionPlan(plan);
+    auto diagnostic = validateGraph(plan);
     if (!diagnostic || diagnostic->message.find("output 42") == std::string::npos) {
         std::cerr << "bad-plan: expected output reference diagnostic\n";
         return false;
@@ -222,13 +221,13 @@ bool skipped_graphs_propagate_to_plan() {
         std::cerr << "skipped-plan: graph lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
-    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Host);
+    auto module_result = scheduleGraphModule(std::get<GraphModule>(graphs), BackendKind::Host);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
         std::cerr << "skipped-plan: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
-    const PlanModule& module = std::get<PlanModule>(module_result);
-    if (!module.plans.empty() || module.skipped.size() != 1) {
+    const GraphModule& module = std::get<GraphModule>(module_result);
+    if (!module.functions.empty() || !module.layers.empty() || module.skipped.size() != 1) {
         std::cerr << "skipped-plan: expected skipped function to propagate\n";
         return false;
     }
@@ -248,13 +247,13 @@ bool module_local_function_calls_survive_capability_validation() {
         return false;
     }
 
-    auto module_result = compilePlanModule(std::get<GraphModule>(graphs), BackendKind::Host);
+    auto module_result = scheduleGraphModule(std::get<GraphModule>(graphs), BackendKind::Host);
     if (const auto* diagnostic = std::get_if<Diagnostic>(&module_result)) {
         std::cerr << "function-call-plan: plan lowering failed: " << diagnostic->toString() << '\n';
         return false;
     }
-    const PlanModule& module = std::get<PlanModule>(module_result);
-    if (module.plans.size() != 2) {
+    const GraphModule& module = std::get<GraphModule>(module_result);
+    if (module.functions.size() + module.layers.size() != 2) {
         std::cerr << "function-call-plan: expected helper and model plans\n";
         return false;
     }
@@ -293,9 +292,9 @@ bool capability_summary_exposes_supported_backend_ops() {
 }
 
 bool capability_check_rejects_unknown_named_ops() {
-    CapabilityCheck check = checkPlanOpCapability(
+    CapabilityCheck check = checkGraphOpCapability(
         BackendKind::PyTorch,
-        make_plan_op(PlanOpKind::LibraryCall, "not_a_real_op")
+        make_plan_op(GraphNodeKind::LibraryCall, "not_a_real_op")
     );
 
     if (check.status != CapabilityStatus::Unsupported ||
@@ -309,11 +308,11 @@ bool capability_check_rejects_unknown_named_ops() {
 }
 
 bool capability_validation_returns_structured_backend_diagnostic() {
-    ExecutionPlan plan;
+    Graph plan;
     plan.backend = BackendKind::Metal;
-    plan.ops.push_back(make_plan_op(PlanOpKind::LibraryCall, "not_a_real_op"));
+    plan.nodes.push_back(make_plan_op(GraphNodeKind::LibraryCall, "not_a_real_op"));
 
-    auto diagnostic = validateExecutionPlanCapabilities(plan);
+    auto diagnostic = validateGraphCapabilities(plan);
     if (!diagnostic) {
         std::cerr << "capability-validation: expected unknown op diagnostic\n";
         return false;

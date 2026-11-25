@@ -1,5 +1,4 @@
 #include "frontend_ir.h"
-#include "execution_plan.h"
 #include "graph_ir.h"
 #include "lexer.h"
 #include "parser.h"
@@ -175,12 +174,12 @@ const GraphParameter* find_graph_parameter(
     }
 }
 
-const PlanParameter* find_plan_parameter(
-    const ExecutionPlan& plan,
+const GraphParameter* find_plan_parameter(
+    const Graph& plan,
     const std::string& role,
     std::size_t ownerValue
 ) {
-    auto found = std::find_if(plan.parameters.begin(), plan.parameters.end(), [&](const PlanParameter& parameter) {
+    auto found = std::find_if(plan.parameters.begin(), plan.parameters.end(), [&](const GraphParameter& parameter) {
         return parameter.role == role && parameter.ownerValue == ownerValue;
     });
     return found == plan.parameters.end() ? nullptr : &*found;
@@ -296,13 +295,13 @@ bool graph_infers_linear_symbolic_shape() {
                   << graphIrToString(makeGraphModule(graph)) << '\n';
         return false;
     }
-    ExecutionPlan plan = compileLocalExecutionPlan(graph);
+    Graph plan = scheduleGraph(graph, BackendKind::Host);
     const auto y = graph.namedValues.at("y");
     if (!plan.values[y].tensorType || graphTensorTypeToString(*plan.values[y].tensorType) != "float32[batch, 4]") {
         std::cerr << "linear-shape-inference: execution plan did not preserve inferred tensor metadata\n";
         return false;
     }
-    const PlanParameter* weight = find_plan_parameter(plan, "weight", owner);
+    const GraphParameter* weight = find_plan_parameter(plan, "weight", owner);
     if (weight == nullptr || weight->name != expected_weight ||
         graphTensorTypeToString(weight->tensorType) != "float32[3, 4]" ||
         weight->valueId >= plan.values.size() ||

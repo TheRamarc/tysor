@@ -1,6 +1,6 @@
 #pragma once
 
-#include "execution_plan.h"
+#include "graph_ir.h"
 #include "frontend_ir.h"
 #include "runtime_tensor.h"
 
@@ -33,8 +33,8 @@ struct GraphExecutionResult {
 using GraphExecutionResultVariant = std::variant<GraphExecutionResult, Diagnostic>;
 
 // Forward execution routines for the local CPU backend.
-GraphExecutionResultVariant execute_execution_plan(const ExecutionPlan& plan, const GraphExecutorOptions& options);
-GraphExecutionResultVariant execute_plan_module(const PlanModule& module, const std::string& entry, const GraphExecutorOptions& options);
+GraphExecutionResultVariant execute_execution_plan(const Graph& plan, const GraphExecutorOptions& options);
+GraphExecutionResultVariant execute_plan_module(const GraphModule& module, const std::string& entry, const GraphExecutorOptions& options);
 void print_graph_runtime_value(const GraphRuntimeValue& value);
 
 struct BackwardResult {
@@ -44,7 +44,7 @@ struct BackwardResult {
 
 // Reverse-mode autodiff over a completed forward execution on the CPU backend.
 std::variant<BackwardResult, Diagnostic> compute_parameter_gradients(
-    const ExecutionPlan& plan,
+    const Graph& plan,
     const GraphExecutionResult& execution,
     std::size_t objective_id,
     const std::map<std::string, SimpleTensor>* parameters = nullptr
@@ -53,7 +53,7 @@ std::variant<BackwardResult, Diagnostic> compute_parameter_gradients(
 // Runs forward + backward pass for a named entry and prints parameter gradients.
 std::optional<Diagnostic> run_backward_plan_module(
     const LoweredModule& lowered,
-    const PlanModule& module,
+    const GraphModule& module,
     const std::string& entry,
     const GraphExecutorOptions& options
 );

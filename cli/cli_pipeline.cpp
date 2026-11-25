@@ -93,15 +93,16 @@ CompileResult compile_source(const std::string &source,
     }
   }
 
-  // 6. Execution Plan phase: Create a backend-specific execution schedule
+  // 6. Schedule Graph IR in-place for the selected backend
   if (options.plan || options.run || options.backward || options.train) {
-    auto plan_result = compilePlanModule(*compiled.graph, options.backend);
+    auto plan_result =
+        scheduleGraphModule(std::move(*compiled.graph), options.backend);
     if (const auto *diagnostic = std::get_if<Diagnostic>(&plan_result)) {
       return *diagnostic;
     }
-    compiled.plan = std::get<PlanModule>(std::move(plan_result));
+    compiled.graph = std::get<GraphModule>(std::move(plan_result));
     if (options.plan) {
-      compiled.plan_dump = executionPlanToString(*compiled.plan);
+      compiled.plan_dump = graphPlanToString(*compiled.graph);
     }
   }
   return compiled;
@@ -125,9 +126,9 @@ void print_compile_summary(const CompiledProgram &compiled) {
   std::cout << loweredModuleSummary(compiled.lowered) << '\n';
   if (compiled.graph.has_value()) {
     std::cout << graphModuleSummary(*compiled.graph) << '\n';
-  }
-  if (compiled.plan.has_value()) {
-    std::cout << executionPlanSummary(*compiled.plan) << '\n';
+    if (compiled.graph->scheduled) {
+      std::cout << graphPlanSummary(*compiled.graph) << '\n';
+    }
   }
 }
 

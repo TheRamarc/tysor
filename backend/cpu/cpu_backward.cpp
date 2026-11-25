@@ -269,7 +269,7 @@ transpose_checked(const SimpleTensor &tensor) {
 }
 
 std::variant<LinearClosure, Diagnostic>
-build_linear_closure(const PlanOp &op, const PlanValue &output,
+build_linear_closure(const GraphNode &op, const GraphValue &output,
                      const GraphExecutionResult &execution) {
   LinearClosure closure;
   if (output.type.callableReturn && output.type.callableReturn->tensorDtype) {
@@ -318,15 +318,15 @@ build_linear_closure(const PlanOp &op, const PlanValue &output,
   return closure;
 }
 
-const PlanOp *find_producer(const ExecutionPlan &plan, std::size_t output_id) {
+const GraphNode *find_producer(const Graph &plan, std::size_t output_id) {
   auto found =
-      std::find_if(plan.ops.begin(), plan.ops.end(),
-                   [&](const PlanOp &op) { return op.output == output_id; });
-  return found == plan.ops.end() ? nullptr : &*found;
+      std::find_if(plan.nodes.begin(), plan.nodes.end(),
+                   [&](const GraphNode &op) { return op.output == output_id; });
+  return found == plan.nodes.end() ? nullptr : &*found;
 }
 
 std::variant<std::size_t, Diagnostic>
-resolve_objective_id(const LoweredModule &lowered, const ExecutionPlan &plan,
+resolve_objective_id(const LoweredModule &lowered, const Graph &plan,
                      const std::string &entry) {
   if (lowered.executionPlan) {
     auto run = std::find_if(
@@ -515,7 +515,7 @@ backward_cross_entropy_target(const SimpleTensor &target) {
 }
 
 std::variant<SimpleTensor, Diagnostic>
-backward_binary(const PlanOp &op, const GraphExecutionResult &execution,
+backward_binary(const GraphNode &op, const GraphExecutionResult &execution,
                 const SimpleTensor &grad,
                 std::map<std::size_t, SimpleTensor> &gradients) {
   // Computes and accumulates gradients for generic binary operations (e.g. Add,
@@ -659,7 +659,7 @@ backward_binary(const PlanOp &op, const GraphExecutionResult &execution,
 
 std::variant<BackwardResult, Diagnostic>
 compute_gradients_internal(
-    const ExecutionPlan &plan, const GraphExecutionResult &execution,
+    const Graph &plan, const GraphExecutionResult &execution,
     std::size_t objective_id,
     const std::map<std::string, SimpleTensor> *parameters) {
   BackwardResult result;
@@ -672,31 +672,31 @@ compute_gradients_internal(
   gradients[objective_id] =
       ones_like(**std::get_if<const SimpleTensor *>(&objective));
 
-  for (auto op_iter = plan.ops.rbegin(); op_iter != plan.ops.rend();
+  for (auto op_iter = plan.nodes.rbegin(); op_iter != plan.nodes.rend();
        ++op_iter) {
-    const PlanOp &op = *op_iter;
+    const GraphNode &op = *op_iter;
     auto gradient = gradients.find(op.output);
     if (gradient == gradients.end()) {
       continue;
     }
     const SimpleTensor grad = gradient->second;
 
-    if (op.kind == PlanOpKind::Constant || op.kind == PlanOpKind::LibraryCtor) {
+    if (op.kind == GraphNodeKind::Constant || op.kind == GraphNodeKind::LibraryCtor) {
       continue;
     }
-    if (op.kind == PlanOpKind::LibraryCall &&
+    if (op.kind == GraphNodeKind::LibraryCall &&
         (op.op == "tensor" || op.op == "zeros" || op.op == "ones" ||
          op.op == "randn")) {
       continue;
     }
-    if (op.kind == PlanOpKind::Binary) {
+    if (op.kind == GraphNodeKind::Binary) {
       auto result = backward_binary(op, execution, grad, gradients);
       if (const auto *diagnostic = std::get_if<Diagnostic>(&result)) {
         return *diagnostic;
       }
       continue;
     }
-    if (op.kind == PlanOpKind::PrimitiveCall && op.op == "matmul") {
+    if (op.kind == GraphNodeKind::PrimitiveCall && op.op == "matmul") {
       auto lhs = require_tensor(execution, op.inputs[0], "matmul lhs");
       auto rhs = require_tensor(execution, op.inputs[1], "matmul rhs");
       if (const auto *diagnostic = std::get_if<Diagnostic>(&lhs))
@@ -723,7 +723,7 @@ compute_gradients_internal(
         return *diagnostic;
       continue;
     }
-    if (op.kind == PlanOpKind::PrimitiveCall && op.op == "relu") {
+    if (op.kind == GraphNodeKind::PrimitiveCall && op.op == "relu") {
       auto output = require_tensor(execution, op.output, "relu output");
       if (const auto *diagnostic = std::get_if<Diagnostic>(&output))
         return *diagnostic;
@@ -743,7 +743,7 @@ compute_gradients_internal(
         return *diagnostic;
       continue;
     }
-    if (op.kind == PlanOpKind::PrimitiveCall && op.op == "scale") {
+    if (op.kind == GraphNodeKind::PrimitiveCall && op.op == "scale") {
       auto scalar = require_scalar(execution, op.inputs[1], "scale");
       if (const auto *diagnostic = std::get_if<Diagnostic>(&scalar))
         return *diagnostic;
@@ -756,8 +756,8 @@ compute_gradients_internal(
         return *diagnostic;
       continue;
     }
-    if (op.kind == PlanOpKind::Apply) {
-      const PlanOp *callee = find_producer(plan, op.inputs[0]);
+    if (op.kind == GraphNodeKind::Apply) {
+      const GraphNode *callee = find_producer(plan, op.inputs[0]);
       if (callee == nullptr) {
         return backward_error(
             "Backward could not resolve apply callee producer");
@@ -774,7 +774,7 @@ compute_gradients_internal(
         const LinearClosure linear = std::get<LinearClosure>(closure);
         const std::int64_t in_features = linear.in_features.value_or(
             (**std::get_if<const SimpleTensor *>(&input)).shape[1]);
-        const PlanParameter *weight_param =
+        const GraphParameter *weight_param =
             find_plan_parameter(plan, op.inputs[0], "weight");
         const std::string weight_name =
             weight_param != nullptr
@@ -803,7 +803,7 @@ compute_gradients_internal(
                   std::get<SimpleTensor>(weight_grad)))
             return *diagnostic;
           if (linear.with_bias) {
-            const PlanParameter *bias_param =
+            const GraphParameter *bias_param =
                 find_plan_parameter(plan, op.inputs[0], "bias");
             const std::string bias_name =
                 bias_param != nullptr
@@ -827,7 +827,7 @@ compute_gradients_internal(
           return *diagnostic;
         if (const auto *diagnostic = std::get_if<Diagnostic>(&embedding_dim))
           return *diagnostic;
-        const PlanParameter *weight_param =
+        const GraphParameter *weight_param =
             find_plan_parameter(plan, op.inputs[0], "weight");
         const std::string weight_name =
             weight_param != nullptr
@@ -880,12 +880,12 @@ compute_gradients_internal(
         return *diagnostic;
       continue;
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "rms_norm") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "rms_norm") {
       if (auto diagnostic = accumulate(gradients, op.inputs[0], grad))
         return *diagnostic;
       continue;
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "cross_entropy") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "cross_entropy") {
       auto logits =
           require_tensor(execution, op.inputs[0], "cross_entropy logits");
       auto target =
@@ -911,7 +911,7 @@ compute_gradients_internal(
         return *diagnostic;
       continue;
     }
-    if (op.kind == PlanOpKind::LibraryCall &&
+    if (op.kind == GraphNodeKind::LibraryCall &&
         (op.op == "sum" || op.op == "mean")) {
       auto input = require_tensor(execution, op.inputs[0], op.op + " input");
       if (const auto *diagnostic = std::get_if<Diagnostic>(&input))
@@ -944,7 +944,7 @@ compute_gradients_internal(
         return *diagnostic;
       continue;
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "transpose") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "transpose") {
       auto input_grad = transpose_checked(grad);
       if (const auto *diagnostic = std::get_if<Diagnostic>(&input_grad))
         return *diagnostic;
@@ -953,7 +953,7 @@ compute_gradients_internal(
         return *diagnostic;
       continue;
     }
-    if (op.kind == PlanOpKind::LibraryCall &&
+    if (op.kind == GraphNodeKind::LibraryCall &&
         (op.op == "reshape" || op.op == "flatten_heads")) {
       auto input = require_tensor(execution, op.inputs[0], op.op + " input");
       if (const auto *diagnostic = std::get_if<Diagnostic>(&input))
@@ -967,7 +967,7 @@ compute_gradients_internal(
         return *diagnostic;
       continue;
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "repeat_kv") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "repeat_kv") {
       auto input = require_tensor(execution, op.inputs[0], "repeat_kv input");
       auto repeats = require_int(execution, op.inputs[1], "repeats");
       if (const auto *diagnostic = std::get_if<Diagnostic>(&input))
@@ -984,7 +984,7 @@ compute_gradients_internal(
         return *diagnostic;
       continue;
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "causal_mask") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "causal_mask") {
       auto input_grad = backward_causal_mask_input(grad);
       if (const auto *diagnostic = std::get_if<Diagnostic>(&input_grad))
         return *diagnostic;
@@ -993,7 +993,7 @@ compute_gradients_internal(
         return *diagnostic;
       continue;
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "rope") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "rope") {
       auto head_dim = require_int(execution, op.inputs[1], "rope head_dim");
       auto theta = require_scalar(execution, op.inputs[2], "rope theta");
       if (const auto *diagnostic = std::get_if<Diagnostic>(&head_dim))
@@ -1035,7 +1035,7 @@ void print_named_tensor(const std::string &name, const SimpleTensor &tensor) {
 } // namespace
 
 std::variant<BackwardResult, Diagnostic>
-compute_parameter_gradients(const ExecutionPlan &plan,
+compute_parameter_gradients(const Graph &plan,
                             const GraphExecutionResult &execution,
                             std::size_t objective_id,
                             const std::map<std::string, SimpleTensor> *parameters) {
@@ -1043,14 +1043,14 @@ compute_parameter_gradients(const ExecutionPlan &plan,
 }
 
 std::optional<Diagnostic>
-run_backward_plan_module(const LoweredModule &lowered, const PlanModule &module,
+run_backward_plan_module(const LoweredModule &lowered, const GraphModule &module,
                          const std::string &entry,
                          const GraphExecutorOptions &options) {
   if (module.backend != BackendKind::Host) {
     return backward_error(
         "C++ backward currently supports the local backend only");
   }
-  const ExecutionPlan *plan = find_plan(module, entry);
+  const Graph *plan = find_plan(module, entry);
   if (plan == nullptr) {
     return backward_error("Entry function '" + entry +
                           "' not found in execution plan module");

@@ -1,9 +1,8 @@
 #pragma once
 
 #include "cli_args.h"
-#include "execution_plan.h"
-#include "frontend_ir.h"
 #include "graph_ir.h"
+#include "frontend_ir.h"
 #include "lexer.h"
 #include "parser.h"
 #include "semantic_analyzer.h"
@@ -68,14 +67,6 @@ struct CompiledProgram {
      * 3. What mutates/updates it: Populated conditionally during the graph generation phase if requested or required by backend.
      */
     std::optional<GraphModule> graph;
-
-    /**
-     * @brief The finalized execution plan.
-     * 1. Why it exists: Guides backend execution engines (e.g., Metal or local) on how to run the model.
-     * 2. What it tracks: Memory allocations, kernel launches, and strict data dependencies.
-     * 3. What mutates/updates it: Populated conditionally during the execution planning phase.
-     */
-    std::optional<PlanModule> plan;
 
     /**
      * @brief String representation of the token stream.

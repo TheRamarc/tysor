@@ -1681,7 +1681,11 @@ GraphFunctionResult buildGraphFunction(const FeFunction& function) {
 }
 
 GraphLayerResult buildGraphLayer(const FeLayer& layer) {
-    return GraphBuilder<FeLayer, GraphLayer>(layer).build();
+    auto result = GraphBuilder<FeLayer, GraphLayer>(layer).build();
+    if (auto* graph = std::get_if<Graph>(&result)) {
+        graph->isLayer = true;
+    }
+    return result;
 }
 
 std::variant<GraphModule, Diagnostic> buildGraphModule(const LoweredModule& module) {
@@ -1771,7 +1775,7 @@ std::optional<Diagnostic> validate_graph_impl(const GraphT& graph) {
             );
         }
     }
-    if constexpr (std::is_same_v<GraphT, GraphLayer>) {
+    if constexpr (std::is_same_v<GraphT, Graph>) {
         std::set<std::string> parameter_names;
         for (const auto& parameter : graph.parameters) {
             if (parameter.name.empty()) {
@@ -1842,14 +1846,30 @@ std::optional<Diagnostic> validate_graph_impl(const GraphT& graph) {
             return graph_error("Graph '" + graph.name + "' output " + std::to_string(output) + " is never produced");
         }
     }
+    for (std::size_t index = 0; index < graph.steps.size(); ++index) {
+        const GraphStep& step = graph.steps[index];
+        if (value_ids.find(step.valueId) == value_ids.end()) {
+            return graph_error("Graph '" + graph.name + "' step #" + std::to_string(index) + " references missing value " + std::to_string(step.valueId));
+        }
+        if (step.opIndex && *step.opIndex >= graph.nodes.size()) {
+            return graph_error("Graph '" + graph.name + "' step #" + std::to_string(index) + " references missing node " + std::to_string(*step.opIndex));
+        }
+        if ((step.kind == GraphStepKind::ExecuteOp || step.kind == GraphStepKind::DispatchDeviceOp) && !step.opIndex) {
+            return graph_error("Graph '" + graph.name + "' step #" + std::to_string(index) + " must reference a node");
+        }
+    }
     return std::nullopt;
 }
 
-std::optional<Diagnostic> validateGraphFunction(const GraphFunction& graph) {
+std::optional<Diagnostic> validateGraph(const Graph& graph) {
     return validate_graph_impl(graph);
 }
 
-std::optional<Diagnostic> validateGraphLayer(const GraphLayer& graph) {
+std::optional<Diagnostic> validateGraphFunction(const Graph& graph) {
+    return validate_graph_impl(graph);
+}
+
+std::optional<Diagnostic> validateGraphLayer(const Graph& graph) {
     return validate_graph_impl(graph);
 }
 
@@ -1938,6 +1958,487 @@ std::string graphIrToString(const GraphModule& module) {
     }
     for (const auto& skipped : module.skipped) {
         out << "// graph function: " << skipped.functionName << "\n"
+            << "// unavailable: " << skipped.reason << '\n';
+    }
+    return out.str();
+}
+
+namespace {
+
+const char* plan_backend_name(BackendKind backend) {
+    switch (backend) {
+        case BackendKind::Host:
+            return "local";
+        case BackendKind::Metal:
+            return "metal";
+        case BackendKind::PyTorch:
+            return "pytorch";
+        case BackendKind::Cuda:
+            return "cuda";
+        case BackendKind::Rocm:
+            return "rocm";
+    }
+    return "local";
+}
+
+Diagnostic capability_error(BackendKind backend, std::size_t opIndex, std::string reason) {
+    return Diagnostic::error(
+        DiagnosticCode::BackendError,
+        std::string("Unsupported ") + plan_backend_name(backend) + " op #" + std::to_string(opIndex) + ": " + reason
+    ).withHelp("The frontend accepted this program, but the selected backend cannot execute one of the planned operations yet.");
+}
+
+bool contains_string(const std::vector<std::string>& values, const std::string& target) {
+    return std::find(values.begin(), values.end(), target) != values.end();
+}
+
+CapabilityCheck check_named_op(
+    BackendKind backend,
+    const std::string& category,
+    const GraphNode& op,
+    const std::vector<std::string>& supported_names,
+    const std::vector<std::string>& supported_ids
+) {
+    if (op.resolvedOp && contains_string(supported_ids, opIdName(*op.resolvedOp))) {
+        return CapabilityCheck{CapabilityStatus::Supported, std::nullopt};
+    }
+    if (op.opId && contains_string(supported_ids, *op.opId)) {
+        return CapabilityCheck{CapabilityStatus::Supported, std::nullopt};
+    }
+    auto resolved_id = lookupOpId(op.op);
+    if (resolved_id && contains_string(supported_ids, opIdName(*resolved_id))) {
+        return CapabilityCheck{CapabilityStatus::Supported, std::nullopt};
+    }
+    if (contains_string(supported_names, op.op)) {
+        return CapabilityCheck{CapabilityStatus::Supported, std::nullopt};
+    }
+    return CapabilityCheck{
+        CapabilityStatus::Unsupported,
+        std::string(plan_backend_name(backend)) + " backend does not support " + category + " op '" + op.op + "'"
+    };
+}
+
+CapabilityCheck check_graph_op_capability_with_callables(
+    BackendKind backend,
+    const GraphNode& op,
+    const std::vector<std::string>& callable_functions
+) {
+    if (op.kind == GraphNodeKind::LibraryCall && !op.opId && !op.resolvedOp &&
+        contains_string(callable_functions, op.op)) {
+        return CapabilityCheck{CapabilityStatus::Supported, std::nullopt};
+    }
+    return checkGraphOpCapability(backend, op);
+}
+
+bool has_resolved_op(const GraphNode& op, OpId id) {
+    const std::optional<OpId> resolved = op.resolvedOp ? op.resolvedOp : lookupOpId(op.op);
+    return resolved && *resolved == id;
+}
+
+std::vector<std::size_t> compute_graph_use_counts(const Graph& graph) {
+    std::vector<std::size_t> counts(graph.values.size(), 0);
+    for (const auto& node : graph.nodes) {
+        for (const auto input : node.inputs) {
+            if (input < counts.size()) {
+                ++counts[input];
+            }
+        }
+    }
+    for (const auto output : graph.outputs) {
+        if (output < counts.size()) {
+            ++counts[output];
+        }
+    }
+    return counts;
+}
+
+bool can_fuse_matmul_relu(
+    const Graph& graph,
+    const std::vector<std::size_t>& use_counts,
+    std::size_t step_index
+) {
+    if (step_index + 1 >= graph.steps.size()) {
+        return false;
+    }
+    const GraphStep& matmul_step = graph.steps[step_index];
+    const GraphStep& relu_step = graph.steps[step_index + 1];
+    if (matmul_step.kind != GraphStepKind::ExecuteOp ||
+        relu_step.kind != GraphStepKind::ExecuteOp ||
+        !matmul_step.opIndex || !relu_step.opIndex) {
+        return false;
+    }
+    const GraphNode& matmul_op = graph.nodes[*matmul_step.opIndex];
+    const GraphNode& relu_op = graph.nodes[*relu_step.opIndex];
+    if (matmul_op.backend != BackendKind::Host ||
+        relu_op.backend != BackendKind::Host ||
+        matmul_op.kind != GraphNodeKind::PrimitiveCall ||
+        relu_op.kind != GraphNodeKind::PrimitiveCall ||
+        !has_resolved_op(matmul_op, OpId::Matmul) ||
+        !has_resolved_op(relu_op, OpId::Relu)) {
+        return false;
+    }
+    if (matmul_op.inputs.size() != 2 || relu_op.inputs.size() != 1 ||
+        relu_op.inputs[0] != matmul_op.output) {
+        return false;
+    }
+    if (matmul_op.output >= use_counts.size() || use_counts[matmul_op.output] != 1) {
+        return false;
+    }
+    return true;
+}
+
+GraphNode make_matmul_relu_op(const GraphNode& matmul_op, const GraphNode& relu_op) {
+    return GraphNode{
+        GraphNodeKind::PrimitiveCall,
+        relu_op.output,
+        "matmul_relu",
+        std::optional<std::string>{"MatmulRelu"},
+        FeBinaryOp::Add,
+        FeValue::none(),
+        matmul_op.inputs,
+        BackendKind::Host,
+        std::optional<OpId>{OpId::MatmulRelu},
+    };
+}
+
+const char* placement_name(Placement placement) {
+    switch (placement) {
+        case Placement::Host:
+            return "host";
+        case Placement::Device:
+            return "device";
+    }
+    return "host";
+}
+
+const char* graph_step_kind_name(GraphStepKind kind) {
+    switch (kind) {
+        case GraphStepKind::AllocateHostValue:
+            return "allocate_host";
+        case GraphStepKind::AllocateDeviceValue:
+            return "allocate_device";
+        case GraphStepKind::ExecuteOp:
+            return "execute_op";
+        case GraphStepKind::MaterializeOutput:
+            return "materialize_output";
+        case GraphStepKind::UploadToDevice:
+            return "upload_to_device";
+        case GraphStepKind::DispatchDeviceOp:
+            return "dispatch_device_op";
+        case GraphStepKind::DownloadToHost:
+            return "download_to_host";
+    }
+    return "unknown";
+}
+
+} // namespace
+
+Graph scheduleGraph(Graph graph, BackendKind backend) {
+    graph.backend = backend;
+    graph.steps.clear();
+
+    if (backend == BackendKind::Metal) {
+        for (auto& value : graph.values) {
+            value.placement = value.type.kind == FeTypeKind::Tensor &&
+                                      !value.isParameter &&
+                                      !value.isModelParameter
+                                  ? Placement::Device
+                                  : Placement::Host;
+            if (value.placement == Placement::Host) {
+                graph.steps.push_back(GraphStep{GraphStepKind::AllocateHostValue, value.id, std::nullopt});
+                if (value.isParameter || value.isModelParameter) {
+                    graph.steps.push_back(GraphStep{GraphStepKind::UploadToDevice, value.id, std::nullopt});
+                }
+            } else {
+                graph.steps.push_back(GraphStep{GraphStepKind::AllocateDeviceValue, value.id, std::nullopt});
+            }
+        }
+        for (std::size_t index = 0; index < graph.nodes.size(); ++index) {
+            graph.nodes[index].backend = BackendKind::Metal;
+            graph.nodes[index].resolvedOp = lookupOpId(graph.nodes[index].op);
+            graph.steps.push_back(GraphStep{GraphStepKind::DispatchDeviceOp, graph.nodes[index].output, index});
+        }
+        for (const auto output : graph.outputs) {
+            graph.steps.push_back(GraphStep{GraphStepKind::DownloadToHost, output, std::nullopt});
+            graph.steps.push_back(GraphStep{GraphStepKind::MaterializeOutput, output, std::nullopt});
+        }
+        return graph;
+    }
+
+    for (auto& value : graph.values) {
+        value.placement = Placement::Host;
+        graph.steps.push_back(GraphStep{GraphStepKind::AllocateHostValue, value.id, std::nullopt});
+    }
+    for (std::size_t index = 0; index < graph.nodes.size(); ++index) {
+        graph.nodes[index].backend = backend;
+        graph.nodes[index].resolvedOp = lookupOpId(graph.nodes[index].op);
+        graph.steps.push_back(GraphStep{GraphStepKind::ExecuteOp, graph.nodes[index].output, index});
+    }
+    for (const auto output : graph.outputs) {
+        graph.steps.push_back(GraphStep{GraphStepKind::MaterializeOutput, output, std::nullopt});
+    }
+    return graph;
+}
+
+Graph optimizeGraph(Graph graph, const GraphOptimizationOptions& options) {
+    if (graph.backend != BackendKind::Host || options.preserveIntermediateValues || !options.enableOperatorFusion) {
+        return graph;
+    }
+
+    const std::vector<std::size_t> use_counts = compute_graph_use_counts(graph);
+    std::vector<GraphNode> optimized_nodes;
+    std::vector<GraphStep> optimized_steps;
+    optimized_nodes.reserve(graph.nodes.size());
+    optimized_steps.reserve(graph.steps.size());
+
+    for (std::size_t step_index = 0; step_index < graph.steps.size(); ++step_index) {
+        const GraphStep& step = graph.steps[step_index];
+        if (can_fuse_matmul_relu(graph, use_counts, step_index)) {
+            const GraphNode& matmul_op = graph.nodes[*step.opIndex];
+            const GraphNode& relu_op = graph.nodes[*graph.steps[step_index + 1].opIndex];
+            optimized_nodes.push_back(make_matmul_relu_op(matmul_op, relu_op));
+            optimized_steps.push_back(GraphStep{GraphStepKind::ExecuteOp, relu_op.output, optimized_nodes.size() - 1});
+            ++step_index;
+            continue;
+        }
+        if ((step.kind == GraphStepKind::ExecuteOp || step.kind == GraphStepKind::DispatchDeviceOp) && step.opIndex) {
+            optimized_nodes.push_back(graph.nodes[*step.opIndex]);
+            optimized_steps.push_back(GraphStep{step.kind, step.valueId, optimized_nodes.size() - 1});
+            continue;
+        }
+        optimized_steps.push_back(step);
+    }
+
+    graph.nodes = std::move(optimized_nodes);
+    graph.steps = std::move(optimized_steps);
+    return graph;
+}
+
+GraphModule optimizeGraphModule(GraphModule module, const GraphOptimizationOptions& options) {
+    for (auto& graph : module.layers) {
+        graph = optimizeGraph(std::move(graph), options);
+    }
+    for (auto& graph : module.functions) {
+        graph = optimizeGraph(std::move(graph), options);
+    }
+    return module;
+}
+
+GraphModuleResult scheduleGraphModule(GraphModule module, BackendKind backend) {
+    module.backend = backend;
+    module.scheduled = true;
+    std::vector<std::string> callable_functions;
+    callable_functions.reserve(module.layers.size() + module.functions.size());
+    for (const auto& graph : module.layers) {
+        callable_functions.push_back(graph.name);
+    }
+    for (const auto& graph : module.functions) {
+        callable_functions.push_back(graph.name);
+    }
+
+    auto schedule_item = [&](Graph& graph) -> std::optional<Diagnostic> {
+        graph = scheduleGraph(std::move(graph), backend);
+        if (auto diagnostic = validateGraph(graph)) {
+            return diagnostic;
+        }
+        for (std::size_t index = 0; index < graph.nodes.size(); ++index) {
+            CapabilityCheck check = check_graph_op_capability_with_callables(backend, graph.nodes[index], callable_functions);
+            if (check.status == CapabilityStatus::Unsupported) {
+                return capability_error(backend, index, check.reason.value_or("operation is not supported"));
+            }
+        }
+        return std::nullopt;
+    };
+
+    for (auto& graph : module.layers) {
+        if (auto diagnostic = schedule_item(graph)) {
+            return *diagnostic;
+        }
+    }
+    for (auto& graph : module.functions) {
+        if (auto diagnostic = schedule_item(graph)) {
+            return *diagnostic;
+        }
+    }
+    return module;
+}
+
+BackendCapabilitySummary backendCapabilitySummary(BackendKind backend) {
+    BackendCapabilitySummary summary;
+    summary.backend = backend;
+    summary.primitiveOps = planSupportedPrimitiveOps();
+    summary.libraryOps = planSupportedLibraryOps();
+    summary.constructors = planSupportedConstructorOps();
+    summary.supportsBinaryOps = true;
+
+    switch (backend) {
+        case BackendKind::Host:
+            summary.notes = {
+                "Runs through the host graph executor.",
+                "Training and backward paths use additional runtime support outside the graph plan.",
+            };
+            break;
+        case BackendKind::PyTorch:
+            summary.notes = {
+                "Uses PyTorch codegen/runtime paths.",
+                "Requires Python and torch at execution time.",
+            };
+            break;
+        case BackendKind::Cuda:
+            summary.notes = {
+                "Declared backend target for future NVIDIA GPU execution.",
+                "Runtime execution is not implemented in this build yet.",
+                "Planning support exists so CUDA can participate in backend contracts.",
+            };
+            break;
+        case BackendKind::Rocm:
+            summary.notes = {
+                "Declared backend target for future AMD GPU execution.",
+                "Runtime execution is not implemented in this build yet.",
+                "Planning support exists so ROCm can participate in backend contracts.",
+            };
+            break;
+        case BackendKind::Metal:
+            summary.notes = {
+                "Requires macOS for native Metal execution.",
+                "Tensor/device placement is explicit in the execution plan.",
+                "Some scalar-only shapes may still be rejected by runtime checks.",
+            };
+            break;
+    }
+
+    return summary;
+}
+
+CapabilityCheck checkGraphOpCapability(BackendKind backend, const GraphNode& op) {
+    switch (op.kind) {
+        case GraphNodeKind::Constant:
+            return CapabilityCheck{CapabilityStatus::Supported, std::nullopt};
+        case GraphNodeKind::Binary:
+            if (backendCapabilitySummary(backend).supportsBinaryOps) {
+                return CapabilityCheck{CapabilityStatus::Supported, std::nullopt};
+            }
+            return CapabilityCheck{CapabilityStatus::Unsupported, std::string(plan_backend_name(backend)) + " backend does not support binary operations"};
+        case GraphNodeKind::PrimitiveCall:
+            if (op.resolvedOp && *op.resolvedOp == OpId::MatmulRelu) {
+                return backend == BackendKind::Host
+                    ? CapabilityCheck{CapabilityStatus::Supported, std::nullopt}
+                    : CapabilityCheck{CapabilityStatus::Unsupported, std::string(plan_backend_name(backend)) + " backend does not support fused matmul_relu"};
+            }
+            return check_named_op(backend, "primitive", op, planSupportedPrimitiveOps(), planSupportedPrimitiveOpIds());
+        case GraphNodeKind::LibraryCall:
+            return check_named_op(backend, "library", op, planSupportedLibraryOps(), planSupportedLibraryOpIds());
+        case GraphNodeKind::LibraryCtor:
+            return check_named_op(backend, "constructor", op, planSupportedConstructorOps(), planSupportedConstructorOpIds());
+        case GraphNodeKind::Apply:
+            return CapabilityCheck{CapabilityStatus::Supported, std::nullopt};
+    }
+    return CapabilityCheck{CapabilityStatus::Unsupported, "operation is not supported"};
+}
+
+std::optional<Diagnostic> validateGraphCapabilities(const Graph& graph) {
+    for (std::size_t index = 0; index < graph.nodes.size(); ++index) {
+        CapabilityCheck check = checkGraphOpCapability(graph.backend, graph.nodes[index]);
+        if (check.status == CapabilityStatus::Unsupported) {
+            return capability_error(graph.backend, index, check.reason.value_or("operation is not supported"));
+        }
+    }
+    return std::nullopt;
+}
+
+std::string graphPlanSummary(const GraphModule& module) {
+    std::ostringstream out;
+    out << "plan=backend:" << plan_backend_name(module.backend)
+        << " functions:" << (module.layers.size() + module.functions.size())
+        << " skipped:" << module.skipped.size();
+    return out.str();
+}
+
+std::string graphPlanToString(const GraphModule& module) {
+    std::ostringstream out;
+    out << graphPlanSummary(module) << '\n';
+    auto format_plan = [&](const Graph& graph) {
+        out << "executionPlan " << graph.name
+            << " backend=" << plan_backend_name(graph.backend)
+            << " values=" << graph.values.size()
+            << " parameters=" << graph.parameters.size()
+            << " ops=" << graph.nodes.size()
+            << " steps=" << graph.steps.size()
+            << " outputs=" << graph.outputs.size()
+            << " -> " << fe_type_to_graph_string(graph.returnType) << '\n';
+        for (const auto& value : graph.values) {
+            out << "  %" << value.id;
+            if (!value.name.empty()) {
+                out << ' ' << value.name;
+            }
+            out << ": " << fe_type_to_graph_string(value.type)
+                << " placement=" << placement_name(value.placement);
+            if (value.tensorType) {
+                out << " tensor=" << graphTensorTypeToString(*value.tensorType);
+            }
+            if (value.isParameter) {
+                out << " param";
+            }
+            if (value.requiresGrad) {
+                out << " requiresGrad";
+            }
+            if (value.isModelParameter) {
+                out << " model_param";
+            }
+            out << '\n';
+        }
+        for (const auto& parameter : graph.parameters) {
+            out << "  param " << parameter.name
+                << " role=" << parameter.role
+                << " owner=%" << parameter.ownerValue
+                << " value=%" << parameter.valueId
+                << " tensor=" << graphTensorTypeToString(parameter.tensorType);
+            if (parameter.trainable) {
+                out << " trainable";
+            }
+            out << '\n';
+        }
+        for (std::size_t index = 0; index < graph.nodes.size(); ++index) {
+            const auto& op = graph.nodes[index];
+            out << "  op #" << index << ' ' << graph_node_kind_name(op.kind)
+                << " -> %" << op.output;
+            if (!op.op.empty()) {
+                out << " op=" << op.op;
+            }
+            if (op.opId) {
+                out << " opId=" << *op.opId;
+            }
+            if (op.kind == GraphNodeKind::Binary) {
+                out << " op=" << fe_binary_op_to_graph_string(op.binaryOp);
+            }
+            if (op.kind == GraphNodeKind::Constant) {
+                out << " value=" << fe_value_to_graph_string(op.constant);
+            }
+            out << " inputs=";
+            append_inputs(out, op.inputs);
+            out << '\n';
+        }
+        for (std::size_t index = 0; index < graph.steps.size(); ++index) {
+            const auto& step = graph.steps[index];
+            out << "  step #" << index << ' ' << graph_step_kind_name(step.kind)
+                << " value=%" << step.valueId;
+            if (step.opIndex) {
+                out << " op=#" << *step.opIndex;
+            }
+            out << '\n';
+        }
+        out << "  outputs=";
+        append_inputs(out, graph.outputs);
+        out << '\n';
+    };
+    for (const auto& graph : module.layers) {
+        format_plan(graph);
+    }
+    for (const auto& graph : module.functions) {
+        format_plan(graph);
+    }
+    for (const auto& skipped : module.skipped) {
+        out << "// execution plan: " << skipped.functionName << "\n"
             << "// unavailable: " << skipped.reason << '\n';
     }
     return out.str();

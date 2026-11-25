@@ -172,7 +172,7 @@ Diagnostic metal_error(std::string message) {
 
 // Synthesizes a tensor with specific shape and type using CLI shapes or static annotations
 std::variant<SimpleTensor, Diagnostic> make_tensor_argument(
-    const PlanValue& value,
+    const GraphValue& value,
     const GraphExecutorOptions& options
 ) {
     auto shape = resolve_tensor_argument_shape(
@@ -330,8 +330,8 @@ std::variant<GraphRuntimeValue, Diagnostic> host_to_graph_value(const HostValue&
 }
 
 std::variant<LinearClosure, Diagnostic> build_linear_closure(
-    const PlanOp& op,
-    const PlanValue& output,
+    const GraphNode& op,
+    const GraphValue& output,
     std::map<std::size_t, MetalValue>& values
 ) {
     LinearClosure closure;
@@ -374,8 +374,8 @@ std::variant<LinearClosure, Diagnostic> build_linear_closure(
 }
 
 std::variant<EmbeddingClosure, Diagnostic> build_embedding_closure(
-    const PlanOp& op,
-    const PlanValue& output,
+    const GraphNode& op,
+    const GraphValue& output,
     std::map<std::size_t, MetalValue>& values
 ) {
     if (op.inputs.size() != 2) {
@@ -406,7 +406,7 @@ bool is_activation_constructor(const std::string& op) {
 }
 
 std::variant<ActivationClosure, Diagnostic> build_activation_closure(
-    const PlanOp& op,
+    const GraphNode& op,
     std::map<std::size_t, MetalValue>& values
 ) {
     if (!is_activation_constructor(op.op)) {
@@ -432,11 +432,11 @@ std::variant<ActivationClosure, Diagnostic> build_activation_closure(
 
 // Predicts the output shape of various operations prior to their dispatch
 std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
-    const PlanOp& op,
+    const GraphNode& op,
     std::map<std::size_t, MetalValue>& values
 ) {
     // Matmul output dimensions are determined by [lhs_rows, rhs_cols]
-    if (op.kind == PlanOpKind::PrimitiveCall && op.op == "matmul") {
+    if (op.kind == GraphNodeKind::PrimitiveCall && op.op == "matmul") {
         DeviceTensor* lhs = require_device_tensor(values, op.inputs[0], "matmul lhs");
         DeviceTensor* rhs = require_device_tensor(values, op.inputs[1], "matmul rhs");
         if (lhs == nullptr || rhs == nullptr) {
@@ -444,15 +444,15 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
         }
         return std::vector<std::int64_t>{lhs->tensor.shape[0], rhs->tensor.shape[1]};
     }
-    if ((op.kind == PlanOpKind::PrimitiveCall && (op.op == "relu" || op.op == "scale")) ||
-        (op.kind == PlanOpKind::LibraryCall && (op.op == "sqrt" || op.op == "rsqrt"))) {
+    if ((op.kind == GraphNodeKind::PrimitiveCall && (op.op == "relu" || op.op == "scale")) ||
+        (op.kind == GraphNodeKind::LibraryCall && (op.op == "sqrt" || op.op == "rsqrt"))) {
         DeviceTensor* input = require_device_tensor(values, op.inputs[0], op.op + " input");
         if (input == nullptr) {
             return metal_error("Metal " + op.op + " requires a device tensor input");
         }
         return input->tensor.shape;
     }
-    if (op.kind == PlanOpKind::Binary) {
+    if (op.kind == GraphNodeKind::Binary) {
         if (DeviceTensor* lhs = require_device_tensor(values, op.inputs[0], "binary lhs")) {
             return lhs->tensor.shape;
         }
@@ -461,7 +461,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
         }
         return metal_error("Metal does not support scalar-scalar binary ops");
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "reshape") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "reshape") {
         DeviceTensor* input = require_device_tensor(values, op.inputs[0], "reshape input");
         if (input == nullptr) {
             return metal_error("Metal reshape requires a device tensor input");
@@ -479,7 +479,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
         }
         return shape;
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "transpose") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "transpose") {
         DeviceTensor* input = require_device_tensor(values, op.inputs[0], "transpose input");
         if (input == nullptr) {
             return metal_error("Metal transpose requires a device tensor input");
@@ -489,7 +489,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
         }
         return std::vector<std::int64_t>{input->tensor.shape[1], input->tensor.shape[0]};
     }
-    if (op.kind == PlanOpKind::LibraryCall && (op.op == "sum" || op.op == "mean")) {
+    if (op.kind == GraphNodeKind::LibraryCall && (op.op == "sum" || op.op == "mean")) {
         DeviceTensor* input = require_device_tensor(values, op.inputs[0], op.op + " input");
         if (input == nullptr) {
             return metal_error("Metal " + op.op + " requires a device tensor input");
@@ -513,7 +513,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
                 return metal_error("Metal " + op.op + " axis currently supports axis 0 or 1");
         }
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "rms_norm") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "rms_norm") {
         DeviceTensor* input = require_device_tensor(values, op.inputs[0], "rms_norm input");
         if (input == nullptr) {
             return metal_error("Metal rms_norm requires a device tensor input");
@@ -530,7 +530,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
         }
         return input->tensor.shape;
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "cross_entropy") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "cross_entropy") {
         DeviceTensor* logits = require_device_tensor(values, op.inputs[0], "cross_entropy logits");
         DeviceTensor* target = require_device_tensor(values, op.inputs[1], "cross_entropy target");
         if (logits == nullptr || target == nullptr) {
@@ -544,7 +544,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
         }
         return std::vector<std::int64_t>{logits->tensor.shape[0], 1};
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "repeat_kv") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "repeat_kv") {
         DeviceTensor* input = require_device_tensor(values, op.inputs[0], "repeat_kv input");
         if (input == nullptr) {
             return metal_error("Metal repeat_kv requires a device tensor input");
@@ -563,7 +563,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
         output_shape[1] *= std::get<std::int64_t>(repeats);
         return output_shape;
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "flatten_heads") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "flatten_heads") {
         DeviceTensor* input = require_device_tensor(values, op.inputs[0], "flatten_heads input");
         if (input == nullptr) {
             return metal_error("Metal flatten_heads requires a device tensor input");
@@ -575,7 +575,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
         output_shape.push_back(input->tensor.shape[input->tensor.shape.size() - 2] * input->tensor.shape.back());
         return output_shape;
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "causal_mask") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "causal_mask") {
         DeviceTensor* input = require_device_tensor(values, op.inputs[0], "causal_mask input");
         if (input == nullptr) {
             return metal_error("Metal causal_mask requires a device tensor input");
@@ -585,7 +585,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
         }
         return input->tensor.shape;
     }
-    if (op.kind == PlanOpKind::LibraryCall && op.op == "rope") {
+    if (op.kind == GraphNodeKind::LibraryCall && op.op == "rope") {
         DeviceTensor* input = require_device_tensor(values, op.inputs[0], "rope input");
         if (input == nullptr) {
             return metal_error("Metal rope requires a device tensor input");
@@ -611,7 +611,7 @@ std::variant<std::vector<std::int64_t>, Diagnostic> infer_output_shape(
         }
         return input->tensor.shape;
     }
-    if (op.kind == PlanOpKind::Apply) {
+    if (op.kind == GraphNodeKind::Apply) {
         HostValue* callee = require_host_value(values, op.inputs[0]);
         DeviceTensor* input = require_device_tensor(values, op.inputs[1], "apply input");
         if (callee == nullptr || input == nullptr) {
@@ -1217,30 +1217,30 @@ std::variant<DeviceTensor, Diagnostic> dispatch_activation(
 }
 
 // Checks if the planned ops are supported by the current Metal backend
-std::optional<Diagnostic> validate_supported_plan(const ExecutionPlan& plan) {
-    auto producer_for = [&](std::size_t valueId) -> const PlanOp* {
-        auto found = std::find_if(plan.ops.begin(), plan.ops.end(), [&](const PlanOp& item) {
+std::optional<Diagnostic> validate_supported_plan(const Graph& plan) {
+    auto producer_for = [&](std::size_t valueId) -> const GraphNode* {
+        auto found = std::find_if(plan.nodes.begin(), plan.nodes.end(), [&](const GraphNode& item) {
             return item.output == valueId;
         });
-        return found == plan.ops.end() ? nullptr : &*found;
+        return found == plan.nodes.end() ? nullptr : &*found;
     };
 
-    for (std::size_t index = 0; index < plan.ops.size(); ++index) {
-        const PlanOp& op = plan.ops[index];
+    for (std::size_t index = 0; index < plan.nodes.size(); ++index) {
+        const GraphNode& op = plan.nodes[index];
         bool supported =
-            op.kind == PlanOpKind::Constant ||
-            op.kind == PlanOpKind::Binary ||
-            (op.kind == PlanOpKind::PrimitiveCall && (op.op == "matmul" || op.op == "relu" || op.op == "scale")) ||
-            (op.kind == PlanOpKind::LibraryCtor && (op.op == "linear" || op.op == "Embedding" || is_activation_constructor(op.op))) ||
-            (op.kind == PlanOpKind::LibraryCall &&
+            op.kind == GraphNodeKind::Constant ||
+            op.kind == GraphNodeKind::Binary ||
+            (op.kind == GraphNodeKind::PrimitiveCall && (op.op == "matmul" || op.op == "relu" || op.op == "scale")) ||
+            (op.kind == GraphNodeKind::LibraryCtor && (op.op == "linear" || op.op == "Embedding" || is_activation_constructor(op.op))) ||
+            (op.kind == GraphNodeKind::LibraryCall &&
              (op.op == "sqrt" || op.op == "rsqrt" || op.op == "reshape" || op.op == "transpose" ||
               op.op == "sum" || op.op == "mean" || op.op == "rms_norm" || op.op == "cross_entropy" ||
               op.op == "repeat_kv" || op.op == "flatten_heads" || op.op == "causal_mask" || op.op == "rope" ||
               op.op == "tensor" || op.op == "zeros" || op.op == "ones" || op.op == "randn"));
-        if (op.kind == PlanOpKind::Apply && !op.inputs.empty()) {
-            const PlanOp* callee = producer_for(op.inputs[0]);
+        if (op.kind == GraphNodeKind::Apply && !op.inputs.empty()) {
+            const GraphNode* callee = producer_for(op.inputs[0]);
             supported = callee != nullptr &&
-                callee->kind == PlanOpKind::LibraryCtor &&
+                callee->kind == GraphNodeKind::LibraryCtor &&
                 (callee->op == "linear" || callee->op == "Embedding" || is_activation_constructor(callee->op));
         }
         if (!supported) {
@@ -1255,7 +1255,7 @@ std::optional<Diagnostic> validate_supported_plan(const ExecutionPlan& plan) {
 
 // Central interpreter loop for the execution plan using the Metal backend
 std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
-    const ExecutionPlan& plan,
+    const Graph& plan,
     const GraphExecutorOptions& options
 ) {
     if (plan.backend != BackendKind::Metal) {
@@ -1281,9 +1281,9 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
     // Process the linear sequence of plan steps
     for (const auto& step : plan.steps) {
         switch (step.kind) {
-            case PlanStepKind::AllocateHostValue: {
+            case GraphStepKind::AllocateHostValue: {
                 // Initialize synthetic tensor inputs based on CLI flags
-                const PlanValue& value = plan.values[step.valueId];
+                const GraphValue& value = plan.values[step.valueId];
                 if (value.isParameter) {
                     if (value.type.kind != FeTypeKind::Tensor) {
                         return metal_error("Metal executor currently supports tensor parameters only");
@@ -1296,7 +1296,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                 }
                 break;
             }
-            case PlanStepKind::UploadToDevice: {
+            case GraphStepKind::UploadToDevice: {
                 // Transfer a tensor resident in host memory to GPU VRAM
                 auto found = values.find(step.valueId);
                 if (found == values.end()) {
@@ -1317,14 +1317,14 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                 values[step.valueId] = std::get<DeviceTensor>(std::move(uploaded));
                 break;
             }
-            case PlanStepKind::AllocateDeviceValue:
+            case GraphStepKind::AllocateDeviceValue:
                 break;
-            case PlanStepKind::DispatchDeviceOp: {
+            case GraphStepKind::DispatchDeviceOp: {
                 if (!step.opIndex) {
                     return metal_error("Metal dispatch step is missing an op index");
                 }
-                const PlanOp& op = plan.ops[*step.opIndex];
-                if (op.kind == PlanOpKind::Constant) {
+                const GraphNode& op = plan.nodes[*step.opIndex];
+                if (op.kind == GraphNodeKind::Constant) {
                     auto host = constant_to_host_value(op.constant);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&host)) {
                         return *diagnostic;
@@ -1332,7 +1332,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                     values[op.output] = std::get<HostValue>(std::move(host));
                     break;
                 }
-                if (op.kind == PlanOpKind::LibraryCtor && op.op == "linear") {
+                if (op.kind == GraphNodeKind::LibraryCtor && op.op == "linear") {
                     auto closure = build_linear_closure(op, plan.values[op.output], values);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&closure)) {
                         return *diagnostic;
@@ -1340,7 +1340,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                     values[op.output] = HostValue{MetalHostValue{std::get<LinearClosure>(std::move(closure))}};
                     break;
                 }
-                if (op.kind == PlanOpKind::LibraryCtor && op.op == "Embedding") {
+                if (op.kind == GraphNodeKind::LibraryCtor && op.op == "Embedding") {
                     auto closure = build_embedding_closure(op, plan.values[op.output], values);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&closure)) {
                         return *diagnostic;
@@ -1348,7 +1348,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                     values[op.output] = HostValue{MetalHostValue{std::get<EmbeddingClosure>(std::move(closure))}};
                     break;
                 }
-                if (op.kind == PlanOpKind::LibraryCtor && is_activation_constructor(op.op)) {
+                if (op.kind == GraphNodeKind::LibraryCtor && is_activation_constructor(op.op)) {
                     auto closure = build_activation_closure(op, values);
                     if (const auto* diagnostic = std::get_if<Diagnostic>(&closure)) {
                         return *diagnostic;
@@ -1357,14 +1357,14 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                     break;
                 }
                 std::variant<DeviceTensor, Diagnostic> result;
-                if (op.kind == PlanOpKind::PrimitiveCall && op.op == "matmul") {
+                if (op.kind == GraphNodeKind::PrimitiveCall && op.op == "matmul") {
                     DeviceTensor* lhs = require_device_tensor(values, op.inputs[0], "matmul lhs");
                     DeviceTensor* rhs = require_device_tensor(values, op.inputs[1], "matmul rhs");
                     if (lhs == nullptr || rhs == nullptr) {
                         return metal_error("Metal matmul requires device tensor inputs");
                     }
                     result = dispatch_matmul(context.get(), *lhs, *rhs);
-                } else if (op.kind == PlanOpKind::Binary) {
+                } else if (op.kind == GraphNodeKind::Binary) {
                     DeviceTensor* lhs_tensor = require_device_tensor(values, op.inputs[0], "binary lhs");
                     DeviceTensor* rhs_tensor = require_device_tensor(values, op.inputs[1], "binary rhs");
                     if (lhs_tensor != nullptr && rhs_tensor != nullptr) {
@@ -1384,13 +1384,13 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                     } else {
                         return metal_error("Metal does not support scalar-scalar binary ops");
                     }
-                } else if (op.kind == PlanOpKind::PrimitiveCall && op.op == "relu") {
+                } else if (op.kind == GraphNodeKind::PrimitiveCall && op.op == "relu") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "relu input");
                     if (input == nullptr) {
                         return metal_error("Metal relu requires a device tensor input");
                     }
                     result = dispatch_unary(context.get(), *input, "relu");
-                } else if (op.kind == PlanOpKind::PrimitiveCall && op.op == "scale") {
+                } else if (op.kind == GraphNodeKind::PrimitiveCall && op.op == "scale") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "scale input");
                     if (input == nullptr) {
                         return metal_error("Metal scale requires a device tensor input");
@@ -1400,19 +1400,19 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                         return *diagnostic;
                     }
                     result = dispatch_tensor_scalar_binary(context.get(), *input, std::get<double>(scalar), FeBinaryOp::Mul, false);
-                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "sqrt") {
+                } else if (op.kind == GraphNodeKind::LibraryCall && op.op == "sqrt") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "sqrt input");
                     if (input == nullptr) {
                         return metal_error("Metal sqrt requires a device tensor input");
                     }
                     result = dispatch_unary(context.get(), *input, "sqrt_op");
-                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "rsqrt") {
+                } else if (op.kind == GraphNodeKind::LibraryCall && op.op == "rsqrt") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "rsqrt input");
                     if (input == nullptr) {
                         return metal_error("Metal rsqrt requires a device tensor input");
                     }
                     result = dispatch_unary(context.get(), *input, "rsqrt_op");
-                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "reshape") {
+                } else if (op.kind == GraphNodeKind::LibraryCall && op.op == "reshape") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "reshape input");
                     if (input == nullptr) {
                         return metal_error("Metal reshape requires a device tensor input");
@@ -1422,13 +1422,13 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                         return *diagnostic;
                     }
                     result = dispatch_copy(context.get(), *input, std::get<std::vector<std::int64_t>>(std::move(shape)));
-                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "transpose") {
+                } else if (op.kind == GraphNodeKind::LibraryCall && op.op == "transpose") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "transpose input");
                     if (input == nullptr) {
                         return metal_error("Metal transpose requires a device tensor input");
                     }
                     result = dispatch_transpose(context.get(), *input);
-                } else if (op.kind == PlanOpKind::LibraryCall && (op.op == "sum" || op.op == "mean")) {
+                } else if (op.kind == GraphNodeKind::LibraryCall && (op.op == "sum" || op.op == "mean")) {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], op.op + " input");
                     if (input == nullptr) {
                         return metal_error("Metal " + op.op + " requires a device tensor input");
@@ -1442,7 +1442,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                         axis = std::get<std::int64_t>(axis_value);
                     }
                     result = dispatch_reduction(context.get(), *input, op.op, axis);
-                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "rms_norm") {
+                } else if (op.kind == GraphNodeKind::LibraryCall && op.op == "rms_norm") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "rms_norm input");
                     if (input == nullptr) {
                         return metal_error("Metal rms_norm requires a device tensor input");
@@ -1452,14 +1452,14 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                         return *diagnostic;
                     }
                     result = dispatch_rms_norm(context.get(), *input, std::get<std::int64_t>(hidden_size));
-                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "cross_entropy") {
+                } else if (op.kind == GraphNodeKind::LibraryCall && op.op == "cross_entropy") {
                     DeviceTensor* logits = require_device_tensor(values, op.inputs[0], "cross_entropy logits");
                     DeviceTensor* target = require_device_tensor(values, op.inputs[1], "cross_entropy target");
                     if (logits == nullptr || target == nullptr) {
                         return metal_error("Metal cross_entropy requires device tensor inputs");
                     }
                     result = dispatch_cross_entropy(context.get(), *logits, *target);
-                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "repeat_kv") {
+                } else if (op.kind == GraphNodeKind::LibraryCall && op.op == "repeat_kv") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "repeat_kv input");
                     if (input == nullptr) {
                         return metal_error("Metal repeat_kv requires a device tensor input");
@@ -1469,7 +1469,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                         return *diagnostic;
                     }
                     result = dispatch_repeat_kv(context.get(), *input, std::get<std::int64_t>(repeats));
-                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "flatten_heads") {
+                } else if (op.kind == GraphNodeKind::LibraryCall && op.op == "flatten_heads") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "flatten_heads input");
                     if (input == nullptr) {
                         return metal_error("Metal flatten_heads requires a device tensor input");
@@ -1479,13 +1479,13 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                         return *diagnostic;
                     }
                     result = dispatch_copy(context.get(), *input, std::get<std::vector<std::int64_t>>(std::move(shape)));
-                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "causal_mask") {
+                } else if (op.kind == GraphNodeKind::LibraryCall && op.op == "causal_mask") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "causal_mask input");
                     if (input == nullptr) {
                         return metal_error("Metal causal_mask requires a device tensor input");
                     }
                     result = dispatch_causal_mask(context.get(), *input);
-                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "tensor") {
+                } else if (op.kind == GraphNodeKind::LibraryCall && op.op == "tensor") {
                     auto host_tensor = build_tensor_from_plan_constant(
                         op,
                         plan.values[op.output],
@@ -1496,7 +1496,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                         return *diagnostic;
                     }
                     result = upload_tensor(context.get(), std::get<SimpleTensor>(std::move(host_tensor)));
-                } else if (op.kind == PlanOpKind::LibraryCall &&
+                } else if (op.kind == GraphNodeKind::LibraryCall &&
                            (op.op == "zeros" || op.op == "ones" || op.op == "randn")) {
                     std::vector<std::int64_t> shape;
                     shape.reserve(op.inputs.size());
@@ -1517,7 +1517,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                             ? make_filled_tensor(shape, 1.0F, dtype)
                             : make_randn_tensor(shape, dtype));
                     result = upload_tensor(context.get(), std::move(host_tensor));
-                } else if (op.kind == PlanOpKind::LibraryCall && op.op == "rope") {
+                } else if (op.kind == GraphNodeKind::LibraryCall && op.op == "rope") {
                     DeviceTensor* input = require_device_tensor(values, op.inputs[0], "rope input");
                     if (input == nullptr) {
                         return metal_error("Metal rope requires a device tensor input");
@@ -1531,7 +1531,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                         return *diagnostic;
                     }
                     result = dispatch_rope(context.get(), *input, std::get<std::int64_t>(head_dim), std::get<double>(theta));
-                } else if (op.kind == PlanOpKind::Apply) {
+                } else if (op.kind == GraphNodeKind::Apply) {
                     HostValue* callee = require_host_value(values, op.inputs[0]);
                     DeviceTensor* input = require_device_tensor(values, op.inputs[1], "apply input");
                     if (callee == nullptr || input == nullptr) {
@@ -1555,7 +1555,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                 values[op.output] = std::get<DeviceTensor>(std::move(result));
                 break;
             }
-            case PlanStepKind::DownloadToHost: {
+            case GraphStepKind::DownloadToHost: {
                 // Read a buffer back from GPU memory into standard CPU memory
                 DeviceTensor* device = require_device_tensor(values, step.valueId, "download value");
                 if (device == nullptr) {
@@ -1569,7 +1569,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                 values[step.valueId] = HostValue{std::move(host)};
                 break;
             }
-            case PlanStepKind::MaterializeOutput: {
+            case GraphStepKind::MaterializeOutput: {
                 auto found = values.find(step.valueId);
                 if (found == values.end()) {
                     return metal_error("Metal output step references an uninitialized value");
@@ -1585,7 +1585,7 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
                 outputs[step.valueId] = std::get<GraphRuntimeValue>(std::move(output));
                 break;
             }
-            case PlanStepKind::ExecuteOp:
+            case GraphStepKind::ExecuteOp:
                 return metal_error("Metal executor cannot run host ExecuteOp steps");
         }
     }
@@ -1597,11 +1597,11 @@ std::variant<GraphExecutionResult, Diagnostic> execute_plan_native(
 } // namespace
 
 GraphExecutionResultVariant execute_metal_plan_module(
-    const PlanModule& module,
+    const GraphModule& module,
     const std::string& entry,
     const GraphExecutorOptions& options
 ) {
-    const ExecutionPlan* plan = find_plan(module, entry);
+    const Graph* plan = find_plan(module, entry);
     if (plan == nullptr) {
         return metal_error("Entry function '" + entry + "' not found in execution plan module");
     }

@@ -28,14 +28,14 @@ int main() {
         return 1;
     }
     CompiledProgram compiled = std::get<CompiledProgram>(std::move(compiled_result));
-    if (!compiled.plan) {
-        std::cerr << "backward-smoke: expected execution plan\n";
+    if (!compiled.graph || !compiled.graph->scheduled) {
+        std::cerr << "backward-smoke: expected scheduled graph\n";
         return 1;
     }
 
     GraphExecutorOptions executor_options;
     executor_options.tensor_shapes = options.tensor_shapes;
-    if (auto diagnostic = run_backward_plan_module(compiled.lowered, *compiled.plan, "model", executor_options)) {
+    if (auto diagnostic = run_backward_plan_module(compiled.lowered, *compiled.graph, "model", executor_options)) {
         std::cerr << diagnostic->toString() << '\n';
         return 1;
     }

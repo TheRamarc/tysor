@@ -90,8 +90,8 @@ std::optional<Diagnostic> unsupported_requested_actions(const CliOptions& option
 
 // Executes the compiled entry function using the appropriate backend runtime
 std::optional<Diagnostic> run_entry_function(const CompiledProgram& compiled, const CliOptions& options) {
-    if (!compiled.plan) {
-        return Diagnostic::error(DiagnosticCode::RuntimeError, "execution plan was not built for --run");
+    if (!compiled.graph || !compiled.graph->scheduled) {
+        return Diagnostic::error(DiagnosticCode::RuntimeError, "scheduled graph was not built for --run");
     }
 
     GraphExecutorOptions executor_options;
@@ -99,8 +99,8 @@ std::optional<Diagnostic> run_entry_function(const CompiledProgram& compiled, co
     
     // Dispatch to the correct backend executor
     auto execution = options.backend == BackendKind::Metal
-        ? execute_metal_plan_module(*compiled.plan, options.entry, executor_options)
-        : execute_plan_module(*compiled.plan, options.entry, executor_options);
+        ? execute_metal_plan_module(*compiled.graph, options.entry, executor_options)
+        : execute_plan_module(*compiled.graph, options.entry, executor_options);
         
     if (const auto* diagnostic = std::get_if<Diagnostic>(&execution)) {
         return *diagnostic;
@@ -162,14 +162,14 @@ int run_program(CliOptions options) {
 
     // Execute the backward pass (gradients) if requested
     if (options.backward) {
-        if (!compiled.plan) {
+        if (!compiled.graph || !compiled.graph->scheduled) {
             std::cout.flush();
-            std::cerr << Diagnostic::error(DiagnosticCode::RuntimeBackwardError, "execution plan was not built for --backward").toString() << '\n';
+            std::cerr << Diagnostic::error(DiagnosticCode::RuntimeBackwardError, "scheduled graph was not built for --backward").toString() << '\n';
             return 1;
         }
         GraphExecutorOptions executor_options;
         executor_options.tensor_shapes = options.tensor_shapes;
-        if (const auto diagnostic = run_backward_plan_module(compiled.lowered, *compiled.plan, options.entry, executor_options)) {
+        if (const auto diagnostic = run_backward_plan_module(compiled.lowered, *compiled.graph, options.entry, executor_options)) {
             std::cout.flush();
             std::cerr << diagnostic->toString() << '\n';
             return 1;
@@ -178,14 +178,14 @@ int run_program(CliOptions options) {
 
     // Execute the training loop if requested
     if (options.train) {
-        if (!compiled.plan) {
+        if (!compiled.graph || !compiled.graph->scheduled) {
             std::cout.flush();
-            std::cerr << Diagnostic::error(DiagnosticCode::RuntimeTrainError, "execution plan was not built for --train").toString() << '\n';
+            std::cerr << Diagnostic::error(DiagnosticCode::RuntimeTrainError, "scheduled graph was not built for --train").toString() << '\n';
             return 1;
         }
         GraphExecutorOptions executor_options;
         executor_options.tensor_shapes = options.tensor_shapes;
-        if (const auto diagnostic = run_train_plan_module(compiled.lowered, *compiled.plan, options.entry, executor_options)) {
+        if (const auto diagnostic = run_train_plan_module(compiled.lowered, *compiled.graph, options.entry, executor_options)) {
             std::cout.flush();
             std::cerr << diagnostic->toString() << '\n';
             return 1;
@@ -193,7 +193,7 @@ int run_program(CliOptions options) {
     }
 
     if (options.print_pipeline) {
-        std::cout << "pipeline=lexer->parser->semantic->frontend_ir->graph_ir->executionPlan->runtime\n";
+        std::cout << "pipeline=lexer->parser->semantic->frontend_ir->graph_ir->runtime\n";
     }
 
     return 0;

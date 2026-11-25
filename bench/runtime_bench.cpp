@@ -89,7 +89,7 @@ BenchResult time_case(std::string name, std::size_t iterations,
                      elapsed * 1000.0 / static_cast<double>(iterations)};
 }
 
-PlanModule compile_graph_benchmark_plan() {
+GraphModule compile_graph_benchmark_plan() {
   const std::string source =
       "layer model(x: tensor[float32], w: tensor[float32]): tensor[float32]:\n"
       "  return relu(matmul(x, w))\n";
@@ -105,10 +105,10 @@ PlanModule compile_graph_benchmark_plan() {
   }
   CompiledProgram compiled =
       std::get<CompiledProgram>(std::move(compiled_result));
-  if (!compiled.plan) {
-    throw std::runtime_error("runtime_bench: expected compiled execution plan");
+  if (!compiled.graph || !compiled.graph->scheduled) {
+    throw std::runtime_error("runtime_bench: expected scheduled graph");
   }
-  return *compiled.plan;
+  return *compiled.graph;
 }
 
 GraphExecutionResult require_graph_result(GraphExecutionResultVariant result) {
@@ -161,7 +161,7 @@ int main() {
     linear.with_bias = true;
     linear.dtype = "float32";
 
-    const PlanModule graph_plan = compile_graph_benchmark_plan();
+    const GraphModule graph_plan = compile_graph_benchmark_plan();
     GraphExecutorOptions graph_options;
     graph_options.tensor_shapes["x"] = {32, 64};
     graph_options.tensor_shapes["w"] = {64, 32};
